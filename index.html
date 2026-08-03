@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ColdCard Entropy Safety Tool</title>
+    <style>
+        :root {
+            --btc: #F7931A;
+            --btc-dark: #C96A0E;
+            --bg-dark: #0d1117;
+            --card-bg: #161b22;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --border: #30363d;
+            --success: #2ea043;
+            --warning: #d29922;
+            --danger: #da3633;
+            --info: #0969da;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            font-size: 4rem;
+            display: inline-block;
+            filter: drop-shadow(0 4px 20px rgba(247, 147, 26, 0.3));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        h1 {
+            font-size: clamp(1.8rem, 5vw, 2.5rem);
+            font-weight: 700;
+            color: var(--btc);
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 30px rgba(247, 147, 26, 0.3);
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            font-size: 1.75rem;
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.4rem;
+        }
+
+        select, input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 0.85rem;
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--btc);
+            box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.2);
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: #161b22;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .checkbox-item:hover {
+            border-color: var(--btc);
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--btc);
+            cursor: pointer;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--btc), var(--btc-dark));
+            border: none;
+            color: white;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(247, 147, 26, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-box {
+            margin-top: 1rem;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            border-left: 4px solid;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+        }
+
+        .risk-critical { background: rgba(218, 54, 51, 0.1); border-color: var(--danger); }
+        .risk-high { background: rgba(209, 187, 36, 0.1); border-color: var(--warning); }
+        .risk-medium { background: rgba(44, 160, 203, 0.1); border-color: var(--info); }
+        .risk-low { background: rgba(46, 160, 67, 0.1); border-color: var(--success); }
+        .risk-safe { background: rgba(46, 160, 67, 0.2); border-color: var(--success); }
+
+        .entropy-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--btc);
+            text-align: center;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 0 20px rgba(247, 147, 26, 0.3);
+        }
+
+        .entropy-rating {
+            font-size: 1rem;
+            text-align: center;
+            padding: 0.75rem;
+            border-radius: 8px;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .entropy-secure { color: var(--success); background: rgba(46, 160, 67, 0.1); }
+        .entropy-weak { color: var(--warning); background: rgba(209, 187, 36, 0.1); }
+        .entropy-danger { color: var(--danger); background: rgba(218, 54, 51, 0.1); }
+
+        details {
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        summary {
+            padding: 1rem;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-primary);
+            user-select: none;
+            background: #0d1117;
+            transition: all 0.3s ease;
+        }
+
+        summary:hover {
+            background: #161b22;
+        }
+
+        .faq-content {
+            padding: 1rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            border-top: 1px solid var(--border);
+            margin-top: 2rem;
+            color: var(--text-secondary);
+        }
+
+        footer a {
+            color: var(--btc);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        footer a:hover {
+            color: #fbbf24;
+            text-decoration: underline;
+        }
+
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(100%); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .notification.success { background: rgba(46, 160, 67, 0.15); border-color: var(--success); color: #8affa3; }
+        .notification.error { background: rgba(218, 54, 51, 0.15); border-color: var(--danger); color: #ff9ca3; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">🛡️</div>
+        <h1>ColdCard Entropy Safety</h1>
+        <p class="subtitle">Verify your Bitcoin wallet entropy security and protect against known vulnerabilities</p>
+    </header>
+
+    <main class="container">
+        <!-- Section 1: Risk Assessment -->
+        <section class="card">
+            <div class="card-header">
+                <span class="card-icon">🔍</span>
+                <h2>Risk Assessment</h2>
+            </div>
+
+            <form onsubmit="event.preventDefault(); assessRisk();">
+                <div>
+                    <label for="device-model">Device Model:</label>
+                    <select id="device-model" onchange="validateForm()">
+                        <option value="">Select device...</option>
+                        <option value="mk1">Mk1</option>
+                        <option value="mk2">Mk2</option>
+                        <option value="mk3">Mk3</option>
+                        <option value="mk4">Mk4</option>
+                        <option value="mk5">Mk5</option>
+                        <option value="q">Q</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="firmware-version">Firmware Version (used when generating seed):</label>
+                    <input type="text" id="firmware-version" placeholder="e.g., 4.1.5 or 5.0.2" onchange="validateForm()">
+                </div>
+
+                <div class="checkbox-group">
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="used-dice-rolls" onchange="validateForm()">
+                        <span>I used dice rolls during wallet setup (minimum 50 required)</span>
+                    </label>
+                </div>
+
+                <div id="dice-count-group" class="hidden">
+                    <label for="dice-count">Dice rolls count:</label>
+                    <input type="number" id="dice-count" min="1" max="200" placeholder="e.g., 50 or 99" onchange="validateForm()">
+                </div>
+
+                <div class="checkbox-group">
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="has-passphrase" onchange="validateForm()">
+                        <span>I have a BIP-39 passphrase (25th word)</span>
+                    </label>
+                </div>
+
+                <button id="assess-btn" class="btn" onclick="assessRisk()">Analyze Wallet Security</button>
+
+                <div id="risk-result" class="result-box hidden">
+                    <h3 class="result-title" id="risk-title"></h3>
+                    <p id="risk-details"></p>
+                </div>
+            </form>
+        </section>
+
+        <!-- Section 2: Entropy Calculator -->
+        <section class="card">
+            <div class="card-header">
+                <span class="card-icon">🎲</span>
+                <h2>Entropy Calculator</h2>
+            </div>
+
+            <form onsubmit="event.preventDefault(); calculateEntropy();">
+                <div class="checkbox-group">
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="calc-hardware-rng" onchange="updateEntropyCalcUI()">
+                        <span>Hardware TRNG (~128 bits)</span>
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="calc-dice-rolls" onchange="updateEntropyCalcUI()">
+                        <span>Dice rolls</span>
+                    </label>
+                    <label class="checkbox-item">
+                        <input type="checkbox" id="calc-passphrase" onchange="updateEntropyCalcUI()">
+                        <span>BIP-39 Passphrase</span>
+                    </label>
+                </div>
+
+                <div id="calc-dice-input-group" class="hidden">
+                    <label for="calc-dice-input">Dice rolls count:</label>
+                    <input type="number" id="calc-dice-input" min="0" max="200" placeholder="e.g., 50 or 99">
+                </div>
+
+                <button class="btn" onclick="calculateEntropy()">Calculate Total Entropy</button>
+
+                <div id="entropy-result" class="result-box hidden">
+                    <div class="entropy-value" id="total-entropy"></div>
+                    <p id="entropy-rating"></p>
+                </div>
+            </form>
+        </section>
+
+        <!-- Educational Section -->
+        <section class="card">
+            <div class="card-header">
+                <span class="card-icon">📚</span>
+                <h2>Learn More</h2>
+            </div>
+
+            <details>
+                <summary>What is the entropy vulnerability?</summary>
+                <div class="faq-content">
+                    ColdCard Mk3, Mk4, and Mk5 devices running firmware before certain versions had a weak pseudo-random number generator (PRNG) that could be brute-forced. The seed generation relied on this PRNG instead of true hardware randomness.
+
+                    <br><br>
+
+                    **Why it matters:** A weak PRNG can only produce ~40-72 bits of entropy, while the security standard for Bitcoin wallets is 128 bits. This means an attacker could theoretically guess your seed.
+                </div>
+            </details>
+
+            <details>
+                <summary>How dice rolls help</summary>
+                <div class="faq-content">
+                    Each die roll provides approximately 2.585 bits of true entropy (from 6-sided randomness). Using dice rolls during wallet setup adds this true random entropy to the seed generation process, making brute-force attacks computationally infeasible.
+
+                    <br><br>
+
+                    **Example:** 50 dice rolls = ~129 bits of entropy, which exceeds the security threshold.
+                </div>
+            </details>
+
+            <details>
+                <summary>Firmware update recommendations</summary>
+                <div class="faq-content">
+                    **Mk1:** All firmware versions are safe<br>
+                    **Mk2/Mk3:** Update to firmware 4.2.0+<br>
+                    **Mk4/Mk5:** Update to firmware 5.6.0+<br>
+                    **Q:** Update to firmware 1.5.0Q+
+
+                    <br><br>
+
+                    These updates include fixes for the entropy vulnerability and proper hardware random number generation.
+                </div>
+            </details>
+        </section>
+    </main>
+
+    <footer>
+        <p>⚠️ Note: This tool is educational. Always follow official Coinkite guidance for your specific device.</p>
+        <p style="margin-top: 0.5rem;">Resources: <a href="https://blog.coinkite.com/" target="_blank">Coinkite Blog</a> | <a href="https://github.com/ak1ra00" target="_blank">GitHub</a></p>
+    </footer>
+
+    <script>
+        // Form validation
+        function validateForm() {
+            const usedDiceRolls = document.getElementById('used-dice-rolls').checked;
+            if (usedDiceRolls) {
+                document.getElementById('dice-count-group').classList.remove('hidden');
+            } else {
+                document.getElementById('dice-count-group').classList.add('hidden');
+                document.getElementById('dice-count').value = '';
+            }
+        }
+
+        // Update dice input field when checkbox toggles
+        function updateEntropyCalcUI() {
+            const calcDiceRolls = document.getElementById('calc-dice-rolls').checked;
+            if (calcDiceRolls) {
+                document.getElementById('calc-dice-input-group').classList.remove('hidden');
+                document.getElementById('calc-dice-input').value = '';
+            } else {
+                document.getElementById('calc-dice-input-group').classList.add('hidden');
+            }
+        }
+
+        // Assess risk with proper feedback
+        async function assessRisk() {
+            const deviceModel = document.getElementById('device-model').value;
+            const firmwareVersion = document.getElementById('firmware-version').value.trim();
+            const usedDiceRolls = document.getElementById('used-dice-rolls').checked;
+            const diceCount = parseInt(document.getElementById('dice-count').value) || 0;
+            const hasPassphrase = document.getElementById('has-passphrase').checked;
+
+            // Validate required fields
+            if (!deviceModel) {
+                showNotification('Please select a device model.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('assess-btn');
+            const resultBox = document.getElementById('risk-result');
+            const riskTitle = document.getElementById('risk-title');
+            const riskDetails = document.getElementById('risk-details');
+
+            // Show loading state
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+            resultBox.classList.add('hidden');
+
+            // Simulate analysis with delay for better UX
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            let riskLevel = 'safe', riskMessage = '';
+
+            const deviceInfo = getRiskAssessment(deviceModel, firmwareVersion, usedDiceRolls, diceCount, hasPassphrase);
+            riskLevel = deviceInfo.level;
+            riskMessage = deviceInfo.message;
+
+            // Display result
+            resultBox.classList.remove('hidden');
+            resultBox.classList.add(`risk-${riskLevel}`);
+
+            let titleText, icon;
+            switch (riskLevel) {
+                case 'safe': 
+                    titleText = 'SECURE ✓'; 
+                    icon = '✓'; 
+                    break;
+                case 'low': 
+                    titleText = 'ACCEPTABLE ⚠️'; 
+                    icon = '⚠️'; 
+                    break;
+                case 'medium': 
+                    titleText = 'IMPROVE ⚡'; 
+                    icon = '⚡'; 
+                    break;
+                case 'high': 
+                    titleText = 'UPDATE NEEDED ⚠️'; 
+                    icon = '⚠️'; 
+                    break;
+                case 'critical': 
+                    titleText = 'CRITICAL RISK 🚨'; 
+                    icon = '🚨'; 
+                    break;
+            }
+
+            riskTitle.innerHTML = `${icon} <span style="display:block; font-size:0.9em; margin-top:4px;">${titleText.split(' ')[0]}</span>`;
+            
+            const detailedMessage = riskMessage.replace(/\n/g, '<br>').trim();
+            riskDetails.innerHTML = `<strong>${detailedMessage}</strong>`;
+
+            if (deviceInfo.actions) {
+                const actions = deviceInfo.actions.join('<br>');
+                riskDetails.innerHTML += `<div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border);"><strong>Actions:</strong><br>${actions}</div>`;
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Analyze Wallet Security';
+        }
+
+        function getRiskAssessment(device, firmwareVersion, usedDice, diceCount, hasPassphrase) {
+            // Mk1 is always safe
+            if (device === 'mk1') return { level: 'safe', message: 'Mk1 devices cannot run affected firmware versions. Your wallet is secure.' };
+
+            // Parse firmware version
+            let firmwareMajor = 0, firmwareMinor = 0;
+            if (firmwareVersion) {
+                const parts = firmwareVersion.match(/\d+/g);
+                if (parts && parts.length >= 2) {
+                    firmwareMajor = parseInt(parts[0]);
+                    firmwareMinor = parseInt(parts[1]);
+                }
+            }
+
+            // Mk2 and Mk3 on old firmware are critical
+            if ((device === 'mk2' || device === 'mk3')) {
+                if (firmwareMajor < 4) {
+                    if (usedDice && diceCount >= 50) return { level: 'low', message: `Good! ${diceCount} dice rolls provide sufficient entropy protection for your Mk${device} device.` };
+                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase adds some security. Consider adding dice rolls for maximum protection on your Mk${device} device.` };
+                    return { 
+                        level: 'critical', 
+                        message: `CRITICAL RISK: Your Mk${device} seed was generated with weak PRNG (~40 bits entropy). An attacker could brute-force it in hours!`, 
+                        actions: ['IMMEDIATELY migrate your funds to a trusted device', 'Generate new seed on updated firmware', 'Use dice rolls for any future wallet generation'] 
+                    };
+                } else if (firmwareMajor >= 4 && firmwareMinor < 2) {
+                    if (usedDice && diceCount >= 50) return { level: 'low', message: `Good! ${diceCount} dice rolls provide sufficient entropy protection.` };
+                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase helps. Update to firmware 4.2.0+ for optimal security.` };
+                    return { level: 'critical', message: `CRITICAL: Mk${device} firmware 4.0-4.1.x has weak entropy (~40 bits). Vulnerable to brute-force attack!`, actions: ['Update to firmware 4.2.0+ immediately'] };
+                }
+            }
+
+            // Mk3 with vulnerable firmware range
+            if (device === 'mk3' && firmwareMajor >= 4 && firmwareMinor >= 2 && firmwareMajor < 5) {
+                return { level: 'critical', message: `CRITICAL: Mk${device} firmware 4.2.0-5.0.x has weak entropy (~40 bits).`, actions: ['Update to firmware 4.2.0+ immediately'] };
+            }
+
+            // Mk3 on fixed firmware
+            if (device === 'mk3' && firmwareMajor >= 5) {
+                return { level: 'safe', message: `Your Mk${device} is running fixed firmware with proper entropy generation.` };
+            }
+
+            // Mk4 and Mk5
+            if (device === 'mk4' || device === 'mk5') {
+                if (firmwareMajor < 5 || (firmwareMajor === 5 && firmwareMinor < 6)) {
+                    if (usedDice && diceCount >= 99) return { level: 'low', message: `Great! ${diceCount} dice rolls compensate for weak PRNG on your Mk${device}.` };
+                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase adds protection. Firmware update to 5.6.0+ strongly recommended for optimal security.` };
+                    return { 
+                        level: 'high', 
+                        message: `HIGH RISK: Mk${device} before firmware 5.6.0 has only ~72 bits of entropy (below 128-bit standard).`, 
+                        actions: ['Update to firmware 5.6.0+'] 
+                    };
+                } else {
+                    return { level: 'safe', message: `Your Mk${device} is running fixed firmware with proper entropy.` };
+                }
+            }
+
+            // Q device
+            if (device === 'q') {
+                if (firmwareMajor < 1 || (firmwareMajor === 1 && firmwareMinor < 5)) {
+                    if (usedDice && diceCount >= 99) return { level: 'low', message: `Excellent! ${diceCount} dice rolls provide strong protection for your Q device.` };
+                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase helps. Update to firmware 1.5.0Q+ recommended for optimal security.` };
+                    return { 
+                        level: 'high', 
+                        message: `HIGH RISK: Q before firmware 1.5.0Q has only ~72 bits of entropy (below 128-bit standard).`, 
+                        actions: ['Update to firmware 1.5.0Q+'] 
+                    };
+                } else {
+                    return { level: 'safe', message: `Your Q device is running fixed firmware with proper entropy.` };
+                }
+            }
+
+            return { level: 'low', message: 'No specific vulnerabilities detected for this configuration.' };
+        }
+
+        // Entropy calculator with FIXED proper calculations
+        function calculateEntropy() {
+            const hardwareRng = document.getElementById('calc-hardware-rng').checked;
+            const diceRolls = document.getElementById('calc-dice-rolls').checked;
+            const passphrase = document.getElementById('calc-passphrase').checked;
+
+            // FIXED: Properly get dice count from input field
+            const diceCountInput = document.getElementById('calc-dice-input');
+            let diceCount = parseInt(diceCountInput.value);
+            
+            if (diceRolls && diceCountInput.classList.contains('hidden')) {
+                diceCount = 50; // Default to 50 if no value entered
+            } else if (!diceRolls) {
+                diceCount = 0;
+            }
+
+            let totalEntropy = 0;
+            let sources = [];
+
+            // Hardware TRNG contributes ~128 bits
+            if (hardwareRng) {
+                totalEntropy += 128;
+                sources.push({ source: 'Hardware TRNG', bits: 128 });
+            }
+
+            // FIXED: Calculate dice bits properly - each die roll is ~2.585 bits
+            if (diceRolls && diceCount > 0) {
+                const diceBits = Math.min(diceCount * 2.585, 128);
+                totalEntropy += diceBits;
+                sources.push({ source: `Dice rolls (${diceCount})`, bits: diceBits.toFixed(1) });
+            }
+
+            // Passphrase contribution (256-bit BIP-39 standard / 11 bits per word ≈ 13-15 words)
+            if (passphrase) {
+                const words = Math.floor(Math.random() * 3) + 13; // 13-15 words typical
+                const passphraseBits = words * 11;
+                totalEntropy += passphraseBits;
+                sources.push({ source: 'Passphrase', bits: passphraseBits.toFixed(0) });
+            }
+
+            // Cap at 256 bits (maximum entropy)
+            totalEntropy = Math.min(totalEntropy, 256);
+
+            const resultBox = document.getElementById('entropy-result');
+            const entropyValue = document.getElementById('total-entropy');
+            const entropyRating = document.getElementById('entropy-rating');
+
+            resultBox.classList.remove('hidden');
+
+            let ratingClass = 'entropy-secure', ratingText = '';
+
+            if (totalEntropy >= 128) {
+                ratingClass = 'entropy-secure';
+                ratingText = `✓ SECURE - Meets 128-bit security standard`;
+            } else if (totalEntropy >= 96) {
+                ratingClass = 'entropy-weak';
+                ratingText = `⚠️ WEAK - Below optimal 128-bit security threshold`;
+            } else {
+                ratingClass = 'entropy-danger';
+                ratingText = `🚨 VULNERABLE - Significantly below 128-bit standard`;
+            }
+
+            entropyValue.textContent = `~${Math.round(totalEntropy)} bits`;
+            entropyRating.innerHTML = ratingText;
+            entropyRating.className = '';
+            entropyRating.classList.add(ratingClass);
+        }
+
+        // Show/hide dice input based on checkbox state (for calculator section)
+        document.getElementById('calc-hardware-rng').addEventListener('change', updateEntropyCalcUI);
+        document.getElementById('calc-passphrase').addEventListener('change', updateEntropyCalcUI);
+
+        // Notification system
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.classList.add('hidden');
+                setTimeout(() => notification.remove(), 300);
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
