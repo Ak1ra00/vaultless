@@ -4,199 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ColdCard Entropy Safety Tool</title>
-    <style>
-        :root {
-            --btc: #F7931A;
-            --btc-dark: #C96A0E;
-            --bg-dark: #0d1117;
-            --card-bg: #161b22;
-            --text-primary: #f0f6fc;
-            --text-secondary: #8b949e;
-            --border: #30363d;
-            --success: #2ea043;
-            --warning: #d29922;
-            --danger: #da3633;
-            --info: #0969da;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-primary);
-            line-height: 1.6;
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem 1rem;
-        }
-
-        header {
-            text-align: center;
-            padding: 3rem 0;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 2rem;
-        }
-
-        .logo {
-            font-size: 4rem;
-            display: inline-block;
-            filter: drop-shadow(0 4px 20px rgba(247, 147, 26, 0.3));
-            animation: float 3s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
-        }
-
-        h1 {
-            font-size: clamp(1.8rem, 5vw, 2.5rem);
-            font-weight: 700;
-            color: var(--btc);
-            margin-bottom: 0.5rem;
-            text-shadow: 0 0 30px rgba(247, 147, 26, 0.3);
-        }
-
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1rem;
-        }
-
-        .card-icon {
-            font-size: 1.75rem;
-        }
-
-        h2 {
-            font-size: 1.4rem;
-            font-weight: 600;
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-
-        label {
-            display: block;
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.4rem;
-        }
-
-        select, input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 0.85rem;
-            background: #0d1117;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 1rem;
-        }
-
-        select:focus, input:focus {
-            outline: none;
-            border-color: var(--btc);
-            box-shadow: 0 0 0 3px rgba(247, 147, 26, 0.2);
-        }
-
-        .checkbox-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.75rem;
-            background: #161b22;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        .checkbox-item:hover {
-            border-color: var(--btc);
-        }
-
-        .checkbox-item input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            accent-color: var(--btc);
-            cursor: pointer;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--btc), var(--btc-dark));
-            border: none;
-            color: white;
-            padding: 1rem 2rem;
-            font-size: 1rem;
-            font-weight: 600;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            width: 100%;
-            margin-top: 1rem;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(247, 147, 26, 0.3);
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .result-box {
-            margin-top: 1rem;
-            padding: 1rem 1.25rem;
-            border-radius: 8px;
-            border-left: 4px solid;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .result-title {
-            font-size: 1.2rem;
-            font-weight: 700;
-            margin-bottom: 0.4rem;
-        }
+    <link rel="stylesheet" href="style.css">
+<script defer src="app.js"></script>
 
         .risk-critical { background: rgba(218, 54, 51, 0.1); border-color: var(--danger); }
         .risk-high { background: rgba(209, 187, 36, 0.1); border-color: var(--warning); }
@@ -310,7 +119,7 @@
                 <h2>Risk Assessment</h2>
             </div>
 
-            <form onsubmit="event.preventDefault(); assessRisk();">
+            <form id="risk-form" onsubmit="event.preventDefault(); assessRisk();">
                 <div>
                     <label for="device-model">Device Model:</label>
                     <select id="device-model" onchange="validateForm()">
@@ -364,7 +173,7 @@
                 <h2>Entropy Calculator</h2>
             </div>
 
-            <form onsubmit="event.preventDefault(); calculateEntropy();">
+            <form id="entropy-form" onsubmit="event.preventDefault(); calculateEntropy();">
                 <div class="checkbox-group">
                     <label class="checkbox-item">
                         <input type="checkbox" id="calc-hardware-rng" onchange="updateEntropyCalcUI()">
