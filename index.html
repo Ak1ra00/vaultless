@@ -120,7 +120,7 @@
                 <h2>Risk Assessment</h2>
             </div>
 
-            <form id="risk-form" onsubmit="return false;">
+            <form id="risk-form" onsubmit="assessRisk(); return false;">
                 <div>
                     <label for="device-model">Device Model:</label>
                     <select id="device-model" onchange="validateForm()">
@@ -174,7 +174,7 @@
                 <h2>Entropy Calculator</h2>
             </div>
 
-            <form id="entropy-form" onsubmit="return false;">
+            <form id="entropy-form" onsubmit="calculateEntropy(); return false;">
                 <div class="checkbox-group">
                     <label class="checkbox-item">
                         <input type="checkbox" id="calc-hardware-rng" onchange="updateEntropyCalcUI()">
@@ -277,6 +277,81 @@
             }
         }
 
+        // Show notifications
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            notification.style.cssText = 'position: fixed; top: 1rem; right: 1rem; padding: 1rem 1.5rem; border-radius: 8px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 1000;';
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 4000);
+        }
+
+        // Get risk assessment based on inputs
+        function getRiskAssessment(deviceModel, firmwareVersion, usedDiceRolls, diceCount, hasPassphrase) {
+            let level = 'critical', message = '', actions = [];
+
+            const modelScores = {
+                mk1: 30, mk2: 45, mk3: 50, mk4: 60, mk5: 70, q: 80
+            };
+
+            // Base score from device
+            let baseScore = modelScores[deviceModel] || 30;
+
+            // Firmware penalty for older versions
+            if (firmwareVersion) {
+                const fwMatch = firmwareVersion.match(/(\d+\.\d+)/);
+                if (fwMatch) {
+                    const [version] = fwMatch;
+                    const parts = version.split('.').map(Number);
+                    if (parts.length >= 2 && parts[0] <= 3 || (parts[0] === 4 && parts[1] < 2)) {
+                        baseScore -= 25;
+                    } else if (parts[0] === 4 && parts[1] < 2) {
+                        baseScore -= 20;
+                    } else if (parts.length >= 3 && parts[2] < 0) {
+                        baseScore -= 15;
+                    }
+                }
+            }
+
+            // Dice rolls bonus
+            if (usedDiceRolls) {
+                const count = diceCount || 50;
+                baseScore += Math.min(count * 0.8, 35);
+            }
+
+            // Passphrase bonus
+            if (hasPassphrase) {
+                baseScore += 10;
+            }
+
+            // Cap at 100
+            const finalScore = Math.min(Math.max(baseScore, 0), 100);
+            
+            // Determine risk level
+            if (finalScore >= 85) {
+                level = 'safe';
+                message = 'Your wallet has excellent entropy security. Your seed is generated with sufficient true randomness.';
+            } else if (finalScore >= 70) {
+                level = 'low';
+                message = 'Your wallet has good entropy security. Consider adding dice rolls for maximum protection.';
+            } else if (finalScore >= 50) {
+                level = 'medium';
+                message = 'Your wallet has acceptable entropy, but could be improved. Adding dice rolls would significantly increase security.';
+            } else if (finalScore >= 30) {
+                level = 'high';
+                message = '⚠️ WARNING: Your wallet has weak entropy due to old firmware or device model. This makes it vulnerable to brute-force attacks!';
+                actions.push('Update your ColdCard firmware immediately');
+            } else {
+                level = 'critical';
+                message = '🚨 CRITICAL RISK: Your wallet is highly vulnerable! The seed can be brute-forced by attackers.';
+                actions.push('URGENT: Update firmware NOW');
+                actions.push('Use dice rolls for all new wallets');
+            }
+
+            return { level, message, actions };
+        }
+
         // Assess risk with proper feedback
         async function assessRisk() {
             const deviceModel = document.getElementById('device-model').value;
@@ -304,212 +379,85 @@
             // Simulate analysis with delay for better UX
             await new Promise(resolve => setTimeout(resolve, 600));
 
-            let riskLevel = 'safe', riskMessage = '';
-
-            const deviceInfo = getRiskAssessment(deviceModel, firmwareVersion, usedDiceRolls, diceCount, hasPassphrase);
-            riskLevel = deviceInfo.level;
-            riskMessage = deviceInfo.message;
+            const riskInfo = getRiskAssessment(deviceModel, firmwareVersion, usedDiceRolls, diceCount, hasPassphrase);
+            const level = riskInfo.level;
+            const message = riskInfo.message;
+            const actions = riskInfo.actions || [];
 
             // Display result
             resultBox.classList.remove('hidden');
-            resultBox.classList.add(`risk-${riskLevel}`);
+            resultBox.classList.add(`risk-${level}`);
 
-            let titleText, icon;
-            switch (riskLevel) {
-                case 'safe': 
-                    titleText = 'SECURE ✓'; 
-                    icon = '✓'; 
-                    break;
-                case 'low': 
-                    titleText = 'ACCEPTABLE ⚠️'; 
-                    icon = '⚠️'; 
-                    break;
-                case 'medium': 
-                    titleText = 'IMPROVE ⚡'; 
-                    icon = '⚡'; 
-                    break;
-                case 'high': 
-                    titleText = 'UPDATE NEEDED ⚠️'; 
-                    icon = '⚠️'; 
-                    break;
-                case 'critical': 
-                    titleText = 'CRITICAL RISK 🚨'; 
-                    icon = '🚨'; 
-                    break;
+            let icon = '✓';
+            switch (level) {
+                case 'safe': icon = '✓'; break;
+                case 'low': icon = '⚠️'; break;
+                case 'medium': icon = '⚡'; break;
+                case 'high': icon = '⚠️'; break;
+                case 'critical': icon = '🚨'; break;
             }
 
-            riskTitle.innerHTML = `${icon} <span style="display:block; font-size:0.9em; margin-top:4px;">${titleText.split(' ')[0]}</span>`;
+            riskTitle.innerHTML = `${icon} <span style="display:block; font-size:0.9em; margin-top:4px;">${level.toUpperCase()}</span>`;
             
-            const detailedMessage = riskMessage.replace(/\n/g, '<br>').trim();
+            const detailedMessage = message.replace(/\n/g, '<br>').trim();
             riskDetails.innerHTML = `<strong>${detailedMessage}</strong>`;
 
-            if (deviceInfo.actions) {
-                const actions = deviceInfo.actions.join('<br>');
-                riskDetails.innerHTML += `<div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border);"><strong>Actions:</strong><br>${actions}</div>`;
+            if (actions.length > 0) {
+                const actionsHtml = actions.map(a => `<li style="margin-bottom:4px;">• ${a}</li>`).join('');
+                riskDetails.innerHTML += `<ul style="margin-top:0.75rem; padding-left:1.2em;"><strong>Recommended Actions:</strong>${actionsHtml}</ul>`;
             }
 
-            btn.disabled = false;
-            btn.textContent = 'Analyze Wallet Security';
+            // Show notification on critical/high risk
+            if (level === 'critical' || level === 'high') {
+                showNotification(`Risk Level: ${level.toUpperCase()}`, 'error');
+            } else {
+                showNotification('Security check complete!', 'success');
+            }
         }
 
-        function getRiskAssessment(device, firmwareVersion, usedDice, diceCount, hasPassphrase) {
-            // Mk1 is always safe
-            if (device === 'mk1') return { level: 'safe', message: 'Mk1 devices cannot run affected firmware versions. Your wallet is secure.' };
-
-            // Parse firmware version
-            let firmwareMajor = 0, firmwareMinor = 0;
-            if (firmwareVersion) {
-                const parts = firmwareVersion.match(/\d+/g);
-                if (parts && parts.length >= 2) {
-                    firmwareMajor = parseInt(parts[0]);
-                    firmwareMinor = parseInt(parts[1]);
-                }
-            }
-
-            // Mk2 and Mk3 on old firmware are critical
-            if ((device === 'mk2' || device === 'mk3')) {
-                if (firmwareMajor < 4) {
-                    if (usedDice && diceCount >= 50) return { level: 'low', message: `Good! ${diceCount} dice rolls provide sufficient entropy protection for your Mk${device} device.` };
-                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase adds some security. Consider adding dice rolls for maximum protection on your Mk${device} device.` };
-                    return { 
-                        level: 'critical', 
-                        message: `CRITICAL RISK: Your Mk${device} seed was generated with weak PRNG (~40 bits entropy). An attacker could brute-force it in hours!`, 
-                        actions: ['IMMEDIATELY migrate your funds to a trusted device', 'Generate new seed on updated firmware', 'Use dice rolls for any future wallet generation'] 
-                    };
-                } else if (firmwareMajor >= 4 && firmwareMinor < 2) {
-                    if (usedDice && diceCount >= 50) return { level: 'low', message: `Good! ${diceCount} dice rolls provide sufficient entropy protection.` };
-                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase helps. Update to firmware 4.2.0+ for optimal security.` };
-                    return { level: 'critical', message: `CRITICAL: Mk${device} firmware 4.0-4.1.x has weak entropy (~40 bits). Vulnerable to brute-force attack!`, actions: ['Update to firmware 4.2.0+ immediately'] };
-                }
-            }
-
-            // Mk3 with vulnerable firmware range
-            if (device === 'mk3' && firmwareMajor >= 4 && firmwareMinor >= 2 && firmwareMajor < 5) {
-                return { level: 'critical', message: `CRITICAL: Mk${device} firmware 4.2.0-5.0.x has weak entropy (~40 bits).`, actions: ['Update to firmware 4.2.0+ immediately'] };
-            }
-
-            // Mk3 on fixed firmware
-            if (device === 'mk3' && firmwareMajor >= 5) {
-                return { level: 'safe', message: `Your Mk${device} is running fixed firmware with proper entropy generation.` };
-            }
-
-            // Mk4 and Mk5
-            if (device === 'mk4' || device === 'mk5') {
-                if (firmwareMajor < 5 || (firmwareMajor === 5 && firmwareMinor < 6)) {
-                    if (usedDice && diceCount >= 99) return { level: 'low', message: `Great! ${diceCount} dice rolls compensate for weak PRNG on your Mk${device}.` };
-                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase adds protection. Firmware update to 5.6.0+ strongly recommended for optimal security.` };
-                    return { 
-                        level: 'high', 
-                        message: `HIGH RISK: Mk${device} before firmware 5.6.0 has only ~72 bits of entropy (below 128-bit standard).`, 
-                        actions: ['Update to firmware 5.6.0+'] 
-                    };
-                } else {
-                    return { level: 'safe', message: `Your Mk${device} is running fixed firmware with proper entropy.` };
-                }
-            }
-
-            // Q device
-            if (device === 'q') {
-                if (firmwareMajor < 1 || (firmwareMajor === 1 && firmwareMinor < 5)) {
-                    if (usedDice && diceCount >= 99) return { level: 'low', message: `Excellent! ${diceCount} dice rolls provide strong protection for your Q device.` };
-                    if (hasPassphrase) return { level: 'medium', message: `Your passphrase helps. Update to firmware 1.5.0Q+ recommended for optimal security.` };
-                    return { 
-                        level: 'high', 
-                        message: `HIGH RISK: Q before firmware 1.5.0Q has only ~72 bits of entropy (below 128-bit standard).`, 
-                        actions: ['Update to firmware 1.5.0Q+'] 
-                    };
-                } else {
-                    return { level: 'safe', message: `Your Q device is running fixed firmware with proper entropy.` };
-                }
-            }
-
-            return { level: 'low', message: 'No specific vulnerabilities detected for this configuration.' };
-        }
-
-        // Entropy calculator with FIXED proper calculations
+        // Calculate entropy from calculator inputs
         function calculateEntropy() {
-            const hardwareRng = document.getElementById('calc-hardware-rng').checked;
-            const diceRolls = document.getElementById('calc-dice-rolls').checked;
-            const passphrase = document.getElementById('calc-passphrase').checked;
+            const calcHardwareRNG = document.getElementById('calc-hardware-rng').checked;
+            const calcDiceRolls = document.getElementById('calc-dice-rolls').checked;
+            const calcPassphrase = document.getElementById('calc-passphrase').checked;
+            const diceCount = parseInt(document.getElementById('calc-dice-input').value) || 0;
 
-            // FIXED: Properly get dice count from input field
-            const diceCountInput = document.getElementById('calc-dice-input');
-            let diceCount = parseInt(diceCountInput.value);
-            
-            if (diceRolls && diceCountInput.classList.contains('hidden')) {
-                diceCount = 50; // Default to 50 if no value entered
-            } else if (!diceRolls) {
-                diceCount = 0;
+            let totalBits = 128; // Hardware TRNG base
+
+            if (calcHardwareRNG) {
+                totalBits += 128;
+            } else if (calcDiceRolls) {
+                totalBits += Math.min(diceCount * 2.585, 100);
+            } else if (calcPassphrase) {
+                totalBits += 256;
             }
 
-            let totalEntropy = 0;
-            let sources = [];
-
-            // Hardware TRNG contributes ~128 bits
-            if (hardwareRng) {
-                totalEntropy += 128;
-                sources.push({ source: 'Hardware TRNG', bits: 128 });
-            }
-
-            // FIXED: Calculate dice bits properly - each die roll is ~2.585 bits
-            if (diceRolls && diceCount > 0) {
-                const diceBits = Math.min(diceCount * 2.585, 128);
-                totalEntropy += diceBits;
-                sources.push({ source: `Dice rolls (${diceCount})`, bits: diceBits.toFixed(1) });
-            }
-
-            // Passphrase contribution (256-bit BIP-39 standard / 11 bits per word ≈ 13-15 words)
-            if (passphrase) {
-                const words = Math.floor(Math.random() * 3) + 13; // 13-15 words typical
-                const passphraseBits = words * 11;
-                totalEntropy += passphraseBits;
-                sources.push({ source: 'Passphrase', bits: passphraseBits.toFixed(0) });
-            }
-
-            // Cap at 256 bits (maximum entropy)
-            totalEntropy = Math.min(totalEntropy, 256);
+            // Cap at realistic values
+            totalBits = Math.min(Math.max(totalBits, 40), 4096);
 
             const resultBox = document.getElementById('entropy-result');
             const entropyValue = document.getElementById('total-entropy');
             const entropyRating = document.getElementById('entropy-rating');
 
             resultBox.classList.remove('hidden');
-
-            let ratingClass = 'entropy-secure', ratingText = '';
-
-            if (totalEntropy >= 128) {
+            entropyValue.textContent = totalBits;
+            
+            let ratingText, ratingClass;
+            if (totalBits >= 256) {
+                ratingText = 'Excellent Security';
                 ratingClass = 'entropy-secure';
-                ratingText = `✓ SECURE - Meets 128-bit security standard`;
-            } else if (totalEntropy >= 96) {
+            } else if (totalBits >= 128) {
+                ratingText = 'Good Security';
                 ratingClass = 'entropy-weak';
-                ratingText = `⚠️ WEAK - Below optimal 128-bit security threshold`;
             } else {
+                ratingText = 'Insecure - Consider adding dice rolls!';
                 ratingClass = 'entropy-danger';
-                ratingText = `🚨 VULNERABLE - Significantly below 128-bit standard`;
             }
 
-            entropyValue.textContent = `~${Math.round(totalEntropy)} bits`;
-            entropyRating.innerHTML = ratingText;
-            entropyRating.className = '';
-            entropyRating.classList.add(ratingClass);
-        }
+            entropyRating.className = ratingClass;
+            entropyRating.textContent = ratingText;
 
-        // Show/hide dice input based on checkbox state (for calculator section)
-        document.getElementById('calc-hardware-rng').addEventListener('change', updateEntropyCalcUI);
-        document.getElementById('calc-passphrase').addEventListener('change', updateEntropyCalcUI);
-
-        // Notification system
-        function showNotification(message, type) {
-            const notification = document.createElement('div');
-            notification.className = `notification ${type}`;
-            notification.textContent = message;
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                notification.classList.add('hidden');
-                setTimeout(() => notification.remove(), 300);
-            }, 4000);
+            showNotification(`Entropy: ${totalBits} bits`, 'success');
         }
     </script>
 </body>
