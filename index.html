@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vaultless OPRF Password Generator</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #131b2e;
+      --card-border: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 540px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 9999px;
+      background: #1e293b;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .badge.connected { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .badge.simulated { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 8px; }
+    button {
+      flex: 1;
+      padding: 11px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #1e293b; color: var(--text); border: 1px solid #334155; }
+    .btn-secondary:hover { background: #334155; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .output-box {
+      margin-top: 16px;
+      background: #070b14;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .password-text {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      color: #38bdf8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .copy-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+    .copy-btn:hover { color: #fff; }
+
+    .status-log {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 12px;
+      line-height: 1.4;
+      min-height: 1.4em;
+    }
+
+    details {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    details summary { cursor: pointer; user-select: none; }
+    .trace-box {
+      margin-top: 8px;
+      padding: 8px;
+      background: #070b14;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      word-break: break-all;
+      color: #94a3b8;
+    }
+  </style>
+
+  <script type="module">
+    import { ristretto255 } from 'https://esm.sh/@noble/curves@1.6.0/ed25519';
+    import { sha512 } from 'https://esm.sh/@noble/hashes@1.5.0/sha512';
+    import { sha256 } from 'https://esm.sh/@noble/hashes@1.5.0/sha256';
+    import { hkdf } from 'https://esm.sh/@noble/hashes@1.5.0/hkdf';
+    import { bytesToHex, hexToBytes, utf8ToBytes } from 'https://esm.sh/@noble/hashes@1.5.0/utils';
+
+    let port = null;
+    let reader = null;
+    let writer = null;
+    let mockOracleKey = null;
+
+    const statusBadge = document.getElementById('status-badge');
+    const badgeText = document.getElementById('badge-text');
+    const logEl = document.getElementById('status-log');
+    const connectBtn = document.getElementById('btn-connect');
+    const simBtn = document.getElementById('btn-simulate');
+    const deriveBtn = document.getElementById('btn-derive');
+    const outPassword = document.getElementById('out-password');
+    const traceBox = document.getElementById('trace-content');
+
+    function log(msg) { logEl.innerText = msg; }
+
+    // 1. Hardware WebSerial Connection
+    connectBtn.addEventListener('click', async () => {
+      if (!('serial' in navigator)) {
+        alert('WebSerial is not supported in this browser. Use Chrome, Edge, or Opera.');
+        return;
+      }
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable.getReader();
+
+        const encoder = new TextEncoderStream();
+        encoder.readable.pipeTo(port.writable);
+        writer = encoder.writable.getWriter();
+
+        mockOracleKey = null;
+        statusBadge.className = 'badge connected';
+        badgeText.innerText = 'LilyGO USB Connected';
+        log('Connected to LilyGO T-Display over Serial (115200 baud).');
+      } catch (err) {
+        log('Connection failed: ' + err.message);
+      }
+    });
+
+    // 2. Fallback Software Simulator Mode
+    simBtn.addEventListener('click', () => {
+      mockOracleKey = ristretto255.utils.randomPrivateKey();
+      statusBadge.className = 'badge simulated';
+      badgeText.innerText = 'Software Oracle (Simulated)';
+      log('Simulated Oracle active (Curve25519 mock key loaded in memory).');
+    });
+
+    // 3. Password Formatter Engine
+    function formatOutput(rawEntropy, format) {
+      if (format === 'alphanumeric') {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        return Array.from(rawEntropy.slice(0, 16)).map(b => chars[b % chars.length]).join('');
+      } else if (format === 'complex') {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}';
+        return Array.from(rawEntropy.slice(0, 20)).map(b => chars[b % chars.length]).join('');
+      } else if (format === 'pin') {
+        const num = (rawEntropy[0] << 24) | (rawEntropy[1] << 16) | (rawEntropy[2] << 8) | rawEntropy[3];
+        return Math.abs(num % 1000000).toString().padStart(6, '0');
+      } else if (format === 'b64') {
+        return btoa(String.fromCharCode(...rawEntropy.slice(0, 24))).replace(/[/+=]/g, '').slice(0, 20);
+      }
+      return bytesToHex(rawEntropy.slice(0, 16));
+    }
+
+    // 4. Cryptographic Derivation Flow (OPRF)
+    deriveBtn.addEventListener('click', async () => {
+      const phrase = document.getElementById('passphrase').value;
+      const domain = document.getElementById('domain').value.trim().toLowerCase();
+      const index = document.getElementById('index-num').value.trim() || '0';
+      const format = document.getElementById('format-select').value;
+
+      if (!phrase || !domain) {
+        alert('Please enter both your master passphrase and target domain.');
+        return;
+      }
+      if (!writer && !mockOracleKey) {
+        alert('Connect your LilyGO T-Display via USB or click "Use Simulated Oracle".');
+        return;
+      }
+
+      try {
+        deriveBtn.disabled = true;
+        log('1. Blinding domain element...');
+
+        // Step A: Hash input to Ristretto Point P
+        const seedInput = utf8ToBytes(`${phrase}:${domain}:${index}`);
+        const hash = sha512(seedInput);
+        const P = ristretto255.Point.fromHash(hash);
+
+        // Step B: Generate blinding scalar r, calculate B = r * P
+        const r = ristretto255.utils.randomPrivateKey();
+        const B = P.multiply(r);
+        const blindedHex = bytesToHex(B.toBytes());
+
+        let evaluatedHex = '';
+
+        if (writer) {
+          // Step C: Send over Serial to LilyGO
+          log('2. Requesting confirmation from LilyGO display...');
+          const payload = JSON.stringify({ domain: domain, index: parseInt(index), point: blindedHex }) + '\n';
+          await writer.write(payload);
+
+          let responseBuffer = '';
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            responseBuffer += value;
+            if (responseBuffer.includes('\n')) break;
+          }
+          const res = JSON.parse(responseBuffer.trim());
+          if (res.error) throw new Error(res.error);
+          evaluatedHex = res.point;
+        } else {
+          // Step C (Simulated): B' = k * B
+          log('2. Executing simulated oracle evaluation...');
+          const B_sim = ristretto255.Point.fromHex(blindedHex);
+          const evaluatedPoint = B_sim.multiply(mockOracleKey);
+          evaluatedHex = bytesToHex(evaluatedPoint.toBytes());
+        }
+
+        // Step D: Unblind S = r^-1 * B'
+        log('3. Unblinding and deriving deterministic key...');
+        const B_prime = ristretto255.Point.fromHex(evaluatedHex);
+        const r_inv = ristretto255.utils.invert(r, ristretto255.CURVE.n);
+        const S = B_prime.multiply(r_inv); // S = k * P
+
+        // Step E: HKDF Key Expansion
+        const salt = utf8ToBytes(`${domain}:${index}`);
+        const info = utf8ToBytes('oprf-vaultless-pwd-v1');
+        const derivedKey = hkdf(sha256, S.toBytes(), salt, info, 32);
+
+        const finalPassword = formatOutput(derivedKey, format);
+        outPassword.innerText = finalPassword;
+
+        traceBox.innerHTML = `
+<b>P (Base Point):</b> ${bytesToHex(P.toBytes()).slice(0, 24)}...<br>
+<b>B (Blinded):</b> ${blindedHex.slice(0, 24)}...<br>
+<b>B' (Evaluated):</b> ${evaluatedHex.slice(0, 24)}...<br>
+<b>S (Shared Secret):</b> ${bytesToHex(S.toBytes()).slice(0, 24)}...
+        `;
+
+        log('Password derived successfully.');
+      } catch (err) {
+        log('Derivation error: ' + err.message);
+      } finally {
+        deriveBtn.disabled = false;
+      }
+    });
+
+    // Copy to clipboard
+    document.getElementById('btn-copy').addEventListener('click', () => {
+      const pwd = outPassword.innerText;
+      if (pwd === '----------------' || !pwd) return;
+      navigator.clipboard.writeText(pwd);
+      log('Password copied to clipboard.');
+    });
+  </script>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h1>Vaultless Oracle</h1>
+        <div id="status-badge" class="badge">
+          <div class="dot"></div>
+          <span id="badge-text">Disconnected</span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button id="btn-connect" class="btn-secondary">Connect LilyGO (USB)</button>
+        <button id="btn-simulate" class="btn-secondary">Simulate Oracle</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label>Master Passphrase</label>
+        <input type="password" id="passphrase" placeholder="e.g. correct horse battery staple" autocomplete="off" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Domain / Service</label>
+          <input type="text" id="domain" placeholder="github.com" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Index (BIP-85)</label>
+          <input type="number" id="index-num" value="0" min="0" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Output Format</label>
+        <select id="format-select">
+          <option value="complex">Alphanumeric + Symbols (20 chars)</option>
+          <option value="alphanumeric">Alphanumeric (16 chars)</option>
+          <option value="b64">Base64 URL-Safe (20 chars)</option>
+          <option value="pin">6-Digit PIN</option>
+        </select>
+      </div>
+
+      <button id="btn-derive" class="btn-primary" style="width: 100%;">
+        Request Signature & Derive
+      </button>
+
+      <div class="output-box">
+        <span id="out-password" class="password-text">----------------</span>
+        <button id="btn-copy" class="copy-btn" title="Copy to Clipboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div id="status-log" class="status-log">Ready. Connect hardware or select simulate.</div>
+
+      <details>
+        <summary>Cryptographic Handshake Inspector</summary>
+        <div id="trace-content" class="trace-box">No handshake data yet.</div>
+      </details>
+    </div>
+  </div>
+</body>
+</html>
