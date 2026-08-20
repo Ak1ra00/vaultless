@@ -1,0 +1,11 @@
+# ESP-IDF Component Manager manifest.
+# Pulls the official libsodium port (crypto_scalarmult_ristretto255,
+# crypto_core_ristretto255_scalar_reduce, randombytes_buf via HW RNG)
+# from the Espressif Component Registry.
+#
+# If `pio run` fails to resolve this component, check the current
+# published version at:
+#   https://components.espressif.com/components/espressif/libsodium
+# and pin it explicitly, e.g. espressif/libsodium: "1.0.20"
+dependencies:
+  espressif/libsodium: "*"
