@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>vaultless · 2P-OPRF password oracle</title>
+<meta name="description" content="A vaultless deterministic password manager backed by a two-party OPRF and a physical hardware oracle.">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+<style>
+  :root{
+    --bg-0:#07090b;
+    --bg-1:#0d1114;
+    --bg-2:#12171b;
+    --line:#1e262b;
+    --line-bright:#2a353c;
+    --ink-0:#e8f1ee;
+    --ink-1:#9db3ae;
+    --ink-2:#5f7570;
+    --cyan:#5eead4;
+    --cyan-dim:#2f6b62;
+    --amber:#f2b263;
+    --amber-dim:#7a5a2e;
+    --red:#ef6a5f;
+    --mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:'IBM Plex Sans', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(94,234,212,0.06), transparent 60%),
+      var(--bg-0);
+    color:var(--ink-0);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--cyan-dim);color:var(--ink-0);}
+  a{color:var(--cyan);}
+
+  .wrap{max-width:960px;margin:0 auto;padding:28px 20px 80px;}
+
+  /* ---------- header / signature strip ---------- */
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding-bottom:22px;border-bottom:1px solid var(--line);margin-bottom:26px;
+    flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;}
+  .brand .mark{
+    font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.02em;
+    color:var(--bg-0);background:var(--cyan);padding:3px 7px;border-radius:3px;
+  }
+  .brand h1{font-family:var(--mono);font-size:16px;font-weight:600;margin:0;color:var(--ink-0);letter-spacing:.01em;}
+  .brand small{font-family:var(--mono);color:var(--ink-2);font-size:12px;}
+
+  .conn{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-1);}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-2);box-shadow:0 0 0 3px transparent;transition:.25s;}
+  .dot.live{background:var(--cyan);box-shadow:0 0 0 3px rgba(94,234,212,.15);}
+  .dot.warn{background:var(--amber);box-shadow:0 0 0 3px rgba(242,178,99,.15);}
+
+  /* ---------- signature element: live protocol trace ---------- */
+  .trace-band{
+    border:1px solid var(--line);border-radius:10px;background:var(--bg-1);
+    overflow:hidden;margin-bottom:26px;
+  }
+  .trace-head{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px;border-bottom:1px solid var(--line);
+  }
+  .trace-head h2{
+    font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--ink-2);margin:0;font-weight:600;
+  }
+  .trace-head .clear{
+    font-family:var(--mono);font-size:11px;color:var(--ink-2);background:none;border:none;
+    cursor:pointer;letter-spacing:.05em;
+  }
+  .trace-head .clear:hover{color:var(--ink-0);}
+  #trace{
+    height:168px;overflow-y:auto;padding:10px 14px;font-family:var(--mono);font-size:12px;line-height:1.65;
+  }
+  #trace .row{display:flex;gap:10px;white-space:pre-wrap;word-break:break-all;}
+  #trace .t{color:var(--ink-2);flex-shrink:0;}
+  #trace .step{color:var(--cyan);flex-shrink:0;}
+  #trace .msg{color:var(--ink-1);}
+  #trace .err{color:var(--red);}
+  #trace .empty{color:var(--ink-2);font-style:italic;}
+
+  /* ---------- layout: form + result ---------- */
+  .grid{display:grid;grid-template-columns:1fr;gap:18px;}
+  @media(min-width:760px){.grid{grid-template-columns:1.1fr .9fr;align-items:start;}}
+
+  .panel{
+    border:1px solid var(--line);border-radius:10px;background:var(--bg-1);padding:20px;
+  }
+  .panel h2{
+    font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--ink-2);margin:0 0 16px;font-weight:600;
+  }
+
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block;font-family:var(--mono);font-size:12px;color:var(--ink-1);margin-bottom:7px;letter-spacing:.02em;
+  }
+  .field .hint{color:var(--ink-2);font-weight:400;}
+  input[type=text],input[type=password],input[type=number],select{
+    width:100%;background:var(--bg-0);border:1px solid var(--line-bright);color:var(--ink-0);
+    padding:11px 12px;border-radius:7px;font-family:var(--mono);font-size:14px;outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus,select:focus{
+    border-color:var(--cyan);box-shadow:0 0 0 3px rgba(94,234,212,.12);
+  }
+  .pw-row{display:flex;gap:8px;}
+  .pw-row input{flex:1;}
+  .iconbtn{
+    background:var(--bg-2);border:1px solid var(--line-bright);border-radius:7px;color:var(--ink-1);
+    padding:0 12px;cursor:pointer;font-family:var(--mono);font-size:12px;
+  }
+  .iconbtn:hover{color:var(--ink-0);border-color:var(--ink-2);}
+
+  .row2{display:grid;grid-template-columns:1fr 110px;gap:12px;}
+
+  .fmt-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .fmt-opt{
+    border:1px solid var(--line-bright);border-radius:7px;padding:10px 12px;cursor:pointer;
+    font-family:var(--mono);font-size:12.5px;color:var(--ink-1);background:var(--bg-0);
+    transition:.15s;
+  }
+  .fmt-opt.active{border-color:var(--cyan);color:var(--cyan);background:rgba(94,234,212,.06);}
+  .fmt-opt:hover{border-color:var(--ink-2);}
+
+  .actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;}
+  button.primary{
+    background:var(--cyan);color:var(--bg-0);border:none;border-radius:7px;
+    font-family:var(--mono);font-weight:600;font-size:13px;padding:12px 18px;cursor:pointer;
+    letter-spacing:.02em;transition:transform .1s, opacity .15s;
+  }
+  button.primary:hover{opacity:.9;}
+  button.primary:active{transform:scale(.98);}
+  button.primary:disabled{opacity:.35;cursor:not-allowed;}
+  button.ghost{
+    background:transparent;border:1px solid var(--line-bright);color:var(--ink-1);
+    border-radius:7px;font-family:var(--mono);font-size:13px;padding:12px 16px;cursor:pointer;
+  }
+  button.ghost:hover{border-color:var(--ink-2);color:var(--ink-0);}
+
+  /* result panel */
+  .result-display{
+    background:var(--bg-0);border:1px solid var(--line-bright);border-radius:8px;
+    padding:18px 14px;text-align:center;margin-bottom:14px;min-height:64px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .result-display .pw{
+    font-family:var(--mono);font-size:19px;letter-spacing:.03em;color:var(--ink-0);word-break:break-all;
+  }
+  .result-display .placeholder{color:var(--ink-2);font-family:var(--mono);font-size:13px;}
+  .result-meta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-bottom:16px;}
+
+  .oracle-state{
+    border-top:1px solid var(--line);margin-top:18px;padding-top:16px;
+  }
+  .oracle-state .lbl{font-family:var(--mono);font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;}
+  .esp-row{margin-top:4px;}
+  esp-web-install-button{--esp-tools-button-color:var(--cyan);}
+  esp-web-install-button::part(activate-button){
+    font-family:var(--mono);font-size:13px;background:var(--bg-2);color:var(--cyan);
+    border:1px solid var(--cyan-dim);border-radius:7px;padding:10px 16px;
+  }
+
+  .foot{
+    margin-top:34px;padding-top:18px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:11px;color:var(--ink-2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  }
+
+  .badge{
+    display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 7px;border-radius:4px;border:1px solid var(--line-bright);color:var(--ink-2);
+  }
+  .badge.on{border-color:var(--cyan-dim);color:var(--cyan);}
+  .badge.warn{border-color:var(--amber-dim);color:var(--amber);}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <span class="mark">2P</span>
+      <div>
+        <h1>vaultless</h1>
+        <small>oblivious PRF password oracle · ristretto255</small>
+      </div>
+    </div>
+    <div class="conn">
+      <span class="dot" id="connDot"></span>
+      <span id="connLabel">oracle disconnected</span>
+    </div>
+  </header>
+
+  <!-- signature element: the live handshake trace -->
+  <section class="trace-band">
+    <div class="trace-head">
+      <h2>protocol trace</h2>
+      <button class="clear" id="clearTrace">clear</button>
+    </div>
+    <div id="trace"><div class="row"><span class="empty">— no handshake yet. derive a password to see the OPRF exchange step by step —</span></div></div>
+  </section>
+
+  <div class="grid">
+    <!-- LEFT: inputs -->
+    <section class="panel">
+      <h2>derive</h2>
+
+      <div class="field">
+        <label for="passphrase">Master passphrase</label>
+        <div class="pw-row">
+          <input type="password" id="passphrase" placeholder="never leaves this device" autocomplete="off">
+          <button class="iconbtn" id="togglePass" type="button">show</button>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="domain">Domain / service</label>
+          <input type="text" id="domain" placeholder="example.com" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="index">Sub-index</label>
+          <input type="number" id="index" value="0" min="0" step="1">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Output format</label>
+        <div class="fmt-grid" id="fmtGrid">
+          <div class="fmt-opt active" data-fmt="complex">Complex symbols · 20</div>
+          <div class="fmt-opt" data-fmt="alnum">Alphanumeric · 16</div>
+          <div class="fmt-opt" data-fmt="b64url">Base64url · 20</div>
+          <div class="fmt-opt" data-fmt="pin">PIN · 6 digits</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="deriveBtn">Derive via oracle</button>
+        <button class="ghost" id="simBtn">Simulate oracle</button>
+      </div>
+
+      <div class="oracle-state">
+        <div class="lbl">hardware</div>
+        <div class="actions" style="margin-top:0;">
+          <button class="ghost" id="connectBtn">Connect WebSerial</button>
+          <button class="ghost" id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+        <div class="esp-row">
+          <esp-web-install-button manifest="manifest.json">
+            <button class="ghost" slot="activate">Flash LilyGO firmware</button>
+          </esp-web-install-button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: result -->
+    <section class="panel">
+      <h2>result</h2>
+      <div class="result-display">
+        <div class="pw" id="pwOut" style="display:none;"></div>
+        <div class="placeholder" id="pwPlaceholder">no password derived yet</div>
+      </div>
+      <div class="result-meta">
+        <span id="resFmt">format: complex · 20</span>
+        <span id="resSource">source: —</span>
+      </div>
+      <div class="actions">
+        <button class="ghost" id="copyBtn" disabled>Copy to clipboard</button>
+      </div>
+
+      <div class="oracle-state">
+        <div class="lbl">why this is safe</div>
+        <p style="font-family:var(--mono);font-size:12px;color:var(--ink-1);line-height:1.6;margin:0;">
+          The oracle's private scalar <em>k</em> never leaves the device, and it only ever sees a blinded,
+          random-looking curve point — never your passphrase, domain, or the final password. Nothing is
+          stored on this device or in the cloud; the same three inputs always regenerate the same password.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span>WebSerial: <span class="badge" id="wsBadge">checking…</span></span>
+    <span>protocol: OPRF-RISTRETTO255-HKDFSHA256 · v1</span>
+  </div>
+</div>
+
+<script type="module">
+import { RistrettoPoint, hashToRistretto255 } from 'https://esm.sh/@noble/curves@1.4.2/ed25519';
+import { bytesToHex, hexToBytes, bytesToNumberLE, numberToBytesLE, utf8ToBytes, concatBytes } from 'https://esm.sh/@noble/curves@1.4.2/abstract/utils';
+import { hkdf } from 'https://esm.sh/@noble/hashes@1.4.0/hkdf';
+import { sha256 } from 'https://esm.sh/@noble/hashes@1.4.0/sha256';
+import { sha512 } from 'https://esm.sh/@noble/hashes@1.4.0/sha512';
+
+/* ---------------------------------------------------------------------
+ * Group order L of ristretto255 / ed25519 (RFC 9380 / RFC 8032).
+ * ------------------------------------------------------------------- */
+const L = 2n ** 252n + 27742317777372353535851937790883648493n;
+
+function egcd(a, b) {
+  if (a === 0n) return [b, 0n, 1n];
+  const [g, x1, y1] = egcd(b % a, a);
+  return [g, y1 - (b / a) * x1, x1];
+}
+function invMod(a, m) {
+  a = ((a % m) + m) % m;
+  const [g, x] = egcd(a, m);
+  if (g !== 1n) throw new Error('scalar not invertible');
+  return ((x % m) + m) % m;
+}
+function randomScalar() {
+  let r = 0n;
+  while (r === 0n) {
+    const buf = new Uint8Array(32);
+    crypto.getRandomValues(buf);
+    r = bytesToNumberLE(buf) % L;
+  }
+  return r;
+}
+function scalarToBytes(s) {
+  return numberToBytesLE(((s % L) + L) % L, 32);
+}
+
+/* ---------------------------------------------------------------------
+ * UI trace logger (the "protocol trace" signature element)
+ * ------------------------------------------------------------------- */
+const traceEl = document.getElementById('trace');
+function trace(step, msg, isErr = false) {
+  if (traceEl.querySelector('.empty')) traceEl.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'row';
+  const t = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  row.innerHTML = `<span class="t">${t}</span><span class="step">${step}</span><span class="${isErr ? 'err' : 'msg'}">${msg}</span>`;
+  traceEl.appendChild(row);
+  traceEl.scrollTop = traceEl.scrollHeight;
+}
+document.getElementById('clearTrace').onclick = () => {
+  traceEl.innerHTML = '<div class="row"><span class="empty">— cleared —</span></div>';
+};
+
+/* ---------------------------------------------------------------------
+ * WebSerial transport
+ * ------------------------------------------------------------------- */
+const wsBadge = document.getElementById('wsBadge');
+const serialSupported = 'serial' in navigator;
+wsBadge.textContent = serialSupported ? 'supported' : 'unsupported';
+wsBadge.classList.add(serialSupported ? 'on' : 'warn');
+
+let port = null, writer = null, reader = null, readableClosed = null;
+const connDot = document.getElementById('connDot');
+const connLabel = document.getElementById('connLabel');
+const connectBtn = document.getElementById('connectBtn');
+const disconnectBtn = document.getElementById('disconnectBtn');
+
+function setConnected(state, label) {
+  connDot.className = 'dot' + (state ? ' live' : '');
+  connLabel.textContent = label;
+  connectBtn.disabled = state;
+  disconnectBtn.disabled = !state;
+}
+
+let lineBuffer = '';
+let pendingResolvers = [];
+
+async function readLoop() {
+  const decoder = new TextDecoderStream();
+  readableClosed = port.readable.pipeTo(decoder.writable);
+  reader = decoder.readable.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) {
+        lineBuffer += value;
+        let idx;
+        while ((idx = lineBuffer.indexOf('\n')) >= 0) {
+          const line = lineBuffer.slice(0, idx).trim();
+          lineBuffer = lineBuffer.slice(idx + 1);
+          if (line && pendingResolvers.length) {
+            const resolve = pendingResolvers.shift();
+            resolve(line);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    trace('serial', `read loop ended: ${e.message}`, true);
+  }
+}
+
+async function connectSerial() {
+  if (!serialSupported) {
+    trace('serial', 'WebSerial is not supported in this browser', true);
+    return;
+  }
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    const encoder = new TextEncoderStream();
+    encoder.readable.pipeTo(port.writable);
+    writer = encoder.writable.getWriter();
+    readLoop();
+    setConnected(true, 'oracle connected');
+    trace('serial', 'WebSerial port opened @ 115200 baud');
+  } catch (e) {
+    trace('serial', `connection failed: ${e.message}`, true);
+  }
+}
+
+async function disconnectSerial() {
+  try {
+    if (reader) await reader.cancel();
+    if (writer) await writer.close();
+    if (port) await port.close();
+  } catch (e) { /* best-effort teardown */ }
+  port = null; writer = null; reader = null;
+  setConnected(false, 'oracle disconnected');
+  trace('serial', 'port closed');
+}
+
+async function sendToOracle(payloadObj, timeoutMs = 30000) {
+  if (!writer) throw new Error('serial port not open');
+  const line = JSON.stringify(payloadObj) + '\n';
+  const responsePromise = new Promise((resolve, reject) => {
+    pendingResolvers.push(resolve);
+    setTimeout(() => reject(new Error('oracle response timed out')), timeoutMs);
+  });
+  await writer.write(line);
+  const raw = await responsePromise;
+  return JSON.parse(raw);
+}
+
+connectBtn.onclick = connectSerial;
+disconnectBtn.onclick = disconnectSerial;
+
+/* ---------------------------------------------------------------------
+ * Simulated oracle (in-browser, ephemeral session key — for testing
+ * without hardware). The scalar lives only in memory for this tab.
+ * ------------------------------------------------------------------- */
+let simKey = null;
+function simulateOracle(blindedHex) {
+  if (!simKey) {
+    simKey = randomScalar();
+    trace('sim', 'generated ephemeral session oracle key (memory-only)');
+  }
+  const B = RistrettoPoint.fromHex(blindedHex);
+  const Bp = B.multiply(((simKey % L) + L) % L);
+  return { point: bytesToHex(Bp.toRawBytes()) };
+}
+
+document.getElementById('simBtn').onclick = () => runDerivation(true);
+document.getElementById('deriveBtn').onclick = () => runDerivation(false);
+
+/* ---------------------------------------------------------------------
+ * Format selector
+ * ------------------------------------------------------------------- */
+let selectedFormat = 'complex';
+document.querySelectorAll('.fmt-opt').forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll('.fmt-opt').forEach(o => o.classList.remove('active'));
+    el.classList.add('active');
+    selectedFormat = el.dataset.fmt;
+    document.getElementById('resFmt').textContent = `format: ${el.textContent.trim()}`;
+  };
+});
+
+document.getElementById('togglePass').onclick = () => {
+  const el = document.getElementById('passphrase');
+  const btn = document.getElementById('togglePass');
+  el.type = el.type === 'password' ? 'text' : 'password';
+  btn.textContent = el.type === 'password' ? 'show' : 'hide';
+};
+
+/* ---------------------------------------------------------------------
+ * Formatting engine — derives a large keystream per-format via a
+ * second HKDF stage keyed by format name, then rejection-samples
+ * into the target charset/length to avoid modulo bias.
+ * ------------------------------------------------------------------- */
+const CHARSETS = {
+  complex: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}',
+  alnum:   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+  pin:     '0123456789',
+};
+const FORMAT_LENGTHS = { complex: 20, alnum: 16, b64url: 20, pin: 6 };
+
+function rejectionSample(streamBytes, charset) {
+  const n = charset.length;
+  const limit = Math.floor(256 / n) * n;
+  const out = [];
+  let i = 0;
+  while (out.length < streamBytes.__need) {
+    if (i >= streamBytes.length) throw new Error('keystream exhausted — increase derived length');
+    const b = streamBytes[i++];
+    if (b < limit) out.push(charset[b % n]);
+  }
+  return out.join('');
+}
+
+function formatPassword(oprfOutput, format) {
+  const need = FORMAT_LENGTHS[format];
+  // Second-stage HKDF, keyed by format so each format is independently
+  // deterministic yet derived from the same OPRF secret.
+  const stream = hkdf(sha256, oprfOutput, utf8ToBytes(format), utf8ToBytes('oprf-vaultless-fmt-v1'), 128);
+  if (format === 'b64url') {
+    const b64 = btoa(String.fromCharCode(...stream))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return b64.slice(0, need);
+  }
+  stream.__need = need;
+  return rejectionSample(stream, CHARSETS[format]);
+}
+
+/* ---------------------------------------------------------------------
+ * Main derivation flow
+ * ------------------------------------------------------------------- */
+async function runDerivation(useSimulator) {
+  const passphrase = document.getElementById('passphrase').value;
+  const domain = document.getElementById('domain').value.trim();
+  const index = parseInt(document.getElementById('index').value || '0', 10);
+  const deriveBtn = document.getElementById('deriveBtn');
+  const simBtn = document.getElementById('simBtn');
+
+  if (!passphrase || !domain) {
+    trace('input', 'master passphrase and domain are required', true);
+    return;
+  }
+  if (!useSimulator && !writer) {
+    trace('input', 'no oracle connected — connect WebSerial or use "Simulate oracle"', true);
+    return;
+  }
+
+  deriveBtn.disabled = true; simBtn.disabled = true;
+  document.getElementById('resSource').textContent = `source: ${useSimulator ? 'simulator' : 'hardware oracle'}`;
+
+  try {
+    trace('1/6', `hashing "${domain}:${index}" to a ristretto255 point`);
+    const msg = concatBytes(utf8ToBytes(passphrase), utf8ToBytes('||'), utf8ToBytes(domain), utf8ToBytes('||'), utf8ToBytes(String(index)));
+    const P = hashToRistretto255(msg, { DST: 'oprf-vaultless-pwd-v1-HashToGroup' });
+
+    trace('2/6', 'generating blinding scalar r and computing B = r·P');
+    const r = randomScalar();
+    const B = P.multiply(r);
+    const blindedHex = bytesToHex(B.toRawBytes());
+    trace('2/6', `B = ${blindedHex.slice(0, 16)}…`);
+
+    trace('3/6', `sending {domain, index, point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
+    let response;
+    if (useSimulator) {
+      response = simulateOracle(blindedHex);
+    } else {
+      response = await sendToOracle({ domain, index, point: blindedHex });
+    }
+    if (response.error) throw new Error(`oracle rejected: ${response.error}`);
+    if (!response.point) throw new Error('oracle response missing point');
+    trace('4/6', `received B' = ${response.point.slice(0, 16)}…`);
+
+    trace('5/6', 'unblinding: S = r⁻¹·B\'');
+    const rInv = invMod(r, L);
+    const Bp = RistrettoPoint.fromHex(response.point);
+    const S = Bp.multiply(rInv);
+    const sBytes = S.toRawBytes();
+
+    trace('6/6', 'expanding shared secret via HKDF-SHA256');
+    const salt = utf8ToBytes(`${domain}:${index}`);
+    const oprfOutput = hkdf(sha256, sBytes, salt, utf8ToBytes('oprf-vaultless-pwd-v1'), 32);
+
+    const password = formatPassword(oprfOutput, selectedFormat);
+    showResult(password);
+    trace('done', `password derived · ${password.length} chars`);
+  } catch (e) {
+    trace('error', e.message, true);
+  } finally {
+    deriveBtn.disabled = false; simBtn.disabled = false;
+  }
+}
+
+function showResult(pw) {
+  document.getElementById('pwPlaceholder').style.display = 'none';
+  const el = document.getElementById('pwOut');
+  el.style.display = 'block';
+  el.textContent = pw;
+  document.getElementById('copyBtn').disabled = false;
+}
+
+document.getElementById('copyBtn').onclick = async () => {
+  const pw = document.getElementById('pwOut').textContent;
+  if (!pw) return;
+  await navigator.clipboard.writeText(pw);
+  const btn = document.getElementById('copyBtn');
+  const original = btn.textContent;
+  btn.textContent = 'copied ✓';
+  setTimeout(() => (btn.textContent = original), 1400);
+};
+</script>
+</body>
+</html>
