@@ -1,0 +1,7 @@
+# This project doesn't use Bluetooth/BLE. Disabling it here removes the
+# arduino-esp32 core's own bundled "libsodium" component (pulled in
+# transitively by WiFiProv/BLE provisioning) from the build, which otherwise
+# collides by name with the espressif/libsodium package we pull in via
+# firmware/src/idf_component.yml ("Multiple candidates to satisfy project
+# requirements: ... candidates: espressif__libsodium, libsodium").
+CONFIG_BT_ENABLED=n

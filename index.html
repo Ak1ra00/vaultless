@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>vaultless · 2P-OPRF password oracle</title>
 <meta name="description" content="A vaultless deterministic password manager backed by a two-party OPRF and a physical hardware oracle.">
+<meta name="theme-color" content="#07090b">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -186,6 +190,23 @@
   .badge.warn{border-color:var(--amber-dim);color:var(--amber);}
 
   @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
+
+  /* ---------- project story / hardware docs ---------- */
+  .docs-grid{display:grid;grid-template-columns:1fr;gap:22px;}
+  @media(min-width:760px){.docs-grid{grid-template-columns:1fr 1fr;}}
+  .doc-p{font-family:var(--sans);font-size:13px;color:var(--ink-1);line-height:1.65;margin:0 0 12px;}
+  .doc-p strong{color:var(--ink-0);font-weight:600;}
+  .doc-p em,.doc-list em,.doc-steps em{font-family:var(--mono);color:var(--cyan);font-style:normal;}
+  .doc-p code{font-family:var(--mono);color:var(--cyan);background:var(--bg-0);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px;}
+  .doc-p a,.doc-list a{color:var(--cyan);text-decoration:none;border-bottom:1px solid var(--cyan-dim);}
+  .doc-p a:hover,.doc-list a:hover{border-color:var(--cyan);}
+  .doc-steps,.doc-list{margin:0 0 12px;padding-left:20px;font-family:var(--sans);font-size:13px;color:var(--ink-1);line-height:1.6;}
+  .doc-steps li,.doc-list li{margin-bottom:8px;}
+  .pin-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;color:var(--ink-1);}
+  .pin-table td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+  .pin-table td:first-child{color:var(--ink-0);white-space:nowrap;padding-right:12px;}
+  .pin-table td:last-child{text-align:right;white-space:nowrap;}
+  .doc-code{font-family:var(--mono);font-size:12px;color:var(--ink-0);background:var(--bg-0);border:1px solid var(--line-bright);border-radius:7px;padding:12px 14px;overflow-x:auto;line-height:1.6;margin:0;}
 </style>
 </head>
 <body>
@@ -260,7 +281,7 @@
           <button class="ghost" id="disconnectBtn" disabled>Disconnect</button>
         </div>
         <div class="esp-row">
-          <esp-web-install-button manifest="manifest.json">
+          <esp-web-install-button manifest="esp-manifest.json">
             <button class="ghost" slot="activate">Flash LilyGO firmware</button>
           </esp-web-install-button>
         </div>
@@ -292,6 +313,94 @@
       </div>
     </section>
   </div>
+
+  <!-- ---------- project story ---------- -->
+  <section class="panel" style="margin-top:18px;">
+    <h2>how it works &amp; why it's safe</h2>
+    <div class="docs-grid">
+      <div>
+        <p class="doc-p">
+          vaultless is a <strong>deterministic</strong> password manager: instead of storing a vault of secrets
+          anywhere, every password is re-derived on demand from three things — your master passphrase, the
+          domain, and a sub-index. Same three inputs, same password, every time. Nothing to sync, back up, or leak.
+        </p>
+        <p class="doc-p">
+          The catch with pure deterministic derivation is that anyone who steals your master passphrase can
+          recompute every password you've ever generated offline. vaultless closes that gap with a second factor
+          that never leaves a physical device: a <strong>two-party oblivious PRF</strong> (OPRF) over
+          ristretto255.
+        </p>
+        <ol class="doc-steps">
+          <li>Your browser hashes <code>passphrase‖domain‖index</code> to a curve point <em>P</em>, then
+            blinds it with a random scalar <em>r</em> to get <em>B = r·P</em> — indistinguishable from a
+            random point.</li>
+          <li><em>B</em> is sent to the oracle (hardware over WebSerial, or the in-browser simulator).</li>
+          <li>The oracle multiplies by its private scalar <em>k</em> and returns <em>B′ = k·B</em>, only after
+            a human presses the physical approve button.</li>
+          <li>The browser unblinds: <em>S = r⁻¹·B′ = k·P</em>, then expands <em>S</em> through HKDF-SHA256 into
+            the final password.</li>
+        </ol>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:10px;">why this resists theft</div>
+        <ul class="doc-list">
+          <li>The oracle only ever sees a blinded point — never your passphrase or the domain in a form it can
+            use to precompute anything.</li>
+          <li>Without the oracle's private scalar <em>k</em>, a stolen passphrase alone cannot regenerate any
+            password.</li>
+          <li>Without the passphrase, a stolen or cloned oracle alone cannot regenerate any password either —
+            both factors are required.</li>
+          <li>Every derivation requires a physical button press on the device, so remote/malware-driven
+            derivations are not silent.</li>
+          <li>Nothing is persisted: not the passphrase, not intermediate points, not the resulting password.</li>
+        </ul>
+        <div class="lbl" style="margin:16px 0 10px;">source</div>
+        <p class="doc-p" style="margin:0;">
+          Protocol, firmware, and this page are all open source:
+          <a href="https://github.com/Ak1ra00/SK" target="_blank" rel="noopener">github.com/Ak1ra00/SK</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- hardware build docs ---------- -->
+  <section class="panel" style="margin-top:18px;">
+    <h2>build your own oracle</h2>
+    <div class="docs-grid">
+      <div>
+        <div class="lbl" style="margin-bottom:10px;">parts list</div>
+        <ul class="doc-list">
+          <li><a href="https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board"
+                 target="_blank" rel="noopener">LilyGO T-Display</a> — ESP32 + 1.14" ST7789 LCD (135×240), 4MB flash</li>
+          <li>USB-C or micro-USB data cable (check your board revision)</li>
+          <li>No extra wiring required — buttons and display are on-board</li>
+        </ul>
+        <div class="lbl" style="margin:16px 0 10px;">on-board pinout</div>
+        <table class="pin-table">
+          <tr><td>Approve button</td><td>GPIO0</td><td class="badge on">active-low</td></tr>
+          <tr><td>Reject button</td><td>GPIO35</td><td class="badge">active-high, ext. pull-up</td></tr>
+          <tr><td>Display (ST7789)</td><td>SPI: MOSI 19 · SCLK 18 · CS 5 · DC 16 · RST 23 · BL 4</td><td></td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:10px;">flashing</div>
+        <p class="doc-p">Easiest: plug the board in over USB and use the
+          <strong>Flash LilyGO firmware</strong> button above — it uses
+          <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
+          over WebSerial, no local toolchain needed.
+        </p>
+        <p class="doc-p">To build from source instead:</p>
+        <pre class="doc-code">git clone https://github.com/Ak1ra00/SK
+cd SK/firmware
+pio run -e esp32dev -t upload</pre>
+        <p class="doc-p" style="margin-top:12px;">
+          The private oracle scalar <em>k</em> is generated on first boot from the hardware RNG and stored in
+          NVS — it never touches the serial line, the browser, or this repo. Firmware source:
+          <a href="https://github.com/Ak1ra00/SK/blob/main/firmware/src/main.cpp" target="_blank" rel="noopener">firmware/src/main.cpp</a>.
+        </p>
+      </div>
+    </div>
+  </section>
 
   <div class="foot">
     <span>WebSerial: <span class="badge" id="wsBadge">checking…</span></span>
