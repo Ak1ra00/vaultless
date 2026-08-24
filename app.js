@@ -356,12 +356,27 @@ function formatPassword(oprfOutput, format) {
  * ------------------------------------------------------------------- */
 async function runDerivation(useSimulator) {
   const passphrase = document.getElementById('passphrase').value;
-  const index = parseInt(document.getElementById('index').value || '0', 10);
   const deriveBtn = document.getElementById('deriveBtn');
   const simBtn = document.getElementById('simBtn');
 
   if (!passphrase) {
     trace('input', 'master passphrase is required', true);
+    return;
+  }
+
+  /* The index goes into the hash input and the HKDF salt, so it has to be
+   * exactly what the user meant. parseInt was too forgiving: "12x" silently
+   * became 12, and anything non-numeric became NaN, which stringifies to
+   * "NaN" and derives a password from it. Require a plain non-negative
+   * integer, and keep it inside the range the firmware's `long` can hold. */
+  const rawIndex = (document.getElementById('index').value || '0').trim();
+  if (!/^\d+$/.test(rawIndex)) {
+    trace('input', 'index must be a non-negative whole number', true);
+    return;
+  }
+  const index = Number(rawIndex);
+  if (!Number.isSafeInteger(index) || index > 2147483647) {
+    trace('input', 'index is out of range (max 2147483647)', true);
     return;
   }
   if (!useSimulator && !writer) {

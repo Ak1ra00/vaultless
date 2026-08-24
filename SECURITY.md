@@ -27,6 +27,15 @@ Known and documented — no need to report:
 - The oracle auto-approves every request it receives. There is no physical
   confirmation step; possession of the connected device is the entire second
   factor. This is stated in the README.
+- The default firmware build (`env:esp32dev`, which is what the website
+  flashes) stores the oracle scalar `k` in unencrypted NVS, so anyone holding
+  the board can read it out of flash. Closing this requires enabling flash
+  encryption, which burns eFuses irreversibly and so is deliberately opt-in —
+  see `firmware/SECURE_PROVISIONING.md`.
+- The site is served from GitHub Pages, which cannot set response headers.
+  Protections that only work as real headers — `frame-ancestors` for
+  clickjacking, HSTS — are therefore unavailable; the rest of the policy is
+  applied via a `<meta>` CSP.
 
 ## Supported versions
 

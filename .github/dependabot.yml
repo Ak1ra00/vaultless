@@ -1,0 +1,13 @@
+# The runtime dependencies here are vendored into vendor/ on purpose (see
+# vendor/VENDOR.md), which removes the CDN risk but also means nothing tells
+# you when an upstream security release lands. These ecosystems are watched so
+# that a pinned version going stale is surfaced rather than silently rotting.
+version: 2
+updates:
+  # GitHub Actions are pinned to commit SHAs; this keeps the pins current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
