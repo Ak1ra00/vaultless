@@ -56,3 +56,11 @@ The site's "Flash LilyGO firmware" button uses
 [ESP Web Tools](https://esphome.github.io/esp-web-tools/) over WebSerial — no local
 toolchain needed. It reads `esp-manifest.json`, which points at `firmware_merged.bin`,
 kept up to date by CI on every push that touches `firmware/`.
+
+## Security
+
+Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 S.K.

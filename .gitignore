@@ -1,0 +1,22 @@
+# PlatformIO / ESP-IDF build output
+.pio/
+.pioenvs/
+.piolibdeps/
+firmware/.pio/
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+firmware/dependencies.lock
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local env — never commit
+.env
+.env.*
+!.env.example
