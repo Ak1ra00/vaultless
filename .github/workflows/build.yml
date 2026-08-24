@@ -85,11 +85,36 @@ jobs:
             0xe000   "${{ steps.artifacts.outputs.boot_app0_bin }}" \
             0x10000  "${{ steps.artifacts.outputs.fw_bin }}"
 
+      - name: Stamp flashing manifest with this build
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          python - "$SHORT_SHA" <<'PY'
+          import json, sys
+
+          sha = sys.argv[1]
+          with open("esp-manifest.json") as fh:
+              manifest = json.load(fh)
+
+          # Cache-bust the binary URL: without this a browser that has already
+          # flashed once can hand ESP Web Tools a stale firmware_merged.bin and
+          # silently reflash the previous build.
+          manifest["version"] = sha
+          for build in manifest["builds"]:
+              for part in build["parts"]:
+                  part["path"] = "firmware_merged.bin?v=%s" % sha
+
+          with open("esp-manifest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+              fh.write("\n")
+          PY
+          cat esp-manifest.json
+
       - name: Commit merged firmware back to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add firmware_merged.bin
+          git add firmware_merged.bin esp-manifest.json
           if git diff --cached --quiet; then
             echo "No changes to firmware_merged.bin — skipping commit."
             exit 0

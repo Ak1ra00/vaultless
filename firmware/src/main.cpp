@@ -350,5 +350,9 @@ extern "C" void app_main() {
   setup();
   while (true) {
     loop();
+    // loop() returns immediately when no serial data is waiting, so without
+    // this the main task spins at 100% on CPU 0, starves IDLE0 and trips the
+    // task watchdog every 5s ("Task watchdog got triggered ... IDLE0").
+    delay(1);
   }
 }
