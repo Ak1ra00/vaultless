@@ -51,6 +51,29 @@ npm install esp-web-tools@10.4.0
 cp -r node_modules/esp-web-tools/dist/web/. vendor/esp-web-tools/
 ```
 
+## `qr-bundle.js`
+
+QR encode and decode for the printable recovery sheet (`recovery.js`).
+
+| package | version | licence | npm integrity |
+| --- | --- | --- | --- |
+| `qrcode-generator` | 1.4.4 | MIT | `sha512-HM7yY8O2ilqhmULxGMpcHSF1EhJJ9yBj8gvDEuZ6M+KGJ0YY2hKpnXvRD+hZPLrDVck3ExIGhmPtSdcjC+guuw==` |
+| `jsqr` | 1.4.0 | Apache-2.0 | `sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==` |
+
+`jsQR` is the decode fallback for browsers without `BarcodeDetector` (Safari,
+Firefox). It is the bulk of the bundle; the native detector is preferred when
+present.
+
+### Rebuilding
+
+```bash
+npm install qrcode-generator@1.4.4 jsqr@1.4.0 esbuild
+# entry.js: export { default as qrcode } from 'qrcode-generator';
+#           export { default as jsQR } from 'jsqr';
+npx esbuild entry.js --bundle --format=esm --minify --target=es2020 \
+  --outfile=vendor/qr-bundle.js
+```
+
 ## Updating
 
 Bump the version, re-run the steps above, re-record the integrity hash from

@@ -288,6 +288,41 @@
   }
   .toast.on{transform:translate(-50%,0);opacity:1;visibility:visible;}
 
+  /* recovery sheet ---------------------------------------------------- */
+  .sheet-panel{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-0);}
+  .sheet-status{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin-bottom:12px;}
+  .sheet-status.good{color:var(--green);}
+  .sheet-label{display:block;font-size:14px;color:var(--ink-1);margin:14px 0 8px;}
+  .sheet-error{color:var(--red);font-size:14px;margin-top:10px;min-height:20px;}
+  .scan-video{width:100%;max-width:340px;border-radius:var(--r-sm);border:1px solid var(--line-bright);background:#000;display:block;}
+  #sheetManual{font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;}
+  .warn-box{
+    border:1px solid var(--amber);background:rgba(242,178,99,.09);border-radius:var(--r-sm);
+    padding:16px 18px;margin-bottom:18px;font-size:15px;color:var(--ink-1);
+  }
+  .warn-box strong{color:var(--amber);display:block;margin-bottom:8px;}
+  .warn-box ul{margin:0;padding-left:20px;}
+  .warn-box li{margin-bottom:7px;}
+  .printable{background:#fff;color:#000;border-radius:var(--r-sm);padding:26px;text-align:center;margin-top:18px;}
+  .printable h4{font-family:var(--mono);font-size:15px;letter-spacing:.1em;text-transform:uppercase;margin:0 0 16px;color:#000;}
+  .printable .qr{width:220px;height:220px;image-rendering:pixelated;}
+  .sheet-meta{display:flex;justify-content:center;gap:28px;margin:16px 0 12px;font-family:var(--mono);font-size:12px;}
+  .sheet-meta .k{display:block;color:#666;text-transform:uppercase;letter-spacing:.08em;font-size:10px;}
+  .sheet-meta .v{display:block;color:#000;font-size:14px;font-weight:600;}
+  .sheet-code{
+    font-family:var(--mono);font-size:13px;line-height:1.9;word-spacing:.2em;color:#000;
+    background:#f3f3f3;border-radius:6px;padding:12px;margin:0 auto;max-width:430px;word-break:break-word;
+  }
+  .sheet-note{font-size:11.5px;color:#444;max-width:430px;margin:14px auto 0;line-height:1.5;}
+
+  @media print{
+    body{background:#fff;}
+    body *{visibility:hidden;}
+    #printable,#printable *{visibility:visible;}
+    #printable{position:absolute;left:0;top:0;width:100%;padding:0;margin:0;}
+    #rain,.aurora{display:none;}
+  }
+
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
     html{scroll-behavior:auto;}
@@ -406,11 +441,33 @@
       </div>
 
       <div class="actions" style="margin-top:14px;">
+        <button class="btn small" id="sheetBtn">Use my paper sheet</button>
         <button class="btn small" id="connectBtn">Connect my gadget</button>
         <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
         <esp-web-install-button manifest="esp-manifest.json">
           <button class="btn small" slot="activate">Install firmware</button>
         </esp-web-install-button>
+      </div>
+
+      <div class="sheet-panel" id="sheetPanel" style="display:none;">
+        <div class="sheet-status" id="sheetStatus">No sheet loaded</div>
+        <div class="actions" style="margin-bottom:12px;">
+          <button class="btn small" id="sheetScanBtn">Scan with camera</button>
+          <button class="btn small" id="sheetStopBtn">Stop camera</button>
+          <button class="btn small" id="sheetForget" style="display:none;">Forget key</button>
+        </div>
+        <div id="sheetScanArea" style="display:none;">
+          <video id="sheetVideo" class="scan-video" muted playsinline></video>
+          <canvas id="sheetCanvas" style="display:none;"></canvas>
+          <p class="help" style="margin:10px 0 0;">Hold the printed square up to the camera.</p>
+        </div>
+        <label class="sheet-label" for="sheetManual">…or type the code from the sheet</label>
+        <div class="pw-row">
+          <input type="text" id="sheetManual" placeholder="VLT1-…" autocomplete="off"
+                 autocapitalize="characters" spellcheck="false">
+          <button class="btn" id="sheetManualBtn" type="button">Use code</button>
+        </div>
+        <div class="sheet-error" id="sheetError" role="alert"></div>
       </div>
     </section>
 
@@ -436,6 +493,46 @@
         <button class="clear" id="clearTrace">clear</button>
       </div>
       <div id="trace"><div class="row"><span class="empty">— no handshake yet. derive a password to see the OPRF exchange step by step —</span></div></div>
+    </section>
+
+    <!-- CREATE A SHEET -->
+    <section class="card">
+      <div class="step-h"><span class="num" aria-hidden="true">＋</span><h3>No gadget? Make a paper key</h3></div>
+      <p class="help">This prints one square of paper that does the same job as the gadget.
+        Keep your phrase in your head and this sheet somewhere safe — together they make your
+        passwords, and neither one alone is enough.</p>
+      <div class="warn-box">
+        <strong>Read this before you print.</strong>
+        <ul>
+          <li>Anyone who photographs this sheet <em>and</em> knows your phrase gets every password.
+            Treat it like a bank card, not a shopping list.</li>
+          <li>Lose the sheet with no copy and every password made with it is gone for good.
+            Print two and store them apart.</li>
+          <li>The gadget is safer: it never hands its key to your computer. A sheet does,
+            every time you scan it.</li>
+        </ul>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="createSheetBtn">Create my paper key</button>
+      </div>
+
+      <div id="sheetOutput" style="display:none;">
+        <div class="printable" id="printable">
+          <h4>vaultless recovery sheet</h4>
+          <canvas id="sheetQR" class="qr"></canvas>
+          <div class="sheet-meta">
+            <div><span class="k">key fingerprint</span><span class="v" id="sheetFp"></span></div>
+            <div><span class="k">created</span><span class="v" id="sheetDate"></span></div>
+          </div>
+          <div class="sheet-code" id="sheetCode"></div>
+          <p class="sheet-note">Scan the square, or type the code, at vaultless.space.
+            You also need your master phrase. Anyone with both can read every password
+            made from this key. Store it like cash.</p>
+        </div>
+        <div class="actions" style="margin-top:16px;">
+          <button class="btn primary" id="printSheetBtn">Print this sheet</button>
+        </div>
+      </div>
     </section>
 
   </div>

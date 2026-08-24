@@ -10,6 +10,7 @@ import {
   initChrome, toast, setDemo, markResultFilled,
   vizStart, vizOracle, vizReturn, vizDone, vizReset,
 } from './ui.js';
+import { initSheet, getSheetKey } from './sheet.js';
 
 /* ---------------------------------------------------------------------
  * Group order L of ristretto255 / ed25519 (RFC 9380 / RFC 8032).
@@ -86,6 +87,31 @@ function dleqProve(k, B, Bp, Y) {
 
 /* Verify a hardware response and enforce the pin. Throws on any failure —
  * a derivation must never proceed against an unverified oracle. */
+/* Trust-on-first-use over the oracle's public key, shared by the hardware
+ * oracle and the printed recovery sheet. It is what catches a substituted
+ * device, and equally a sheet that is not the one this browser has been using —
+ * scanning last year's sheet would otherwise derive different passwords with no
+ * error anywhere. */
+function enforcePin(pubkeyHex, whatItIs) {
+  let pinned = null;
+  try { pinned = localStorage.getItem(PIN_KEY); } catch { /* private mode */ }
+  if (!pinned) {
+    try { localStorage.setItem(PIN_KEY, pubkeyHex); } catch { /* private mode */ }
+    trace('pin', `pinned ${whatItIs} ${pubkeyHex.slice(0, 16)}… (first use)`);
+    return;
+  }
+  if (pinned === pubkeyHex) return;
+  const okToRepin = confirm(
+    `WARNING: this ${whatItIs} is not the one previously pinned.\n\n` +
+    `pinned: ${pinned.slice(0, 24)}…\n` +
+    `this:   ${pubkeyHex.slice(0, 24)}…\n\n` +
+    'A different key derives DIFFERENT passwords. Only continue if you ' +
+    'deliberately replaced it. Trust this key from now on?');
+  if (!okToRepin) throw new Error(`${whatItIs} public key does not match the pinned one`);
+  try { localStorage.setItem(PIN_KEY, pubkeyHex); } catch { /* private mode */ }
+  trace('pin', `re-pinned ${whatItIs} ${pubkeyHex.slice(0, 16)}…`, true);
+}
+
 function verifyOracleResponse(response, B, pin = true) {
   if (!response.pubkey || !response.proof) {
     throw new Error('oracle did not supply a DLEQ proof — firmware predates ' +
@@ -105,21 +131,7 @@ function verifyOracleResponse(response, B, pin = true) {
                     'the key it claims; refusing to derive');
   }
   if (!pin) return Bp;
-  const pinned = localStorage.getItem(PIN_KEY);
-  if (!pinned) {
-    localStorage.setItem(PIN_KEY, response.pubkey);
-    trace('pin', `pinned oracle ${response.pubkey.slice(0, 16)}… (first use)`);
-  } else if (pinned !== response.pubkey) {
-    const okToRepin = confirm(
-      'WARNING: this oracle is not the one previously pinned.\n\n' +
-      `pinned: ${pinned.slice(0, 24)}…\n` +
-      `this:   ${response.pubkey.slice(0, 24)}…\n\n` +
-      'A different key derives DIFFERENT passwords. Only continue if you ' +
-      'deliberately re-provisioned the device. Trust this oracle from now on?');
-    if (!okToRepin) throw new Error('oracle public key does not match the pinned one');
-    localStorage.setItem(PIN_KEY, response.pubkey);
-    trace('pin', `re-pinned oracle ${response.pubkey.slice(0, 16)}…`, true);
-  }
+  enforcePin(response.pubkey, 'oracle');
   return Bp;
 }
 
@@ -293,8 +305,10 @@ function simulateOracle(blindedHex) {
   };
 }
 
-document.getElementById('simBtn').onclick = () => runDerivation(true);
-document.getElementById('deriveBtn').onclick = () => runDerivation(false);
+document.getElementById('simBtn').onclick = () => runDerivation('simulator');
+/* One button, whichever second factor is actually present. */
+document.getElementById('deriveBtn').onclick = () =>
+  runDerivation(getSheetKey() ? 'sheet' : 'hardware');
 
 /* ---------------------------------------------------------------------
  * Format selector
@@ -363,7 +377,10 @@ function formatPassword(oprfOutput, format) {
 /* ---------------------------------------------------------------------
  * Main derivation flow
  * ------------------------------------------------------------------- */
-async function runDerivation(useSimulator) {
+/* mode: 'hardware' | 'simulator' | 'sheet' */
+async function runDerivation(mode) {
+  const useSimulator = mode === 'simulator';
+  const useSheet = mode === 'sheet';
   const passphrase = document.getElementById('passphrase').value;
   const deriveBtn = document.getElementById('deriveBtn');
   const simBtn = document.getElementById('simBtn');
@@ -388,19 +405,41 @@ async function runDerivation(useSimulator) {
     trace('input', 'index is out of range (max 2147483647)', true);
     return;
   }
-  if (!useSimulator && !writer) {
-    trace('input', 'no oracle connected — connect WebSerial or use "Simulate oracle"', true);
+  if (mode === 'hardware' && !writer) {
+    trace('input', 'no oracle connected — connect your gadget, load a recovery sheet, or try the demo', true);
+    return;
+  }
+  if (useSheet && !getSheetKey()) {
+    trace('input', 'no recovery sheet loaded — scan or type your code first', true);
     return;
   }
 
   deriveBtn.disabled = true; simBtn.disabled = true;
   setDemo(useSimulator);
-  document.getElementById('resSource').textContent = `source: ${useSimulator ? 'demo simulator' : 'your gadget'}`;
+  document.getElementById('resSource').textContent =
+    `source: ${useSimulator ? 'demo simulator' : useSheet ? 'recovery sheet' : 'your gadget'}`;
 
   try {
     trace('1/7', `hashing "${index}" to a ristretto255 point`);
     const msg = concatBytes(utf8ToBytes(passphrase), utf8ToBytes('||'), utf8ToBytes(String(index)));
     const P = hashToRistretto255(msg, { DST: 'oprf-vaultless-pwd-v1-HashToGroup' });
+
+    let S;
+    if (useSheet) {
+      /* With k in hand there is no second party, so no blinding and no proof:
+       * the browser computes k·P itself. The blinding in the oracle path
+       * cancels — r⁻¹·(k·(r·P)) = k·P — so this lands on exactly the same
+       * point, and therefore exactly the same password, as the hardware. */
+      const k = getSheetKey();
+      trace('2/4', 'using the key from your recovery sheet (no oracle round trip)');
+      enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'recovery sheet');
+      trace('3/4', 'computing S = k·P locally');
+      vizStart('reading your sheet…');
+      vizOracle('applying your key…');
+      await new Promise(r => setTimeout(r, 450));
+      S = P.multiply(k);
+      vizReturn('done…');
+    } else {
 
     trace('2/7', 'generating blinding scalar r and computing B = r·P');
     const r = randomScalar();
@@ -430,10 +469,12 @@ async function runDerivation(useSimulator) {
 
     trace('6/7', 'unblinding: S = r⁻¹·B\'');
     const rInv = invMod(r, L);
-    const S = Bp.multiply(rInv);
+    S = Bp.multiply(rInv);
+    }
+
     const sBytes = S.toRawBytes();
 
-    trace('7/7', 'expanding shared secret via HKDF-SHA256');
+    trace(useSheet ? '4/4' : '7/7', 'expanding shared secret via HKDF-SHA256');
     const salt = utf8ToBytes(String(index));
     const oprfOutput = hkdf(sha256, sBytes, salt, utf8ToBytes('oprf-vaultless-pwd-v1'), 32);
 
@@ -492,3 +533,4 @@ document.getElementById('copyBtn').onclick = async () => {
 
 /* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
 initChrome();
+initSheet();
