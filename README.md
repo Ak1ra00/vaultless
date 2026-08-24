@@ -12,14 +12,19 @@ Live at **[vaultless.space](https://vaultless.space)**.
 2. `B` is sent to the oracle — either the LilyGO hardware device over WebSerial, or the
    in-browser simulator.
 3. The oracle multiplies by its private scalar `k` (generated on-device, stored in NVS,
-   never exported) and returns `B' = k·B`, but only after a human presses the physical
-   approve button.
+   never exported) and returns `B' = k·B`, playing a matrix-rain handshake on its display
+   while it works.
 4. The browser unblinds `S = r⁻¹·B' = k·P` and expands it via HKDF-SHA256 into the final
    password.
 
 Same two inputs (passphrase, index) always regenerate the same password, and
 there's no vault file to sync, back up, or leak. Recovering any password requires both
-the passphrase *and* physical access to the approving oracle.
+the passphrase *and* physical access to the oracle.
+
+> **Note:** the oracle auto-approves every request it receives — there is no
+> physical confirmation step. Possession of the connected device is the whole
+> second factor, so anything that can reach its serial port while it's plugged in
+> can evaluate `k·B` on points of its choosing.
 
 ## Repo layout
 

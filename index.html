@@ -328,8 +328,7 @@
             blinds it with a random scalar <em>r</em> to get <em>B = r·P</em> — indistinguishable from a
             random point.</li>
           <li><em>B</em> is sent to the oracle (hardware over WebSerial, or the in-browser simulator).</li>
-          <li>The oracle multiplies by its private scalar <em>k</em> and returns <em>B′ = k·B</em>, only after
-            a human presses the physical approve button.</li>
+          <li>The oracle multiplies by its private scalar <em>k</em> and returns <em>B′ = k·B</em>.</li>
           <li>The browser unblinds: <em>S = r⁻¹·B′ = k·P</em>, then expands <em>S</em> through HKDF-SHA256 into
             the final password.</li>
         </ol>
@@ -343,8 +342,8 @@
             password.</li>
           <li>Without the passphrase, a stolen or cloned oracle alone cannot regenerate any password either —
             both factors are required.</li>
-          <li>Every derivation requires a physical button press on the device, so remote/malware-driven
-            derivations are not silent.</li>
+          <li>Derivation requires the oracle to be physically connected — but note it auto-approves every
+            request it receives, so anything with access to the serial port can use it while it's plugged in.</li>
           <li>Nothing is persisted: not the passphrase, not intermediate points, not the resulting password.</li>
         </ul>
         <div class="lbl" style="margin:16px 0 10px;">source</div>
@@ -366,13 +365,12 @@
           <li><a href="https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board"
                  target="_blank" rel="noopener">LilyGO T-Display</a> — ESP32 + 1.14" ST7789 LCD (135×240), 4MB flash</li>
           <li>USB-C or micro-USB data cable (check your board revision)</li>
-          <li>No extra wiring required — buttons and display are on-board</li>
+          <li>No extra wiring required — display is on-board</li>
         </ul>
         <div class="lbl" style="margin:16px 0 10px;">on-board pinout</div>
         <table class="pin-table">
-          <tr><td>Approve button</td><td>GPIO0</td><td class="badge on">active-low</td></tr>
-          <tr><td>Reject button</td><td>GPIO35</td><td class="badge">active-high, ext. pull-up</td></tr>
           <tr><td>Display (ST7789)</td><td>SPI: MOSI 19 · SCLK 18 · CS 5 · DC 16 · RST 23 · BL 4</td><td></td></tr>
+          <tr><td>Buttons</td><td>unused — requests are auto-approved</td><td></td></tr>
         </table>
       </div>
       <div>
