@@ -11,3 +11,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: ci
+    # Major bumps of an action are breaking changes that need the workflow
+    # re-run and re-read, not an auto-opened PR. Alerts still surface them;
+    # this keeps the routine noise to same-major security and bugfix updates.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
