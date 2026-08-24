@@ -18,7 +18,7 @@ export function toast(msg) {
   t.textContent = msg;
   t.classList.add('on');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 3600);
 }
 
 /* ------------------------------------------------------------- dialogs */
@@ -117,20 +117,29 @@ function initRain() {
   size();
   addEventListener('resize', size);
 
-  let raf = null, last = 0;
+  let raf = null, last = 0, surge = 0;
   function frame(ts) {
     raf = requestAnimationFrame(frame);
-    if (ts - last < 55) return;          // ~18fps: it is wallpaper, not a game
+    /* The rain answers the handshake. While the oracle is working the whole
+     * backdrop quickens and brightens, so the page is visibly doing the thing
+     * rather than leaving one panel to mime it. Eased in and out, because a
+     * step change reads as a glitch. */
+    const want = document.body.classList.contains('handshaking') ? 1 : 0;
+    surge += (want - surge) * 0.045;
+    if (ts - last < 55 - surge * 26) return;   // ~18fps at rest, ~34fps mid-handshake
     last = ts;
-    ctx.fillStyle = 'rgba(7,9,11,0.14)';
+    ctx.fillStyle = `rgba(7,9,11,${0.14 - surge * 0.035})`;
     ctx.fillRect(0, 0, w, h);
     ctx.font = `${13 * dpr}px 'IBM Plex Mono', monospace`;
+    const bright = 0.42 + surge * 0.3;
     cols.forEach((col, i) => {
       const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
       const x = i * col.step;
-      ctx.fillStyle = Math.random() < 0.06 ? 'rgba(160,255,232,0.85)' : 'rgba(60,180,155,0.42)';
+      ctx.fillStyle = Math.random() < 0.06 + surge * 0.07
+        ? `rgba(160,255,232,${0.85 + surge * 0.15})`
+        : `rgba(60,180,155,${bright})`;
       ctx.fillText(ch, x, col.y);
-      col.y += col.speed * 6;
+      col.y += col.speed * (6 + surge * 5);
       if (col.y > h && Math.random() > 0.975) col.y = Math.random() * -220 * dpr;
     });
   }
@@ -273,40 +282,194 @@ function initAccounts() {
 }
 
 /* ------------------------------------------------------- handshake viz */
-export function vizReset() {
-  $('viz').classList.remove('on');
-  $('vizLabel').textContent = '';
-  for (const id of ['wireOut', 'wireIn']) $(id).classList.remove('go', 'back');
-  for (const id of ['nodeYou', 'nodeOracle', 'nodeDone']) $(id).classList.remove('hot');
+/* The signature element: the OPRF round trip, played out with the real bytes.
+ *
+ * The old version was two emoji and a dot sliding along a wire — which said
+ * "something is happening" and nothing else. The whole claim of this project is
+ * that your phrase is DISGUISED before the oracle sees it and undisguised
+ * afterwards, and that is a thing you can actually watch happen if the values
+ * are on screen: P settles, churns into B, travels, comes back changed, and
+ * resolves to S. Same bytes the trace logs, same bytes the maths uses.
+ *
+ * Every duration is a multiple of BEAT, so the whole choreography retimes from
+ * one number. app.js paces the awaits between stages to match. */
+export const BEAT = 900;
+
+const HEXCHARS = '0123456789abcdef';
+const HEX_LEN = 64;
+
+let scrambleRaf = null;
+
+/* Settle text left-to-right out of churning hex.
+ *
+ * Unsettled characters keep rolling, so the readout reads as a value being
+ * computed rather than a string being typed. Resolves when it has landed. */
+function settleHex(el, target, ms) {
+  cancelAnimationFrame(scrambleRaf);
+  const text = String(target || '').slice(0, HEX_LEN).padEnd(HEX_LEN, '·');
+  if (reduceMotion) { el.textContent = text; return Promise.resolve(); }
+
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / ms);
+      // Ease the settle front so the last characters land unhurriedly.
+      const landed = Math.floor(text.length * (1 - Math.pow(1 - p, 2.2)));
+      let out = text.slice(0, landed);
+      for (let i = landed; i < text.length; i++) {
+        out += HEXCHARS[(Math.random() * 16) | 0];
+      }
+      el.textContent = out;
+      if (p < 1) { scrambleRaf = requestAnimationFrame(step); }
+      else { el.textContent = text; resolve(); }
+    };
+    scrambleRaf = requestAnimationFrame(step);
+  });
 }
-export function vizStart(label) {
-  if (reduceMotion) { $('vizLabel').textContent = label; return; }
+
+/* Churn without settling — used while the oracle is working and the browser
+ * genuinely does not know the answer yet. */
+function churnHex(el, ms) {
+  cancelAnimationFrame(scrambleRaf);
+  if (reduceMotion) return Promise.resolve();
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    const step = (now) => {
+      let out = '';
+      for (let i = 0; i < HEX_LEN; i++) out += HEXCHARS[(Math.random() * 16) | 0];
+      el.textContent = out;
+      if (now - t0 < ms) scrambleRaf = requestAnimationFrame(step);
+      else resolve();
+    };
+    scrambleRaf = requestAnimationFrame(step);
+  });
+}
+
+/* Which party is doing the work at each stage. Drives the lift-and-glow, so
+ * attention follows the value rather than sitting on both boxes at once. */
+const HOT_AT = {
+  local: ['partyYou'], blinding: ['partyYou'], sending: [],
+  stamping: ['partyOracle'], returning: ['partyOracle'],
+  unblinding: ['partyYou'], done: ['partyYou'],
+};
+
+function stage(name) {
+  const v = $('viz');
+  v.dataset.stage = name || '';
+  const hot = HOT_AT[name] || [];
+  for (const id of ['partyYou', 'partyOracle']) {
+    $(id).classList.toggle('hot', hot.includes(id));
+  }
+}
+
+function setReadout(tag, hex, { churn = false, ms = BEAT * 0.8 } = {}) {
+  $('vizTag').textContent = tag;
+  const el = $('vizHex');
+  return churn ? churnHex(el, ms) : settleHex(el, hex, ms);
+}
+
+export function vizReset() {
+  cancelAnimationFrame(scrambleRaf);
+  const v = $('viz');
+  v.classList.remove('on');
+  delete v.dataset.stage;
+  $('vizLabel').textContent = '';
+  $('vizHex').textContent = '';
+  $('vizTag').textContent = '';
+  for (const id of ['partyYou', 'partyOracle']) $(id).classList.remove('hot');
+  document.body.classList.remove('handshaking');
+}
+
+/* Opens the stage and shows the point the phrase hashed to. */
+export function vizStart(label, hex) {
   vizReset();
   $('viz').classList.add('on');
-  $('nodeYou').classList.add('hot');
   $('vizLabel').textContent = label;
-  requestAnimationFrame(() => $('wireOut').classList.add('go'));
+  // The backdrop answers the handshake: the rain surges while the oracle works,
+  // so the whole page is visibly doing the thing, not just this one panel.
+  document.body.classList.add('handshaking');
+  stage('local');
+  return setReadout('P', hex, { ms: BEAT });
 }
+
+/* The blinding step — the reason the oracle learns nothing. */
+export function vizBlind(label, hex) {
+  $('vizLabel').textContent = label;
+  stage('blinding');
+  return setReadout('B = r·P', hex, { ms: BEAT * 1.1 });
+}
+
+/* Hand it over: the packet crosses the channel. */
+export function vizSend(label) {
+  $('vizLabel').textContent = label;
+  stage('sending');
+  return new Promise(r => setTimeout(r, reduceMotion ? 0 : BEAT));
+}
+
+/* The oracle is working and we genuinely do not know the answer yet. */
 export function vizOracle(label) {
   $('vizLabel').textContent = label;
-  if (reduceMotion) return;
-  $('nodeYou').classList.remove('hot');
-  $('nodeOracle').classList.add('hot');
+  stage('stamping');
+  $('vizTag').textContent = 'k · B';
+  /* Churns until the next stage cancels it, rather than for a fixed time: a
+   * hardware oracle takes as long as it takes, and a readout that froze
+   * mid-scramble while the device was still thinking would be a lie. The
+   * returned promise is a MINIMUM dwell, so the fast paths still read. */
+  churnHex($('vizHex'), 120000);
+  return new Promise(r => setTimeout(r, reduceMotion ? 0 : BEAT * 1.4));
 }
-export function vizReturn(label) {
+
+/* Stamped, coming back. */
+export function vizReturn(label, hex) {
   $('vizLabel').textContent = label;
-  if (reduceMotion) return;
-  $('wireIn').classList.add('back');
+  stage('returning');
+  return new Promise(r => setTimeout(r, reduceMotion ? 0 : BEAT * 0.9))
+    .then(() => setReadout("B' = k·B", hex, { ms: BEAT }));
 }
+
+/* Take the disguise off. */
+export function vizUnblind(label, hex) {
+  $('vizLabel').textContent = label;
+  stage('unblinding');
+  return setReadout('S = r⁻¹·B\'', hex, { ms: BEAT * 1.2 });
+}
+
 export function vizDone(label) {
   $('vizLabel').textContent = label;
+  stage('done');
+  document.body.classList.remove('handshaking');
   if (reduceMotion) return;
-  $('nodeOracle').classList.remove('hot');
-  $('nodeDone').classList.add('hot');
   setTimeout(() => {
     $('viz').classList.remove('on');
     $('vizLabel').textContent = '';   // don't leave the caption orphaned
-  }, 1600);
+  }, BEAT * 3);
+}
+
+/* The password lands rather than appears.
+ *
+ * It is derived, not looked up, and watching each character settle out of a
+ * churn says that better than any copy could. Left-to-right, easing out, so the
+ * last few characters take their time. */
+const PW_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@#$%^&*-_=+';
+let pwRaf = null;
+
+export function revealPassword(el, pw) {
+  cancelAnimationFrame(pwRaf);
+  if (reduceMotion) { el.textContent = pw; return; }
+  const ms = BEAT * 1.8;
+  const t0 = performance.now();
+  const step = (now) => {
+    const p = Math.min(1, (now - t0) / ms);
+    const landed = Math.floor(pw.length * (1 - Math.pow(1 - p, 2.4)));
+    let out = pw.slice(0, landed);
+    for (let i = landed; i < pw.length; i++) {
+      out += PW_CHARS[(Math.random() * PW_CHARS.length) | 0];
+    }
+    el.textContent = out;
+    if (p < 1) pwRaf = requestAnimationFrame(step);
+    else el.textContent = pw;
+  };
+  pwRaf = requestAnimationFrame(step);
 }
 
 /* --------------------------------------------------------- result chrome */

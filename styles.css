@@ -197,25 +197,151 @@
   @keyframes popin{from{opacity:0;transform:translateY(10px) scale(.96);}to{opacity:1;transform:none;}}
   .pw.reveal{animation:popin .45s cubic-bezier(.2,.9,.3,1.2);}
 
-  /* handshake viz ----------------------------------------------------- */
-  .viz{height:0;overflow:hidden;transition:height .35s ease;}
-  .viz.on{height:96px;}
-  .viz-inner{display:flex;align-items:center;justify-content:center;gap:0;height:96px;}
-  .node{
-    width:56px;height:56px;border-radius:14px;display:grid;place-items:center;flex:none;
-    background:var(--bg-3);border:1.5px solid var(--line-bright);font-size:22px;transition:.3s;
+  /* handshake stage --------------------------------------------------- */
+  /* Colour carries meaning here, and only meaning: cyan is a value in the
+     clear on your machine, violet is a value that has been disguised and is
+     safe to hand over, green is the shared secret both halves agree on. The
+     readout changes colour as the value changes hands. */
+  .stage{
+    height:0;overflow:hidden;opacity:0;
+    transition:height .55s cubic-bezier(.2,.8,.2,1), opacity .45s ease;
   }
-  .node.hot{border-color:var(--cyan);box-shadow:0 0 24px rgba(94,234,212,.5);}
-  .wire{flex:1;max-width:190px;height:3px;background:var(--bg-3);position:relative;border-radius:2px;}
-  .wire b{
-    position:absolute;top:50%;width:12px;height:12px;border-radius:50%;margin-top:-6px;
-    background:var(--cyan);box-shadow:0 0 16px var(--cyan);opacity:0;
+  .stage.on{height:228px;opacity:1;}
+
+  .stage-rail{display:flex;align-items:center;justify-content:center;height:104px;}
+  .party{display:flex;flex-direction:column;align-items:center;gap:10px;flex:none;width:112px;}
+  .party-box{
+    width:64px;height:64px;border-radius:19px;display:grid;place-items:center;position:relative;
+    background:linear-gradient(158deg,var(--bg-3),var(--bg-1));
+    border:1.5px solid var(--line-bright);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+    transition:border-color .55s ease, box-shadow .55s ease, transform .55s cubic-bezier(.2,.9,.3,1.2);
   }
-  .wire.go b{animation:travel 1.05s cubic-bezier(.5,0,.5,1) forwards;}
-  .wire.back b{animation:travelback 1.05s cubic-bezier(.5,0,.5,1) forwards;}
-  @keyframes travel{0%{left:0;opacity:0;}12%{opacity:1;}88%{opacity:1;}100%{left:100%;opacity:0;}}
-  @keyframes travelback{0%{left:100%;opacity:0;}12%{opacity:1;}88%{opacity:1;}100%{left:0;opacity:0;}}
-  .viz-label{text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--cyan);margin-top:-6px;min-height:18px;}
+  .party-glyph{
+    font-family:var(--mono);font-size:25px;font-weight:600;color:var(--ink-2);
+    transition:color .55s ease, text-shadow .55s ease;
+  }
+  /* Deliberately NOT uppercased: these name the actual scalars, and "YOU HOLD R"
+     severs the tie to the lowercase r sitting in the box above it. */
+  .party-name{
+    font-family:var(--mono);font-size:11px;letter-spacing:.09em;
+    color:var(--ink-2);transition:color .55s ease;white-space:nowrap;
+  }
+  .party.hot .party-box{
+    border-color:var(--cyan);transform:translateY(-3px);
+    box-shadow:0 0 34px rgba(94,234,212,.34), inset 0 1px 0 rgba(255,255,255,.09);
+  }
+  .party.hot .party-glyph{color:var(--cyan-hot);text-shadow:0 0 18px rgba(94,234,212,.7);}
+  .party.hot .party-name{color:var(--ink-1);}
+
+  /* the oracle's seal — rings that break outward each time it stamps */
+  .seal-ring{
+    position:absolute;inset:-5px;border-radius:23px;border:1.5px solid var(--cyan);
+    opacity:0;pointer-events:none;
+  }
+  #viz[data-stage="stamping"] .seal-ring{animation:sealPulse 2.1s ease-out infinite;}
+  #viz[data-stage="stamping"] .seal-ring.two{animation-delay:1.05s;}
+  @keyframes sealPulse{
+    0%{opacity:.9;transform:scale(.82);}
+    70%{opacity:.18;}
+    100%{opacity:0;transform:scale(1.45);}
+  }
+
+  /* the channel between the two parties */
+  .channel{flex:1;max-width:232px;min-width:70px;height:64px;position:relative;}
+  .channel-line,.channel-pulse{
+    position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;border-radius:2px;
+  }
+  .channel-line{
+    background:linear-gradient(90deg,transparent,var(--line-bright) 14%,
+               var(--line-bright) 86%,transparent);
+  }
+  .channel-pulse{
+    background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+    opacity:0;transition:opacity .45s ease;
+  }
+  #viz[data-stage="sending"] .channel-pulse,
+  #viz[data-stage="returning"] .channel-pulse{opacity:.55;animation:channelGlow 2.2s ease-in-out infinite;}
+  @keyframes channelGlow{0%,100%{opacity:.2;}50%{opacity:.7;}}
+
+  .packet{
+    position:absolute;top:50%;margin-top:-6px;display:flex;gap:3px;opacity:0;pointer-events:none;
+  }
+  .packet i{
+    width:7px;height:12px;border-radius:2px;background:var(--cyan);
+    box-shadow:0 0 14px rgba(94,234,212,.85);
+  }
+  /* Outbound is violet: by then the point is blinded, and the colour is the
+     whole point — that is the thing the oracle is allowed to see. */
+  #packetOut i{background:var(--violet);box-shadow:0 0 14px rgba(169,139,255,.85);}
+  #packetOut i:nth-child(2){animation-delay:.06s;}
+  #packetOut i:nth-child(3){animation-delay:.12s;}
+  #viz[data-stage="sending"] #packetOut{animation:flyOut 1.05s cubic-bezier(.4,0,.5,1) forwards;}
+  #viz[data-stage="returning"] #packetIn{animation:flyIn 1.05s cubic-bezier(.4,0,.5,1) forwards;}
+  @keyframes flyOut{
+    0%{left:0;opacity:0;transform:scale(.6);}
+    14%{opacity:1;transform:scale(1);}
+    86%{opacity:1;transform:scale(1);}
+    100%{left:calc(100% - 29px);opacity:0;transform:scale(.6);}
+  }
+  @keyframes flyIn{
+    0%{left:calc(100% - 29px);opacity:0;transform:scale(.6);}
+    14%{opacity:1;transform:scale(1);}
+    86%{opacity:1;transform:scale(1);}
+    100%{left:0;opacity:0;transform:scale(.6);}
+  }
+
+  /* the actual bytes */
+  .readout{
+    display:flex;align-items:flex-start;gap:12px;margin-top:12px;padding:12px 14px;
+    background:var(--bg-0);border:1px solid var(--line);border-radius:var(--r-sm);
+  }
+  .readout-tag{
+    flex:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+    color:var(--cyan);background:rgba(94,234,212,.09);border:1px solid var(--cyan-dim);
+    border-radius:5px;padding:4px 9px;min-width:78px;text-align:center;white-space:nowrap;
+    transition:color .5s ease, border-color .5s ease, background .5s ease;
+  }
+  .readout-hex{
+    flex:1;min-width:0;font-family:var(--mono);font-size:12px;line-height:1.62;
+    letter-spacing:.055em;color:var(--ink-1);word-break:break-all;
+    transition:color .5s ease;
+  }
+  /* disguised — safe to hand over */
+  #viz[data-stage="blinding"] .readout-tag,
+  #viz[data-stage="sending"] .readout-tag,
+  #viz[data-stage="stamping"] .readout-tag,
+  #viz[data-stage="returning"] .readout-tag{
+    color:var(--violet);border-color:rgba(169,139,255,.45);background:rgba(169,139,255,.1);
+  }
+  #viz[data-stage="blinding"] .readout-hex,
+  #viz[data-stage="sending"] .readout-hex,
+  #viz[data-stage="returning"] .readout-hex{color:#c3b1ff;}
+  #viz[data-stage="stamping"] .readout-hex{color:var(--ink-2);}
+  /* the shared secret */
+  #viz[data-stage="unblinding"] .readout-tag,
+  #viz[data-stage="done"] .readout-tag{
+    color:var(--green);border-color:rgba(94,232,154,.45);background:rgba(94,232,154,.1);
+  }
+  #viz[data-stage="unblinding"] .readout-hex,
+  #viz[data-stage="done"] .readout-hex{color:#9df0c0;}
+
+  .viz-label{
+    text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--cyan);
+    margin:12px 0 0;min-height:18px;letter-spacing:.02em;
+  }
+  /* Only the stage is animated open; the caption is a live region and must stay
+     in the accessibility tree, so it is never display:none. */
+  .stage:not(.on) .viz-label{opacity:0;}
+  .viz-label{transition:opacity .4s ease;}
+
+  @media(max-width:560px){
+    .stage.on{height:268px;}
+    .party{width:84px;}
+    .party-box{width:54px;height:54px;border-radius:16px;}
+    .readout{flex-direction:column;gap:8px;}
+    .readout-tag{min-width:0;align-self:flex-start;}
+  }
 
   /* trace / expert ---------------------------------------------------- */
   body:not(.expert) .expert-only{display:none;}
@@ -329,7 +455,12 @@
   .choice:hover{transform:translateY(-4px);border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 34px rgba(94,234,212,.18);}
   .choice:hover::after{opacity:1;}
   .choice:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
-  .ch-icon{font-size:34px;line-height:1;}
+  .ch-mark{
+    width:46px;height:46px;display:block;color:var(--cyan);
+    transition:color .4s ease, transform .5s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .choice:hover .ch-mark{color:var(--cyan-hot);transform:translateY(-2px) scale(1.04);}
+  .choice[aria-pressed="true"] .ch-mark{color:var(--cyan-hot);}
   .ch-title{font-size:21px;font-weight:600;letter-spacing:-.01em;}
   .ch-body{color:var(--ink-1);font-size:15px;line-height:1.55;flex:1;}
   .ch-tag{
@@ -428,12 +559,103 @@
   }
   .sheet-note{font-size:11.5px;color:#444;max-width:430px;margin:14px auto 0;line-height:1.5;}
 
+
+  /* ====================================================================
+     Choreography and depth.
+
+     Motion here is deliberately unhurried: this is a page where something is
+     genuinely being computed, and animation that snaps implies a lookup. Every
+     duration below is paced to be readable rather than fast. All of it is
+     switched off wholesale by the reduced-motion block at the end of this file.
+     ==================================================================== */
+
+  /* cards arrive in sequence rather than all at once ------------------- */
+  @keyframes riseIn{
+    from{opacity:0;transform:translateY(18px) scale(.985);}
+    to{opacity:1;transform:none;}
+  }
+  body.in-app .steps > *{animation:riseIn .7s cubic-bezier(.2,.8,.2,1) backwards;}
+  body.in-app .steps > *:nth-child(1){animation-delay:.04s;}
+  body.in-app .steps > *:nth-child(2){animation-delay:.12s;}
+  body.in-app .steps > *:nth-child(3){animation-delay:.2s;}
+  body.in-app .steps > *:nth-child(4){animation-delay:.28s;}
+  body.in-app .steps > *:nth-child(5){animation-delay:.36s;}
+  body.in-app .steps > *:nth-child(6){animation-delay:.44s;}
+  body:not(.in-app) .hero,
+  body:not(.in-app) .what-strip,
+  body:not(.in-app) #homeStep1{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) backwards;}
+  body:not(.in-app) .what-strip{animation-delay:.08s;}
+  body:not(.in-app) #homeStep1{animation-delay:.16s;}
+
+  /* a completed step stamps a check over its number -------------------- */
+  .num{position:relative;overflow:hidden;}
+  .card.done .num::after{
+    content:'✓';position:absolute;inset:0;display:grid;place-items:center;
+    background:var(--cyan);color:#04100d;font-size:17px;font-weight:700;
+    animation:stampIn .55s cubic-bezier(.2,.9,.3,1.5) backwards;
+  }
+  @keyframes stampIn{
+    from{opacity:0;transform:scale(.4) rotate(-18deg);}
+    to{opacity:1;transform:none;}
+  }
+
+  /* the primary action carries a slow sheen ---------------------------- */
+  #deriveBtn{position:relative;overflow:hidden;}
+  #deriveBtn::after{
+    content:'';position:absolute;top:0;bottom:0;width:55%;left:-60%;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.22),transparent);
+    animation:sheen 6.5s cubic-bezier(.4,0,.3,1) infinite;pointer-events:none;
+  }
+  #deriveBtn:disabled::after{animation:none;}
+  @keyframes sheen{0%,62%{left:-45%;}100%{left:118%;}}
+
+  /* depth on the cards ------------------------------------------------- */
+  .card{position:relative;}
+  .card::before{
+    content:'';position:absolute;inset:0;border-radius:var(--r);pointer-events:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+  }
+  .card.step{transition:border-color .45s ease, box-shadow .45s ease;}
+  .choice{transition:transform .38s cubic-bezier(.2,.9,.3,1.2), border-color .38s ease, box-shadow .38s ease;}
+  .choice::after{transition:opacity .5s ease;}
+  .forkbtn{transition:border-color .32s ease, transform .32s cubic-bezier(.2,.9,.3,1.2), background .32s ease;}
+
+  /* the result ---------------------------------------------------------- */
+  .result{transition:border-color .6s ease, background .6s ease;}
+  .result:not(.empty){
+    border-color:var(--cyan-dim);
+    box-shadow:0 0 44px rgba(94,234,212,.1), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  /* The password already lands character by character (see revealPassword),
+     so the container only has to bloom underneath it. */
+  .pw.reveal{animation:pwBloom 1.9s cubic-bezier(.2,.8,.2,1) backwards;}
+  @keyframes pwBloom{
+    0%{text-shadow:0 0 0 rgba(94,234,212,0);letter-spacing:.16em;opacity:.55;}
+    45%{text-shadow:0 0 40px rgba(94,234,212,.75);}
+    100%{text-shadow:0 0 26px rgba(94,234,212,.45);letter-spacing:.04em;opacity:1;}
+  }
+  .pw{transition:filter .5s ease;}
+
+  /* the connection dot breathes rather than blinks ---------------------- */
+  .dot.live{animation:pulse 2.6s ease-in-out infinite;}
+
+  /* toast dwells long enough to be read --------------------------------- */
+  .toast{transition:transform .5s cubic-bezier(.2,.9,.3,1.3), opacity .35s, visibility .35s;}
+
+  /* the dialog arrives ------------------------------------------------- */
+  dialog.ask[open]{animation:askIn .42s cubic-bezier(.2,.9,.3,1.2);}
+  dialog.ask[open]::backdrop{animation:fadeIn .42s ease;}
+  @keyframes askIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:none;}}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+
   @media print{
     body{background:#fff;}
     #rain,.aurora,.toast{display:none !important;}
     /* A password on paper is the one thing this project exists to avoid, so an
        accidental Ctrl+P never carries one — with or without the class below. */
-    #resultCard,#passphrase,#sheetManual,#trace{display:none !important;}
+    /* #viz carries the live derivation values, S included — an OPRF output on
+       paper is the same mistake as a password on paper. */
+    #resultCard,#passphrase,#sheetManual,#trace,#viz{display:none !important;}
     /* sheet.js lifts #printable to the top of <body> and sets this class, so
        there is no app left in the flow to paginate into blank pages. */
     body.printing-sheet > *{display:none;}

@@ -8,7 +8,8 @@ import {
 } from './vendor/noble-bundle.js';
 import {
   initChrome, toast, setDemo, markResultFilled, confirmDialog, clearResult,
-  vizStart, vizOracle, vizReturn, vizDone, vizReset, getOracleChoice, setReady,
+  vizStart, vizBlind, vizSend, vizOracle, vizReturn, vizUnblind, vizDone, vizReset,
+  revealPassword, getOracleChoice, setReady,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
 
@@ -587,28 +588,35 @@ async function runDerivation(mode) {
       trace('2/4', 'using your paper oracle (its key is here, so no round trip)');
       await enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
       trace('3/4', 'computing S = k·P locally');
-      vizStart('reading your paper oracle…');
-      vizOracle('doing the handshake…');
-      await new Promise(r => setTimeout(r, 450));
+      /* No blinding stage here, and the animation says so: with k in hand there
+       * is no second party to hide the input from, so nothing crosses a channel.
+       * Showing a disguise step the paper path does not perform would be the one
+       * kind of prettiness this project cannot afford. */
+      await vizStart('turning your phrase into a point on the curve…', bytesToHex(P.toRawBytes()));
+      const stampingPaper = vizOracle('your paper oracle is doing the handshake…');
       S = P.multiply(k);
-      vizReturn('done…');
+      await stampingPaper;
+      await vizUnblind('landing on the shared secret…', bytesToHex(S.toRawBytes()));
     } else {
+
+    await vizStart('turning your phrase into a point on the curve…', bytesToHex(P.toRawBytes()));
 
     trace('2/7', 'generating blinding scalar r and computing B = r·P');
     const r = randomScalar();
     const B = P.multiply(r);
     const blindedHex = bytesToHex(B.toRawBytes());
     trace('2/7', `B = ${blindedHex.slice(0, 16)}…`);
+    await vizBlind('disguising it — this is all the oracle ever sees…', blindedHex);
 
-    trace('3/7', `sending {index, point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
-    vizStart('sending a disguised request…');
+    trace('3/7', `sending {point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
+    await vizSend('handing it over…');
     let response;
     if (useSimulator) {
-      vizOracle('the demo key is stamping it…');
-      await new Promise(r => setTimeout(r, 700));   // let the animation read
+      const stamping = vizOracle('the demo key is stamping it…');
       response = simulateOracle(blindedHex);
+      await stamping;                                // let the animation read
     } else {
-      vizOracle('your oracle is stamping it…');
+      const stamping = vizOracle('your oracle is stamping it…');
       /* Protocol v3 drops `index` from the request. The oracle never used it —
        * it multiplies the blinded point and nothing else — so carrying it only
        * told the device, its display, and anyone reading the serial line which
@@ -625,11 +633,12 @@ async function runDerivation(mode) {
                      'the clear; reflash it to stop disclosing which account you open', true);
         response = await sendToOracle({ index, point: blindedHex });
       }
+      await stamping;
     }
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);
     if (!response.point) throw new Error('oracle response missing point');
     trace('4/7', `received B' = ${response.point.slice(0, 16)}…`);
-    vizReturn('stamped answer coming back…');
+    await vizReturn('stamped, and on its way back…', response.point);
 
     trace('5/7', 'verifying DLEQ proof that B\' = k·B under the pinned key');
     const Bp = await verifyOracleResponse(response, B, !useSimulator);
@@ -638,6 +647,8 @@ async function runDerivation(mode) {
     trace('6/7', 'unblinding: S = r⁻¹·B\'');
     const rInv = invMod(r, L);
     S = Bp.multiply(rInv);
+    await vizUnblind('taking the disguise off — only you can do this…',
+                     bytesToHex(S.toRawBytes()));
     }
 
     /* One more guard covering all three paths at once — hardware, simulator and
@@ -674,7 +685,7 @@ function showResult(pw) {
   document.getElementById('pwPlaceholder').style.display = 'none';
   const el = document.getElementById('pwOut');
   el.style.display = 'block';
-  el.textContent = pw;
+  revealPassword(el, pw);
   el.classList.remove('hidden-pw');
   el.classList.remove('reveal');
   void el.offsetWidth;            // restart the entrance animation
@@ -719,7 +730,7 @@ document.getElementById('copyBtn').onclick = async () => {
   const btn = document.getElementById('copyBtn');
   const original = btn.textContent;
   btn.textContent = 'Copied ✓';
-  setTimeout(() => (btn.textContent = original), 1400);
+  setTimeout(() => (btn.textContent = original), 2400);
   toast('Copied — cleared from the clipboard in 60 seconds');
   clearTimeout(clipboardTimer);
   clipboardTimer = setTimeout(() => scrubClipboard(pw), CLIPBOARD_CLEAR_MS);

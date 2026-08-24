@@ -73,7 +73,17 @@
         a small device, or a square of paper. Both do exactly the same job.</p>
     <div class="choices">
       <button type="button" class="choice" id="chooseHardware">
-        <span class="ch-icon" aria-hidden="true">🔐</span>
+        <svg class="ch-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+          <rect x="9.5" y="4.5" width="29" height="39" rx="4" stroke="currentColor" stroke-width="2"/>
+          <rect x="14" y="10" width="20" height="13" rx="2" fill="currentColor" opacity=".16"/>
+          <rect x="14" y="10" width="20" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M17.5 14.5h3.5M17.5 18.5h9M24.5 14.5h3" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" opacity=".8"/>
+          <circle cx="24" cy="33.5" r="5.5" stroke="currentColor" stroke-width="2"/>
+          <path d="M24 30.5v3.2l2.1 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M9.5 13h-4M9.5 21h-4M9.5 29h-4M38.5 13h4M38.5 21h4M38.5 29h4"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+        </svg>
         <span class="ch-title">A hardware oracle</span>
         <span class="ch-body">A small LilyGO device on USB. It does the handshake itself and never
           hands its half of the secret to your computer — the safest option.</span>
@@ -84,7 +94,18 @@
       </button>
 
       <button type="button" class="choice" id="choosePaper">
-        <span class="ch-icon" aria-hidden="true">🖨️</span>
+        <svg class="ch-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+          <path d="M11 4.5h26a2 2 0 0 1 2 2v35a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2v-35a2 2 0 0 1 2-2z"
+                stroke="currentColor" stroke-width="2"/>
+          <rect x="14" y="10" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/>
+          <rect x="26" y="10" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/>
+          <rect x="14" y="22" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/>
+          <rect x="26.5" y="22.5" width="3" height="3" fill="currentColor"/>
+          <rect x="31" y="22.5" width="3" height="3" fill="currentColor"/>
+          <rect x="26.5" y="27" width="3" height="3" fill="currentColor"/>
+          <path d="M14 35.5h20M14 39.5h13" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" opacity=".45"/>
+        </svg>
         <span class="ch-title">A paper oracle</span>
         <span class="ch-body">One printed square that does the very same handshake. Nothing to buy,
           nothing to charge, nothing to keep charged. Scan it when you need a password.</span>
@@ -316,16 +337,38 @@
       <p class="help expert-only">Derive against the hardware oracle over WebSerial, or the in-browser
         simulator (ephemeral session key, not pinned).</p>
 
-      <div class="viz" id="viz" aria-hidden="true">
-        <div class="viz-inner">
-          <div class="node" id="nodeYou">💻</div>
-          <div class="wire" id="wireOut"><b></b></div>
-          <div class="node" id="nodeOracle">🔐</div>
-          <div class="wire" id="wireIn"><b></b></div>
-          <div class="node" id="nodeDone">🔑</div>
+      <!-- The handshake, shown with the actual bytes. Decorative to assistive
+           tech: #vizLabel carries the same story as live text. -->
+      <div class="stage" id="viz">
+        <div class="stage-rail" aria-hidden="true">
+          <div class="party" id="partyYou">
+            <span class="party-box"><span class="party-glyph">r</span></span>
+            <span class="party-name">you hold r</span>
+          </div>
+
+          <div class="channel" id="channel">
+            <span class="channel-line"></span>
+            <span class="channel-pulse"></span>
+            <span class="packet" id="packetOut"><i></i><i></i><i></i></span>
+            <span class="packet" id="packetIn"><i></i><i></i><i></i></span>
+          </div>
+
+          <div class="party" id="partyOracle">
+            <span class="party-box seal">
+              <span class="seal-ring"></span>
+              <span class="seal-ring two"></span>
+              <span class="party-glyph">k</span>
+            </span>
+            <span class="party-name">it holds k</span>
+          </div>
         </div>
+
+        <div class="readout" id="readout" aria-hidden="true">
+          <span class="readout-tag" id="vizTag">P</span>
+          <span class="readout-hex" id="vizHex"></span>
+        </div>
+        <p class="viz-label" id="vizLabel" aria-live="polite"></p>
       </div>
-      <div class="viz-label" id="vizLabel" aria-live="polite"></div>
 
       <div class="actions">
         <button class="btn primary" id="deriveBtn">Make my password</button>
