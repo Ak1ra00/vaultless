@@ -290,3 +290,16 @@ void loop() {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// ESP-IDF entry point. Building against "framework = arduino, espidf" (as
+// opposed to plain "arduino") skips PlatformIO's usual auto-generated
+// app_main() shim, so it's provided here directly.
+// ---------------------------------------------------------------------------
+extern "C" void app_main() {
+  initArduino();
+  setup();
+  while (true) {
+    loop();
+  }
+}
