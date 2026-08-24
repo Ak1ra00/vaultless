@@ -2,3 +2,13 @@
 # ESP-IDF's own default is 100Hz, which fails the build with:
 #   "esp32-arduino requires CONFIG_FREERTOS_HZ=1000 (currently 100)"
 CONFIG_FREERTOS_HZ=1000
+
+# setup()/loop() run on the ESP-IDF main task (see app_main in src/main.cpp),
+# whose stack defaults to 3584 bytes — far too small here. A single request
+# frame holds a 512-byte StaticJsonDocument and then calls into libsodium's
+# crypto_scalarmult_ristretto255, whose ge25519 temporaries need several KB
+# more. Overflowing it panics with "***ERROR*** A stack overflow in task main
+# has been detected." mid-handshake. Plain Arduino builds dodge this by
+# running loop() on a separate 8KB loopTask; give the main task comparable
+# headroom instead.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384

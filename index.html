@@ -490,9 +490,15 @@ async function readLoop() {
         while ((idx = lineBuffer.indexOf('\n')) >= 0) {
           const line = lineBuffer.slice(0, idx).trim();
           lineBuffer = lineBuffer.slice(idx + 1);
-          if (line && pendingResolvers.length) {
-            const resolve = pendingResolvers.shift();
-            resolve(line);
+          if (!line) continue;
+          // The device shares this line with its ESP-IDF boot log and panic
+          // handler, so only actual protocol replies may satisfy a pending
+          // request — anything else is surfaced as device output instead of
+          // being parsed as a response.
+          if (line.startsWith('{') && pendingResolvers.length) {
+            pendingResolvers.shift()(line);
+          } else {
+            trace('device', line, /error|panic|abort|assert/i.test(line));
           }
         }
       }
