@@ -88,7 +88,7 @@ function dleqProve(k, B, Bp, Y) {
 /* Verify a hardware response and enforce the pin. Throws on any failure —
  * a derivation must never proceed against an unverified oracle. */
 /* Trust-on-first-use over the oracle's public key, shared by the hardware
- * oracle and the printed recovery sheet. It is what catches a substituted
+ * hardware oracle and the paper oracle. It is what catches a substituted
  * device, and equally a sheet that is not the one this browser has been using —
  * scanning last year's sheet would otherwise derive different passwords with no
  * error anywhere. */
@@ -406,18 +406,18 @@ async function runDerivation(mode) {
     return;
   }
   if (mode === 'hardware' && !writer) {
-    trace('input', 'no oracle connected — connect your gadget, load a recovery sheet, or try the demo', true);
+    trace('input', 'no oracle connected — connect your gadget, load your paper oracle, or try the demo', true);
     return;
   }
   if (useSheet && !getSheetKey()) {
-    trace('input', 'no recovery sheet loaded — scan or type your code first', true);
+    trace('input', 'no paper oracle loaded — scan its square or type its code first', true);
     return;
   }
 
   deriveBtn.disabled = true; simBtn.disabled = true;
   setDemo(useSimulator);
   document.getElementById('resSource').textContent =
-    `source: ${useSimulator ? 'demo simulator' : useSheet ? 'recovery sheet' : 'your gadget'}`;
+    `source: ${useSimulator ? 'demo simulator' : useSheet ? 'your paper oracle' : 'your gadget'}`;
 
   try {
     trace('1/7', `hashing "${index}" to a ristretto255 point`);
@@ -431,11 +431,11 @@ async function runDerivation(mode) {
        * cancels — r⁻¹·(k·(r·P)) = k·P — so this lands on exactly the same
        * point, and therefore exactly the same password, as the hardware. */
       const k = getSheetKey();
-      trace('2/4', 'using the key from your recovery sheet (no oracle round trip)');
-      enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'recovery sheet');
+      trace('2/4', 'using your paper oracle (its key is here, so no round trip)');
+      enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
       trace('3/4', 'computing S = k·P locally');
-      vizStart('reading your sheet…');
-      vizOracle('applying your key…');
+      vizStart('reading your paper oracle…');
+      vizOracle('doing the handshake…');
       await new Promise(r => setTimeout(r, 450));
       S = P.multiply(k);
       vizReturn('done…');

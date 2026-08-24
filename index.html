@@ -288,7 +288,7 @@
   }
   .toast.on{transform:translate(-50%,0);opacity:1;visibility:visible;}
 
-  /* recovery sheet ---------------------------------------------------- */
+  /* paper oracle ------------------------------------------------------ */
   .sheet-panel{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-0);}
   .sheet-status{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin-bottom:12px;}
   .sheet-status.good{color:var(--green);}
@@ -441,7 +441,7 @@
       </div>
 
       <div class="actions" style="margin-top:14px;">
-        <button class="btn small" id="sheetBtn">Use my paper sheet</button>
+        <button class="btn small" id="sheetBtn">Use my paper oracle</button>
         <button class="btn small" id="connectBtn">Connect my gadget</button>
         <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
         <esp-web-install-button manifest="esp-manifest.json">
@@ -450,18 +450,18 @@
       </div>
 
       <div class="sheet-panel" id="sheetPanel" style="display:none;">
-        <div class="sheet-status" id="sheetStatus">No sheet loaded</div>
+        <div class="sheet-status" id="sheetStatus">No paper oracle loaded</div>
         <div class="actions" style="margin-bottom:12px;">
           <button class="btn small" id="sheetScanBtn">Scan with camera</button>
           <button class="btn small" id="sheetStopBtn">Stop camera</button>
-          <button class="btn small" id="sheetForget" style="display:none;">Forget key</button>
+          <button class="btn small" id="sheetForget" style="display:none;">Forget this oracle</button>
         </div>
         <div id="sheetScanArea" style="display:none;">
           <video id="sheetVideo" class="scan-video" muted playsinline></video>
           <canvas id="sheetCanvas" style="display:none;"></canvas>
           <p class="help" style="margin:10px 0 0;">Hold the printed square up to the camera.</p>
         </div>
-        <label class="sheet-label" for="sheetManual">…or type the code from the sheet</label>
+        <label class="sheet-label" for="sheetManual">…or type the code printed under the square</label>
         <div class="pw-row">
           <input type="text" id="sheetManual" placeholder="VLT1-…" autocomplete="off"
                  autocapitalize="characters" spellcheck="false">
@@ -497,40 +497,43 @@
 
     <!-- CREATE A SHEET -->
     <section class="card">
-      <div class="step-h"><span class="num" aria-hidden="true">＋</span><h3>No gadget? Make a paper key</h3></div>
-      <p class="help">This prints one square of paper that does the same job as the gadget.
-        Keep your phrase in your head and this sheet somewhere safe — together they make your
-        passwords, and neither one alone is enough.</p>
+      <div class="step-h"><span class="num" aria-hidden="true">＋</span><h3>No gadget? Print one on paper</h3></div>
+      <p class="help">The gadget does a secret handshake to make your passwords. This prints a
+        square of paper that does that same handshake instead — so you don't need the gadget at all.
+        Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
+        password. <strong>No password is printed on it.</strong></p>
       <div class="warn-box">
         <strong>Read this before you print.</strong>
         <ul>
-          <li>Anyone who photographs this sheet <em>and</em> knows your phrase gets every password.
-            Treat it like a bank card, not a shopping list.</li>
-          <li>Lose the sheet with no copy and every password made with it is gone for good.
+          <li>Anyone who photographs the paper <em>and</em> knows your phrase can make every one of
+            your passwords. Treat it like a bank card, not a shopping list.</li>
+          <li>Lose the paper with no copy and every password it makes is gone for good.
             Print two and store them apart.</li>
-          <li>The gadget is safer: it never hands its key to your computer. A sheet does,
-            every time you scan it.</li>
+          <li>The gadget is safer: it never hands its half of the secret to your computer.
+            Paper does, every time you scan it.</li>
         </ul>
       </div>
       <div class="actions">
-        <button class="btn primary" id="createSheetBtn">Create my paper key</button>
+        <button class="btn primary" id="createSheetBtn">Create my paper oracle</button>
       </div>
 
       <div id="sheetOutput" style="display:none;">
         <div class="printable" id="printable">
-          <h4>vaultless recovery sheet</h4>
+          <h4>vaultless paper oracle</h4>
           <canvas id="sheetQR" class="qr"></canvas>
           <div class="sheet-meta">
-            <div><span class="k">key fingerprint</span><span class="v" id="sheetFp"></span></div>
+            <div><span class="k">oracle fingerprint</span><span class="v" id="sheetFp"></span></div>
             <div><span class="k">created</span><span class="v" id="sheetDate"></span></div>
           </div>
           <div class="sheet-code" id="sheetCode"></div>
-          <p class="sheet-note">Scan the square, or type the code, at vaultless.space.
-            You also need your master phrase. Anyone with both can read every password
-            made from this key. Store it like cash.</p>
+          <p class="sheet-note"><strong>This is not a password.</strong> No password is printed
+            here. This square does the secret handshake that makes your passwords — at
+            vaultless.space, scan it or type the code, then add the master phrase you keep in your
+            head. Both halves are needed. Anyone holding both can make every password this oracle
+            makes, so store it like cash.</p>
         </div>
         <div class="actions" style="margin-top:16px;">
-          <button class="btn primary" id="printSheetBtn">Print this sheet</button>
+          <button class="btn primary" id="printSheetBtn">Print my paper oracle</button>
         </div>
       </div>
     </section>

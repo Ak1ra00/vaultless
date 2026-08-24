@@ -1,4 +1,8 @@
-/* UI for the printable recovery sheet.
+/* UI for the paper oracle — the printed square that stands in for the gadget.
+ *
+ * It plays the same role the hardware does: it holds k and performs the
+ * handshake half of the derivation. It is not a password and no password is
+ * printed on it; without the master phrase it produces nothing.
  *
  * Holds the scanned key for the session and nothing longer. k is kept in one
  * module-scoped variable and is never written to localStorage, sessionStorage,
@@ -30,7 +34,7 @@ function touchIdle() {
   if (!sheetKey) return;
   idleTimer = setTimeout(() => {
     forgetKey();
-    toast('Recovery key cleared after 5 minutes idle');
+    toast('Paper oracle cleared after 5 minutes idle');
   }, IDLE_MS);
 }
 
@@ -49,11 +53,12 @@ function forgetKey() {
 function renderStatus() {
   const loaded = !!sheetKey;
   $('sheetStatus').textContent = loaded
-    ? `Sheet loaded · key ${fingerprint(sheetKey)}`
-    : 'No sheet loaded';
+    ? `Paper oracle loaded · ${fingerprint(sheetKey)}`
+    : 'No paper oracle loaded';
   $('sheetStatus').classList.toggle('good', loaded);
   $('sheetForget').style.display = loaded ? '' : 'none';
-  $('deriveBtn').textContent = loaded ? 'Make my password (from sheet)' : 'Make my password';
+  // The source is reported on the result card; keep the button one plain verb.
+  $('deriveBtn').textContent = 'Make my password';
   $('card4').classList.toggle('done', loaded);
 }
 
@@ -70,7 +75,7 @@ function acceptCode(text) {
   $('sheetError').textContent = '';
   setKey(k);
   stopScan();
-  toast(`Sheet loaded · key ${fingerprint(k)}`);
+  toast(`Paper oracle loaded · ${fingerprint(k)}`);
   return true;
 }
 
@@ -110,11 +115,11 @@ function createSheet() {
   $('sheetFp').textContent = fp;
   $('sheetDate').textContent = new Date().toISOString().slice(0, 10);
   $('sheetOutput').style.display = '';
-  $('createSheetBtn').textContent = 'Create a different sheet';
+  $('createSheetBtn').textContent = 'Create a different one';
 
   // Load it straight away so "print, then use it" works without rescanning.
   setKey(k);
-  toast(`Sheet created · key ${fp} — print it now`);
+  toast(`Paper oracle created · ${fp} — print it now`);
 }
 
 export function initSheet() {
@@ -129,7 +134,7 @@ export function initSheet() {
   };
   $('sheetScanBtn').onclick = () => startScan();
   $('sheetStopBtn').onclick = () => stopScan();
-  $('sheetForget').onclick = () => { forgetKey(); toast('Recovery key forgotten'); };
+  $('sheetForget').onclick = () => { forgetKey(); toast('Paper oracle forgotten'); };
   $('sheetManualBtn').onclick = () => {
     if (acceptCode($('sheetManual').value)) $('sheetManual').value = '';
   };
