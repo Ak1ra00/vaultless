@@ -2,15 +2,32 @@
  * A third party able to serve script to this page could read the master
  * passphrase and every derived password, so nothing here loads cross-origin. */
 import {
-  RistrettoPoint, hashToRistretto255, ed25519,
+  RistrettoPoint, hashToRistretto255,
   bytesToHex, hexToBytes, bytesToNumberLE, numberToBytesLE,
   utf8ToBytes, concatBytes, invert, hkdf, sha256, sha512,
 } from './vendor/noble-bundle.js';
 import {
-  initChrome, toast, setDemo, markResultFilled,
+  initChrome, toast, setDemo, markResultFilled, confirmDialog, clearResult,
   vizStart, vizOracle, vizReturn, vizDone, vizReset, getOracleChoice, setReady,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
+
+/* ---------------------------------------------------------------------
+ * Clickjacking guard.
+ *
+ * frame-ancestors cannot be expressed in a <meta> CSP and GitHub Pages cannot
+ * send real headers, so this is the only defence available to a page that shows
+ * live passwords and holds a master phrase: refuse to run framed. Blank the
+ * document first and navigate second — a busting redirect can be cancelled by
+ * the framing page, but an emptied document has nothing left to click on. The
+ * throw stops the rest of this module, and with it every DOM handler below.
+ * ------------------------------------------------------------------- */
+if (self !== top) {
+  document.documentElement.replaceChildren(
+    document.createElement('head'), document.createElement('body'));
+  try { top.location = self.location; } catch { /* cross-origin: blank is the point */ }
+  throw new Error('vaultless refuses to run inside a frame');
+}
 
 /* ---------------------------------------------------------------------
  * Group order L of ristretto255 / ed25519 (RFC 9380 / RFC 8032).
@@ -58,7 +75,35 @@ function scalarToBytes(s) {
  *     Pinning is what makes a substituted device detectable.
  * ------------------------------------------------------------------- */
 const DLEQ_DST = utf8ToBytes('oprf-vaultless-dleq-v1');
-const PIN_KEY = 'vaultless.oracle.pubkey.v1';
+const PIN_KEY = 'vaultless.oracle.pubkey.v1';      // legacy: one key, replaced on accept
+const TRUST_KEY = 'vaultless.oracle.trusted.v1';   // current: the set of keys you trust
+
+/* The same short identifier the paper oracle prints on its sheet — SHA-256 of
+ * the public key, truncated — so a device and a sheet holding one key show one
+ * fingerprint, and the mismatch dialog can name keys instead of showing 24
+ * characters of hex nobody can compare. */
+function keyFingerprint(pubkeyHex) {
+  const h = bytesToHex(sha256(hexToBytes(pubkeyHex))).slice(0, 8);
+  return `${h.slice(0, 4)}-${h.slice(4, 8)}`;
+}
+
+function loadTrusted() {
+  try {
+    const raw = localStorage.getItem(TRUST_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (Array.isArray(v)) return v.filter(x => typeof x === 'string' && x.length === 64);
+    }
+    // Carry across the single key pinned before this was a set.
+    const legacy = localStorage.getItem(PIN_KEY);
+    if (legacy) return [legacy];
+  } catch { /* private mode, or corrupt value: start empty rather than throw */ }
+  return [];
+}
+
+function saveTrusted(list) {
+  try { localStorage.setItem(TRUST_KEY, JSON.stringify(list)); } catch { /* private mode */ }
+}
 
 function dleqChallenge(Y, B, Bp, T1, T2) {
   const h = sha512(concatBytes(
@@ -92,27 +137,41 @@ function dleqProve(k, B, Bp, Y) {
  * device, and equally a sheet that is not the one this browser has been using —
  * scanning last year's sheet would otherwise derive different passwords with no
  * error anywhere. */
-function enforcePin(pubkeyHex, whatItIs) {
-  let pinned = null;
-  try { pinned = localStorage.getItem(PIN_KEY); } catch { /* private mode */ }
-  if (!pinned) {
-    try { localStorage.setItem(PIN_KEY, pubkeyHex); } catch { /* private mode */ }
-    trace('pin', `pinned ${whatItIs} ${pubkeyHex.slice(0, 16)}… (first use)`);
+async function enforcePin(pubkeyHex, whatItIs) {
+  const trusted = loadTrusted();
+  if (!trusted.length) {
+    saveTrusted([pubkeyHex]);
+    trace('pin', `trusting ${whatItIs} ${keyFingerprint(pubkeyHex)} (first use)`);
     return;
   }
-  if (pinned === pubkeyHex) return;
-  const okToRepin = confirm(
-    `WARNING: this ${whatItIs} is not the one previously pinned.\n\n` +
-    `pinned: ${pinned.slice(0, 24)}…\n` +
-    `this:   ${pubkeyHex.slice(0, 24)}…\n\n` +
-    'A different key derives DIFFERENT passwords. Only continue if you ' +
-    'deliberately replaced it. Trust this key from now on?');
-  if (!okToRepin) throw new Error(`${whatItIs} public key does not match the pinned one`);
-  try { localStorage.setItem(PIN_KEY, pubkeyHex); } catch { /* private mode */ }
-  trace('pin', `re-pinned ${whatItIs} ${pubkeyHex.slice(0, 16)}…`, true);
+  if (trusted.includes(pubkeyHex)) return;
+
+  const fp = keyFingerprint(pubkeyHex);
+  const ok = await confirmDialog({
+    title: `This ${whatItIs} is not one you have used here`,
+    lines: [
+      `It presents ${fp}. This browser already trusts ` +
+      `${trusted.map(keyFingerprint).join(', ')}.`,
+      'A different key makes different passwords — none of the ones you already ' +
+      'use. Continue only if you meant to add another oracle. If you did not, ' +
+      'stop: something has taken the place of yours.',
+    ],
+    confirmLabel: `Also trust ${fp}`,
+    cancelLabel: 'Stop',
+    danger: true,
+  });
+  if (!ok) throw new Error(`${whatItIs} public key is not one this browser trusts`);
+
+  /* Added, never substituted. Replacing the pinned key meant that owning two
+   * legitimate oracles — a device and a work device, or a device and a sheet
+   * carrying a different k — silently disarmed the protection for whichever one
+   * you had used a minute ago, and trained you to click through the single
+   * prompt that matters. */
+  saveTrusted([...trusted, pubkeyHex]);
+  trace('pin', `now also trusting ${whatItIs} ${fp}`, true);
 }
 
-function verifyOracleResponse(response, B, pin = true) {
+async function verifyOracleResponse(response, B, pin = true) {
   if (!response.pubkey || !response.proof) {
     throw new Error('oracle did not supply a DLEQ proof — firmware predates ' +
                     'protocol v2, reflash it before deriving');
@@ -154,7 +213,11 @@ function verifyOracleResponse(response, B, pin = true) {
                     'the key it claims; refusing to derive');
   }
   if (!pin) return Bp;
-  enforcePin(response.pubkey, 'oracle');
+  /* Y as re-encoded from the parsed point, never response.pubkey as it arrived.
+   * The comparison is string equality, so an oracle answering in uppercase hex
+   * would trip the "not one you have used here" dialog with nothing actually
+   * wrong — and that is the one dialog users must not be taught to dismiss. */
+  await enforcePin(bytesToHex(Y.toRawBytes()), 'oracle');
   return Bp;
 }
 
@@ -199,7 +262,16 @@ function fail(step, msg, short = msg) {
 }
 
 document.getElementById('clearTrace').onclick = () => {
-  traceEl.innerHTML = '<div class="row"><span class="empty">— cleared —</span></div>';
+  // Built as nodes rather than markup. The string is a literal today, but an
+  // innerHTML sink on the page holding the master phrase is not worth keeping
+  // around for someone to later feed a variable into.
+  const row = document.createElement('div');
+  row.className = 'row';
+  const empty = document.createElement('span');
+  empty.className = 'empty';
+  empty.textContent = '— cleared —';
+  row.appendChild(empty);
+  traceEl.replaceChildren(row);
 };
 
 /* ---------------------------------------------------------------------
@@ -312,6 +384,7 @@ async function disconnectSerial() {
   }
   port = null; writer = null; reader = null;
   setConnected(false, 'oracle disconnected');
+  clearResult();          // the oracle is gone; its password should not linger
   trace('serial', 'port closed');
 }
 
@@ -392,11 +465,17 @@ document.querySelectorAll('.fmt-opt').forEach(el => {
   };
 });
 
+/* The button used to carry a fixed aria-label ("Show or hide the phrase"), which
+ * overrides its visible text — so sighted users read "show" then "hide" while
+ * screen-reader users heard the same string both times and never learned which
+ * state they were in. The label now follows the state, like the text does. */
 document.getElementById('togglePass').onclick = () => {
   const el = document.getElementById('passphrase');
   const btn = document.getElementById('togglePass');
   el.type = el.type === 'password' ? 'text' : 'password';
-  btn.textContent = el.type === 'password' ? 'show' : 'hide';
+  const hidden = el.type === 'password';
+  btn.textContent = hidden ? 'show' : 'hide';
+  btn.setAttribute('aria-label', hidden ? 'Show the phrase' : 'Hide the phrase');
 };
 
 /* ---------------------------------------------------------------------
@@ -458,7 +537,13 @@ async function runDerivation(mode) {
    * exactly what the user meant. parseInt was too forgiving: "12x" silently
    * became 12, and anything non-numeric became NaN, which stringifies to
    * "NaN" and derives a password from it. Require a plain non-negative
-   * integer, and keep it inside the range the firmware's `long` can hold. */
+   * integer, and keep it inside the range the firmware's `long` can hold.
+   *
+   * The field is type="text" inputmode="numeric" for this to work at all. As a
+   * number input it returned "" for anything the browser judged invalid — "-5",
+   * "1e5", "abc" — so the `|| '0'` below turned every one of them into account
+   * ZERO and derived a confident, correctly formatted password for the wrong
+   * account. The validation was already right; it just never saw the input. */
   const rawIndex = (document.getElementById('index').value || '0').trim();
   if (!/^\d+$/.test(rawIndex)) {
     fail('input', 'index must be a non-negative whole number',
@@ -500,7 +585,7 @@ async function runDerivation(mode) {
        * point, and therefore exactly the same password, as the hardware. */
       const k = getSheetKey();
       trace('2/4', 'using your paper oracle (its key is here, so no round trip)');
-      enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
+      await enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
       trace('3/4', 'computing S = k·P locally');
       vizStart('reading your paper oracle…');
       vizOracle('doing the handshake…');
@@ -547,7 +632,7 @@ async function runDerivation(mode) {
     vizReturn('stamped answer coming back…');
 
     trace('5/7', 'verifying DLEQ proof that B\' = k·B under the pinned key');
-    const Bp = verifyOracleResponse(response, B, !useSimulator);
+    const Bp = await verifyOracleResponse(response, B, !useSimulator);
     trace('5/7', useSimulator ? 'proof ok (simulator, not pinned)' : 'proof ok · oracle key matches pin');
 
     trace('6/7', 'unblinding: S = r⁻¹·B\'');
@@ -603,6 +688,30 @@ function showResult(pw) {
 
 const CLIPBOARD_CLEAR_MS = 60000;
 let clipboardTimer = null;
+
+/* Best-effort scrub, so a derived password does not sit in the system clipboard.
+ *
+ * Reading the clipboard back is the precise way to do this — only clear what we
+ * put there — but navigator.clipboard.readText() raises a permission prompt in
+ * Chromium, and it would arrive a full minute after the copy with nothing on
+ * screen to explain it. On a security tool that is exactly the prompt people
+ * should refuse, and refusing it meant no clearing at all.
+ *
+ * So: read back only where permission has already been granted — permissions
+ * .query() never prompts — and otherwise simply overwrite. Clobbering something
+ * copied since is a small annoyance; leaving a password in the clipboard is not. */
+async function scrubClipboard(pw) {
+  try {
+    let mayRead = false;
+    try {
+      const st = await navigator.permissions.query({ name: 'clipboard-read' });
+      mayRead = st.state === 'granted';
+    } catch { /* Firefox and Safari do not know this permission name */ }
+    if (mayRead && (await navigator.clipboard.readText()) !== pw) return;  // theirs, not ours
+    await navigator.clipboard.writeText('');
+    trace('clipboard', 'cleared after 60s');
+  } catch { /* not focused, or write denied — leave it alone */ }
+}
 document.getElementById('copyBtn').onclick = async () => {
   const pw = document.getElementById('pwOut').textContent;
   if (!pw) return;
@@ -611,20 +720,29 @@ document.getElementById('copyBtn').onclick = async () => {
   const original = btn.textContent;
   btn.textContent = 'Copied ✓';
   setTimeout(() => (btn.textContent = original), 1400);
-  toast('Copied — clears from the clipboard in 60 seconds');
-  // Best-effort clipboard scrub, so a derived password does not sit in the
-  // system clipboard indefinitely. Only clears if we still own what we wrote.
+  toast('Copied — cleared from the clipboard in 60 seconds');
   clearTimeout(clipboardTimer);
-  clipboardTimer = setTimeout(async () => {
-    try {
-      if (await navigator.clipboard.readText() === pw) {
-        await navigator.clipboard.writeText('');
-        trace('clipboard', 'cleared after 60s');
-      }
-    } catch { /* permission denied or not focused — leave it alone */ }
-  }, CLIPBOARD_CLEAR_MS);
+  clipboardTimer = setTimeout(() => scrubClipboard(pw), CLIPBOARD_CLEAR_MS);
 };
 
 /* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
 initChrome();
 initSheet();
+
+/* ---------------------------------------------------------------------
+ * Offline shell.
+ *
+ * A password manager that needs the network to hand you a password is not much
+ * of one — and every load without this re-fetches the derivation code from the
+ * host, so the code you audited last week is only the code that runs today if
+ * the host is still honest. Caching the shell pins it between updates.
+ *
+ * Registration is last and its failure is never fatal: no service worker means
+ * the site behaves exactly as it did before, which is also what happens on
+ * file:// and in browsers that do not support one.
+ * ------------------------------------------------------------------- */
+if ('serviceWorker' in navigator && isSecureContext) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* not fatal */ });
+  });
+}

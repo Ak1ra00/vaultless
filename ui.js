@@ -21,6 +21,81 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
 }
 
+/* ------------------------------------------------------------- dialogs */
+/* One in-page dialog, used both for asking a question and for confirming.
+ *
+ * The pin mismatch is the most security-critical decision in the product and it
+ * used to be a native confirm(): unstyleable, suppressible by the browser after
+ * a couple of dialogs, and exactly the kind of box people dismiss without
+ * reading. <dialog> gives a real focus trap and Escape handling for free, and
+ * lets the safe answer be the default — Cancel takes focus, and anything other
+ * than a deliberate press of the confirm button counts as a refusal.
+ *
+ * No form element and no method="dialog": this page runs under form-action
+ * 'none', and a plain button that calls close() cannot be caught by it. */
+function ask({ title, lines = [], confirmLabel = 'OK', cancelLabel = 'Cancel',
+               danger = false, input = null }) {
+  const dlg = $('ask');
+  const wantsInput = !!input;
+
+  // Nothing modern lacks <dialog>, but a security prompt must never simply
+  // vanish, so fall back to the platform boxes rather than to nothing.
+  if (!dlg || typeof dlg.showModal !== 'function') {
+    if (wantsInput) {
+      const v = prompt([title, ...lines].join('\n'), input.value || '');
+      return Promise.resolve(v === null ? null : v.trim());
+    }
+    return Promise.resolve(confirm([title, ...lines].join('\n\n')));
+  }
+
+  $('askTitle').textContent = title;
+  const body = $('askBody');
+  body.replaceChildren();      // textContent only: these lines carry key material
+  for (const line of lines) {
+    const p = document.createElement('p');
+    p.textContent = line;
+    body.appendChild(p);
+  }
+
+  const field = $('askInput'), label = $('askLabel');
+  field.hidden = label.hidden = !wantsInput;
+  if (wantsInput) {
+    label.textContent = input.label || '';
+    field.placeholder = input.placeholder || '';
+    field.value = input.value || '';
+  }
+
+  const ok = $('askOk'), cancel = $('askCancel');
+  ok.textContent = confirmLabel;
+  cancel.textContent = cancelLabel;
+  ok.classList.toggle('danger', danger);
+
+  return new Promise((resolve) => {
+    let value = null;
+    const done = (v) => { value = v; dlg.close(); };
+    ok.onclick = () => done(wantsInput ? field.value.trim() : true);
+    cancel.onclick = () => done(wantsInput ? null : false);
+    field.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ok.click(); } };
+    dlg.addEventListener('close', () => {
+      ok.onclick = cancel.onclick = field.onkeydown = null;
+      field.value = '';                       // never leave typed text sitting there
+      resolve(!wantsInput && value === null ? false : value);
+    }, { once: true });
+    dlg.showModal();
+    (wantsInput ? field : cancel).focus();    // the safe answer is the default
+  });
+}
+
+/* Resolves true only on a deliberate confirm; Escape, Cancel and a dismissed
+ * dialog all resolve false. */
+export function confirmDialog(opts) {
+  return ask({ confirmLabel: 'Continue', ...opts });
+}
+/* Resolves the trimmed string, or null if the person backed out. */
+export function promptDialog(opts) {
+  return ask({ confirmLabel: 'Save', ...opts, input: opts.input || {} });
+}
+
 /* --------------------------------------------------- matrix rain backdrop */
 function initRain() {
   const c = $('rain');
@@ -160,15 +235,30 @@ function initAccounts() {
       wrap.appendChild(hint);
     }
   };
-  $('addAccount').onclick = () => {
-    const name = (prompt('Nickname for account number ' + idx.value + '\n(e.g. "email", "bank")') || '').trim();
+  $('addAccount').onclick = async () => {
+    /* Refuse to bind a nickname to a number the field does not actually hold.
+     * `Number(idx.value) || 0` used to turn anything unparseable into account
+     * 0, so a mistyped number quietly saved a nickname pointing at the wrong
+     * account — and pressing that chip later derived the wrong password. */
+    const raw = idx.value.trim();
+    if (!/^\d+$/.test(raw)) {
+      toast('Set a whole account number first, 0 or more.');
+      idx.focus();
+      return;
+    }
+    const name = await promptDialog({
+      title: `Nickname for account number ${raw}`,
+      lines: ['Stays on this device. It never reaches the oracle and never ' +
+              'changes the password — it is only a label for the number.'],
+      input: { label: 'Nickname', placeholder: 'email, bank, work…' },
+    });
     if (!name) return;
     const list = loadAccounts().filter(a => a.name !== name);
-    list.push({ name: name.slice(0, 24), index: Number(idx.value) || 0 });
+    list.push({ name: name.slice(0, 24), index: Number(raw) });
     list.sort((a, b) => a.index - b.index);
     saveAccounts(list);
     render();
-    toast(`Saved “${name}” as number ${idx.value}`);
+    toast(`Saved “${name}” as number ${raw}`);
   };
   const bump = (d) => {
     const n = Math.max(0, (Number(idx.value) || 0) + d);
@@ -227,6 +317,29 @@ export function markResultFilled(filled) {
   $('resultCard').classList.toggle('empty', !filled);
   $('card4').classList.toggle('done', filled);
 }
+/* Put the result card back to empty and forget the phrase.
+ *
+ * The paper key gets a five-minute idle wipe, but the password it produced used
+ * to sit on screen indefinitely and the phrase stayed in its input — so the one
+ * secret with a lifetime was the one the user could not read off the glass.
+ * Called whenever an oracle goes away: forgotten, idled out, or disconnected. */
+export function clearResult() {
+  const pw = $('pwOut');
+  pw.textContent = '';
+  pw.style.display = 'none';
+  pw.classList.remove('reveal', 'hidden-pw');
+  $('pwPlaceholder').style.display = '';
+  $('copyBtn').disabled = true;
+  const reveal = $('revealBtn');
+  reveal.disabled = true;
+  reveal.textContent = 'Reveal';
+  $('resSource').textContent = 'source: —';
+  $('passphrase').value = '';
+  $('passphrase').dispatchEvent(new Event('input'));   // reset the strength meter
+  setDemo(false);
+  markResultFilled(false);
+}
+
 function initReveal() {
   const pw = $('pwOut'), btn = $('revealBtn');
   btn.onclick = () => {
@@ -236,12 +349,47 @@ function initReveal() {
 }
 
 /* -------------------------------------------------------------- keyboard */
+/* ARIA radiogroup semantics, which the markup was claiming but not providing.
+ *
+ * All four options carried tabindex="0" and only answered Enter and Space, so
+ * Tab walked through every one and the arrow keys did nothing — the widget
+ * announced itself as a radiogroup and then behaved like four buttons. Roving
+ * tabindex puts exactly the checked option in the tab order; the arrows move
+ * selection, as they do in every other radiogroup. */
 function initFormatKeys() {
-  document.querySelectorAll('.fmt-opt').forEach((el) => {
+  const opts = [...document.querySelectorAll('.fmt-opt')];
+  if (!opts.length) return;
+
+  const syncTabIndex = () => {
+    let checked = opts.find(o => o.getAttribute('aria-checked') === 'true');
+    if (!checked) checked = opts[0];
+    opts.forEach(o => { o.tabIndex = o === checked ? 0 : -1; });
+  };
+
+  // app.js owns which format is selected; clicking keeps that one source of truth.
+  const select = (el) => { el.click(); syncTabIndex(); el.focus(); };
+  const step = (from, delta) =>
+    select(opts[(opts.indexOf(from) + delta + opts.length) % opts.length]);
+
+  opts.forEach((el) => {
+    el.addEventListener('click', syncTabIndex);
     el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
+      switch (e.key) {
+        case 'Enter': case ' ':
+          e.preventDefault(); el.click(); syncTabIndex(); break;
+        case 'ArrowRight': case 'ArrowDown':
+          e.preventDefault(); step(el, 1); break;
+        case 'ArrowLeft': case 'ArrowUp':
+          e.preventDefault(); step(el, -1); break;
+        case 'Home':
+          e.preventDefault(); select(opts[0]); break;
+        case 'End':
+          e.preventDefault(); select(opts[opts.length - 1]); break;
+        default: break;
+      }
     });
   });
+  syncTabIndex();
 }
 
 
@@ -292,6 +440,18 @@ function setView(inApp, { push = true } = {}) {
     history.pushState({ inApp }, '', hash || location.pathname);
   }
   scrollTo({ top: 0, behavior: 'auto' });
+  /* Move focus into the view that just appeared. Without this a keyboard user
+   * who presses "Continue to my password" is left focused on a button inside a
+   * now-hidden subtree, focus falls back to <body>, and the next Tab restarts
+   * from the top of the document. Only on a real navigation — stealing focus on
+   * first load would be its own bug. */
+  if (push) {
+    const heading = (inApp ? $('viewApp') : $('viewHome')).querySelector('h2, h3');
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+    }
+  }
   /* Leaving a view has to be able to tear things down — the camera above all,
    * which otherwise keeps running behind a hidden <video> with the machine's
    * recording light still on. */
@@ -320,9 +480,28 @@ function routeFromHash() {
   return (h === 'hardware' || h === 'paper') ? h : null;
 }
 
+/* esp-web-tools is a large module graph and only the "brand new device" branch
+ * ever opens it, yet it used to load on every page view — including the entire
+ * paper-oracle path, where nobody will ever flash anything. Fetched when that
+ * branch opens instead, which is several seconds before the button can be
+ * pressed. Loading it is also what upgrades <esp-web-install-button>, so the
+ * button does nothing until this resolves; saying so beats a dead control. */
+let flasherLoading = null;
+function loadFlasher() {
+  if (!flasherLoading) {
+    flasherLoading = import('./vendor/esp-web-tools/install-button.js')
+      .catch((e) => {
+        flasherLoading = null;   // let a later attempt retry
+        toast('Could not load the firmware installer — reload and try again.');
+        throw e;
+      });
+  }
+  return flasherLoading;
+}
+
 function initHardwareFork() {
   const panels = { forkFlash: 'panelFlash', forkReady: 'panelConnect' };
-  $('forkFlash').onclick = () => pickFork(panels, 'forkFlash');
+  $('forkFlash').onclick = () => { pickFork(panels, 'forkFlash'); loadFlasher(); };
   $('forkReady').onclick = () => pickFork(panels, 'forkReady');
 }
 

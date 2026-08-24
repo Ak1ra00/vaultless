@@ -29,3 +29,11 @@ CONFIG_NVS_ENCRYPTION=y
 # Leave secure boot off. It is a second, separate one-way eFuse operation and
 # is not needed to protect k at rest; enable it only deliberately.
 # CONFIG_SECURE_BOOT=y
+
+# Core dumps off, explicitly.
+#
+# ESP-IDF already defaults to this, but both partition tables reserve a coredump
+# partition, so the only thing standing between a panic and k landing in flash is
+# a default nobody has written down. On the unencrypted build the task memory a
+# core dump captures contains g_privkey and g_noncekey in the clear.
+CONFIG_ESP_COREDUMP_ENABLE_TO_NONE=y

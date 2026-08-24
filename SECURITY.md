@@ -18,7 +18,11 @@ component (browser derivation, firmware oracle, or CI/build pipeline).
 
 In scope:
 
-- The in-browser derivation code (`index.html`)
+- The in-browser derivation and protocol code (`app.js`), the paper-oracle codec
+  (`recovery.js`), its UI (`sheet.js`), the presentation layer (`ui.js`) and the
+  page itself (`index.html`)
+- The offline shell (`sw.js`)
+- The vendored dependencies in `vendor/` (see `vendor/VENDOR.md`)
 - The oracle firmware (`firmware/`)
 - The build and release pipeline (`.github/workflows/`)
 
@@ -33,9 +37,12 @@ Known and documented — no need to report:
   encryption, which burns eFuses irreversibly and so is deliberately opt-in —
   see `firmware/SECURE_PROVISIONING.md`.
 - The site is served from GitHub Pages, which cannot set response headers.
-  Protections that only work as real headers — `frame-ancestors` for
-  clickjacking, HSTS — are therefore unavailable; the rest of the policy is
-  applied via a `<meta>` CSP.
+  Protections that only work as real headers — `frame-ancestors`, HSTS — are
+  therefore unavailable; the rest of the policy is applied via a `<meta>` CSP,
+  and `app.js` refuses to run inside a frame as a stand-in for `frame-ancestors`.
+- `k` cannot be scrubbed from JavaScript memory. `sheet.js` drops its last
+  reference on idle, on Forget and on unload, which is the most a browser
+  allows; a machine you do not trust needs the hardware oracle, not the sheet.
 
 ## Supported versions
 

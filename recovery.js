@@ -28,6 +28,9 @@ const L = 2n ** 252n + 27742317777372353535851937790883648493n;
  * confused for something else when read back by eye or by hand. */
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const PREFIX = 'VLT1';
+/* 32 key bytes + 4 checksum bytes = 36, and 36 bytes need ceil(36*8/5) base32
+ * characters. This is the length a code must have exactly — see decodeRecovery. */
+const CODE_CHARS = Math.ceil(36 * 8 / 5);   // 58
 const CHECK_DST = 'vaultless-recovery-v1';
 
 function b32encode(bytes) {
@@ -90,8 +93,24 @@ export function decodeRecovery(text) {
   if (s.includes('U')) throw new Error('unexpected character “U” in the code');
   if (!s.length) throw new Error('no code found');
 
+  /* Exactly 58 characters, checked BEFORE decoding.
+   *
+   * The invariant is a character count, not a byte count, and only the former
+   * can be enforced. 36 bytes need ceil(36*8/5) = 58 characters, which carry 290
+   * bits — two of them padding. Append one more character and you get 295 bits,
+   * which is still 36 bytes, so a byte-length test cannot see it at all; the
+   * zero-padding rule does not catch it either, because appending "0" leaves the
+   * low bits zero. The old `< 36` test therefore accepted "…0", "…00" and "…000"
+   * as the same key, quietly breaking the one-key-one-string property the codec
+   * is documented to have and absorbing a corrupted QR payload without a word. */
+  if (s.length !== CODE_CHARS) {
+    throw new Error(s.length < CODE_CHARS
+      ? `code is too short — ${CODE_CHARS - s.length} character(s) missing`
+      : `code is too long — ${s.length - CODE_CHARS} character(s) too many`);
+  }
+
   const bytes = b32decode(s);
-  if (bytes.length < 36) throw new Error('code is too short — some characters are missing');
+  if (bytes.length !== 36) throw new Error('code is the wrong length');
   const k32 = bytes.slice(0, 32);
   const want = checksum(k32);
   const got = bytes.slice(32, 36);
@@ -203,8 +222,10 @@ export function drawQR(canvas, text, scale = 6) {
 /* ---------------------------------------------------------------- scanner */
 /* Prefers the browser's native detector; falls back to the vendored decoder so
  * Safari and Firefox still work. Manual entry always remains available. */
+/* onResult returning false means "not a code I can use" — keep looking. Anything
+ * else is treated as a hit and stops the camera. */
 export function createScanner({ video, canvas, onResult, onError }) {
-  let stream = null, raf = null, detector = null, stopped = false;
+  let stream = null, raf = null, detector = null, stopped = false, rejected = null;
 
   async function start() {
     stopped = false;
@@ -247,7 +268,18 @@ export function createScanner({ video, canvas, onResult, onError }) {
     } catch { /* a bad frame is not an error worth surfacing */ }
   }
 
-  function hit(value) { stop(); onResult(value); }
+  /* The camera used to stop the instant anything decoded, before the caller had
+   * said whether the code was usable. A foreign QR, a sheet from a different
+   * version, a checksum failure — any of them left a frozen video frame and an
+   * error message, and scanning looked broken until the user worked out that the
+   * button needed pressing again. Now a rejected value just keeps the loop
+   * running, and is remembered so the same square held in front of the lens does
+   * not re-fire the same complaint sixty times a second. */
+  function hit(value) {
+    if (value === rejected) return;
+    if (onResult(value) === false) { rejected = value; return; }
+    stop();
+  }
 
   function stop() {
     stopped = true;

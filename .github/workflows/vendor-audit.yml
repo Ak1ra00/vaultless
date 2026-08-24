@@ -1,0 +1,105 @@
+name: Audit vendored dependencies
+
+# Everything in vendor/ is committed on purpose — see vendor/VENDOR.md — which
+# removes the CDN risk but also means Dependabot cannot see any of it. Nothing
+# told anyone when an upstream security release landed, or if a vendored bundle
+# stopped matching the tarball it claims to have been built from.
+#
+# This closes both halves:
+#   - integrity mismatch  -> the recorded hash is not what npm serves. FAILS.
+#   - newer version       -> the pin has gone stale. Warns, does not fail.
+#
+# It only checks what VENDOR.md records, so the table stays the source of truth.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'      # Mondays, early
+  workflow_dispatch: {}
+  push:
+    paths:
+      - 'vendor/VENDOR.md'
+      - '.github/workflows/vendor-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      - name: Compare recorded integrity hashes against the npm registry
+        run: |
+          python3 - <<'PY'
+          import json, re, sys, urllib.request
+
+          REGISTRY = "https://registry.npmjs.org/%s"
+
+          def fetch(name):
+              with urllib.request.urlopen(REGISTRY % name.replace("/", "%2f"), timeout=30) as r:
+                  return json.load(r)
+
+          text = open("vendor/VENDOR.md").read()
+
+          # Rows look like: | `@noble/curves` | 1.4.2 | `sha512-...==` |
+          # with an optional licence column in between, so pick the fields by
+          # shape rather than by position.
+          rows = []
+          for line in text.splitlines():
+              if not line.startswith("|"):
+                  continue
+              cells = [c.strip().strip("`") for c in line.strip("|").split("|")]
+              pkg = next((c for c in cells if re.fullmatch(r"@?[\w.-]+(/[\w.-]+)?", c)
+                          and not re.fullmatch(r"[\d.]+", c) and c not in ("package", "version",
+                          "licence", "license", "npm integrity", "---")), None)
+              ver = next((c for c in cells if re.fullmatch(r"\d+\.\d+\.\d+", c)), None)
+              sri = next((c for c in cells if c.startswith("sha512-")), None)
+              if pkg and ver and sri:
+                  rows.append((pkg, ver, sri))
+
+          if not rows:
+              print("::error::no dependency rows parsed out of vendor/VENDOR.md")
+              sys.exit(1)
+
+          print(f"checking {len(rows)} vendored packages\n")
+          failed = False
+          for pkg, ver, recorded in rows:
+              try:
+                  meta = fetch(pkg)
+              except Exception as exc:
+                  print(f"::warning::{pkg}: could not reach the registry ({exc})")
+                  continue
+
+              versions = meta.get("versions", {})
+              if ver not in versions:
+                  print(f"::error::{pkg}@{ver} is recorded in VENDOR.md but the registry "
+                        f"does not have it — it may have been unpublished")
+                  failed = True
+                  continue
+
+              actual = versions[ver].get("dist", {}).get("integrity")
+              if actual != recorded:
+                  # The tarball behind a published version must never change.
+                  print(f"::error::{pkg}@{ver} INTEGRITY MISMATCH\n"
+                        f"  VENDOR.md: {recorded}\n"
+                        f"  registry:  {actual}")
+                  failed = True
+                  continue
+
+              latest = meta.get("dist-tags", {}).get("latest")
+              if latest and latest != ver:
+                  print(f"::warning::{pkg} is pinned at {ver}; {latest} is current. "
+                        f"Check the changelog for security fixes, then rebuild the bundle "
+                        f"per vendor/VENDOR.md and re-record the hash.")
+                  print(f"  {pkg:<22} {ver:>9}  -> stale (latest {latest})")
+              else:
+                  print(f"  {pkg:<22} {ver:>9}  -> current, integrity OK")
+
+          if failed:
+              print("\nA recorded hash does not match the registry. Do not ignore this: "
+                    "the bundle in vendor/ may not be built from the tarball it claims.")
+              sys.exit(1)
+          print("\nAll recorded integrity hashes match the registry.")
+          PY
