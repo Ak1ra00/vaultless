@@ -128,8 +128,6 @@
   }
   .iconbtn:hover{color:var(--ink-0);border-color:var(--ink-2);}
 
-  .row2{display:grid;grid-template-columns:1fr 110px;gap:12px;}
-
   .fmt-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
   .fmt-opt{
     border:1px solid var(--line-bright);border-radius:7px;padding:10px 12px;cursor:pointer;
@@ -248,15 +246,9 @@
         </div>
       </div>
 
-      <div class="row2">
-        <div class="field">
-          <label for="domain">Domain / service</label>
-          <input type="text" id="domain" placeholder="example.com" autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="index">Sub-index</label>
-          <input type="number" id="index" value="0" min="0" step="1">
-        </div>
+      <div class="field">
+        <label for="index">Sub-index <span class="hint">— use a different number per account/service</span></label>
+        <input type="number" id="index" value="0" min="0" step="1">
       </div>
 
       <div class="field">
@@ -307,8 +299,8 @@
         <div class="lbl">why this is safe</div>
         <p style="font-family:var(--mono);font-size:12px;color:var(--ink-1);line-height:1.6;margin:0;">
           The oracle's private scalar <em>k</em> never leaves the device, and it only ever sees a blinded,
-          random-looking curve point — never your passphrase, domain, or the final password. Nothing is
-          stored on this device or in the cloud; the same three inputs always regenerate the same password.
+          random-looking curve point — never your passphrase or the final password. Nothing is
+          stored on this device or in the cloud; the same passphrase and index always regenerate the same password.
         </p>
       </div>
     </section>
@@ -321,8 +313,9 @@
       <div>
         <p class="doc-p">
           vaultless is a <strong>deterministic</strong> password manager: instead of storing a vault of secrets
-          anywhere, every password is re-derived on demand from three things — your master passphrase, the
-          domain, and a sub-index. Same three inputs, same password, every time. Nothing to sync, back up, or leak.
+          anywhere, every password is re-derived on demand from two things — your master passphrase and a
+          sub-index (pick a different number per account). Same two inputs, same password, every time. Nothing
+          to sync, back up, or leak.
         </p>
         <p class="doc-p">
           The catch with pure deterministic derivation is that anyone who steals your master passphrase can
@@ -331,7 +324,7 @@
           ristretto255.
         </p>
         <ol class="doc-steps">
-          <li>Your browser hashes <code>passphrase‖domain‖index</code> to a curve point <em>P</em>, then
+          <li>Your browser hashes <code>passphrase‖index</code> to a curve point <em>P</em>, then
             blinds it with a random scalar <em>r</em> to get <em>B = r·P</em> — indistinguishable from a
             random point.</li>
           <li><em>B</em> is sent to the oracle (hardware over WebSerial, or the in-browser simulator).</li>
@@ -344,7 +337,7 @@
       <div>
         <div class="lbl" style="margin-bottom:10px;">why this resists theft</div>
         <ul class="doc-list">
-          <li>The oracle only ever sees a blinded point — never your passphrase or the domain in a form it can
+          <li>The oracle only ever sees a blinded point — never your passphrase or index in a form it can
             use to precompute anything.</li>
           <li>Without the oracle's private scalar <em>k</em>, a stolen passphrase alone cannot regenerate any
             password.</li>
@@ -638,13 +631,12 @@ function formatPassword(oprfOutput, format) {
  * ------------------------------------------------------------------- */
 async function runDerivation(useSimulator) {
   const passphrase = document.getElementById('passphrase').value;
-  const domain = document.getElementById('domain').value.trim();
   const index = parseInt(document.getElementById('index').value || '0', 10);
   const deriveBtn = document.getElementById('deriveBtn');
   const simBtn = document.getElementById('simBtn');
 
-  if (!passphrase || !domain) {
-    trace('input', 'master passphrase and domain are required', true);
+  if (!passphrase) {
+    trace('input', 'master passphrase is required', true);
     return;
   }
   if (!useSimulator && !writer) {
@@ -656,8 +648,8 @@ async function runDerivation(useSimulator) {
   document.getElementById('resSource').textContent = `source: ${useSimulator ? 'simulator' : 'hardware oracle'}`;
 
   try {
-    trace('1/6', `hashing "${domain}:${index}" to a ristretto255 point`);
-    const msg = concatBytes(utf8ToBytes(passphrase), utf8ToBytes('||'), utf8ToBytes(domain), utf8ToBytes('||'), utf8ToBytes(String(index)));
+    trace('1/6', `hashing "${index}" to a ristretto255 point`);
+    const msg = concatBytes(utf8ToBytes(passphrase), utf8ToBytes('||'), utf8ToBytes(String(index)));
     const P = hashToRistretto255(msg, { DST: 'oprf-vaultless-pwd-v1-HashToGroup' });
 
     trace('2/6', 'generating blinding scalar r and computing B = r·P');
@@ -666,12 +658,12 @@ async function runDerivation(useSimulator) {
     const blindedHex = bytesToHex(B.toRawBytes());
     trace('2/6', `B = ${blindedHex.slice(0, 16)}…`);
 
-    trace('3/6', `sending {domain, index, point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
+    trace('3/6', `sending {index, point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
     let response;
     if (useSimulator) {
       response = simulateOracle(blindedHex);
     } else {
-      response = await sendToOracle({ domain, index, point: blindedHex });
+      response = await sendToOracle({ index, point: blindedHex });
     }
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);
     if (!response.point) throw new Error('oracle response missing point');
@@ -684,7 +676,7 @@ async function runDerivation(useSimulator) {
     const sBytes = S.toRawBytes();
 
     trace('6/6', 'expanding shared secret via HKDF-SHA256');
-    const salt = utf8ToBytes(`${domain}:${index}`);
+    const salt = utf8ToBytes(String(index));
     const oprfOutput = hkdf(sha256, sBytes, salt, utf8ToBytes('oprf-vaultless-pwd-v1'), 32);
 
     const password = formatPassword(oprfOutput, selectedFormat);

@@ -1,11 +1,18 @@
 # ESP-IDF Component Manager manifest.
-# Pulls the official libsodium port (crypto_scalarmult_ristretto255,
-# crypto_core_ristretto255_scalar_reduce, randombytes_buf via HW RNG)
-# from the Espressif Component Registry.
 #
-# If `pio run` fails to resolve this component, check the current
-# published version at:
-#   https://components.espressif.com/components/espressif/libsodium
-# and pin it explicitly, e.g. espressif/libsodium: "1.0.20"
+# libsodium (crypto_scalarmult_ristretto255, crypto_core_ristretto255_scalar_reduce,
+# randombytes_buf via HW RNG) shipped as a component built into ESP-IDF itself up to
+# v4.4, and was only split out into this registry package for v5.0+. Declaring the
+# registry package unconditionally on IDF <5.0 makes the component manager see two
+# candidates for the same "libsodium" requirement (the built-in one and this one) and
+# fail with "Multiple candidates to satisfy project requirements" — see
+# https://github.com/espressif/esp-idf/issues/9309. Gating it to idf_version >= 5.0
+# resolves the ambiguity: on our pinned IDF 4.4 the built-in component (which already
+# includes ristretto255 support) is used instead.
 dependencies:
-  espressif/libsodium: "*"
+  espressif/libsodium:
+    version: "*"
+    rules:
+      - if: "idf_version >=5.0"
+  idf:
+    version: ">=4.1"

@@ -7,7 +7,7 @@ Live at **[vaultless.space](https://vaultless.space)**.
 
 ## How it works
 
-1. The browser hashes `passphrase‖domain‖index` to a ristretto255 point `P`, blinds it
+1. The browser hashes `passphrase‖index` to a ristretto255 point `P`, blinds it
    with a random scalar `r` to get `B = r·P`.
 2. `B` is sent to the oracle — either the LilyGO hardware device over WebSerial, or the
    in-browser simulator.
@@ -17,7 +17,7 @@ Live at **[vaultless.space](https://vaultless.space)**.
 4. The browser unblinds `S = r⁻¹·B' = k·P` and expands it via HKDF-SHA256 into the final
    password.
 
-Same three inputs (passphrase, domain, index) always regenerate the same password, and
+Same two inputs (passphrase, index) always regenerate the same password, and
 there's no vault file to sync, back up, or leak. Recovering any password requires both
 the passphrase *and* physical access to the approving oracle.
 

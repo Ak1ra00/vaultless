@@ -3,14 +3,14 @@
  * LilyGO T-Display (ESP32 + ST7789 135x240)
  *
  * Protocol (newline-delimited JSON over USB CDC, 115200 baud):
- *   -> {"domain":"example.com","index":0,"point":"<64 hex chars>"}
+ *   -> {"index":0,"point":"<64 hex chars>"}
  *   <- {"point":"<64 hex chars>"}                 on approval
  *   <- {"error":"rejected"} | {"error":"timeout"} | {"error":"invalid_point"}
  *
  * The device holds a persistent private scalar k in NVS. It never reveals k,
- * never sees the caller's passphrase/domain in cleartext form beyond the
- * label shown on screen, and only ever performs a single scalar
- * multiplication on a blinded (indistinguishable-from-random) point.
+ * never sees the caller's passphrase in any form, and only ever performs a
+ * single scalar multiplication on a blinded (indistinguishable-from-random)
+ * point.
  */
 
 #include <Arduino.h>
@@ -107,7 +107,7 @@ static void tftBanner() {
   tft.drawString("idle - waiting for request", 4, 28);
 }
 
-static void showRequest(const String &domain, long index) {
+static void showRequest(long index) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   tft.setTextFont(2);
@@ -115,14 +115,10 @@ static void showRequest(const String &domain, long index) {
   tft.drawFastHLine(0, 20, tft.width(), TFT_DARKGREY);
 
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString("domain:", 4, 30);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.drawString(domain, 4, 46);
-
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
   char idxbuf[24];
   snprintf(idxbuf, sizeof(idxbuf), "index: %ld", index);
-  tft.drawString(idxbuf, 4, 66);
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  tft.drawString(idxbuf, 4, 46);
 
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
   tft.drawString("[BOOT] approve", 4, 90);
@@ -203,14 +199,12 @@ static void handleLine(const String &line) {
     return;
   }
 
-  const char *domainC = doc["domain"] | "";
   long index = doc["index"] | -1;
   const char *pointHexC = doc["point"] | "";
 
-  String domain = String(domainC);
   String pointHex = String(pointHexC);
 
-  if (domain.length() == 0 || index < 0 || pointHex.length() != 64) {
+  if (index < 0 || pointHex.length() != 64) {
     sendJsonError("bad_request");
     return;
   }
@@ -221,7 +215,7 @@ static void handleLine(const String &line) {
     return;
   }
 
-  showRequest(domain, index);
+  showRequest(index);
 
   Decision d = waitForApproval();
   if (d == Decision::REJECTED) {
