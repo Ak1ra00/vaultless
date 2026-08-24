@@ -14,7 +14,11 @@ Live at **[vaultless.space](https://vaultless.space)**.
 3. The oracle multiplies by its private scalar `k` (generated on-device, stored in NVS,
    never exported) and returns `B' = k·B`, playing a matrix-rain handshake on its display
    while it works.
-4. The browser unblinds `S = r⁻¹·B' = k·P` and expands it via HKDF-SHA256 into the final
+4. The oracle also returns its public key `Y = k·G` and a Chaum-Pedersen DLEQ proof
+   that `log_G(Y) == log_B(B')`. The browser verifies the proof and checks `Y` against
+   the key it pinned on first use, so a swapped or tampered oracle is rejected instead
+   of silently yielding a different password.
+5. The browser unblinds `S = r⁻¹·B' = k·P` and expands it via HKDF-SHA256 into the final
    password.
 
 Same two inputs (passphrase, index) always regenerate the same password, and
@@ -29,16 +33,34 @@ the passphrase *and* physical access to the oracle.
 ## Repo layout
 
 ```
-index.html            the site (crypto + WebSerial UI, single page)
+index.html             the site (markup + styles)
+app.js                 crypto + WebSerial UI, loaded as a module so the page can
+                         run under a strict CSP with script-src 'self'
+vendor/                vendored dependencies — see vendor/VENDOR.md. Nothing in the
+  noble-bundle.js        runtime is fetched from a CDN: a third party able to serve
+  esp-web-tools/         script here could read the passphrase and every password.
 manifest.json          PWA manifest for the site itself
 esp-manifest.json      ESP Web Tools flashing manifest (points at firmware_merged.bin)
 icons/, favicon.svg    site icons
-firmware/               ESP32 firmware (PlatformIO)
-  src/main.cpp          oracle firmware — OPRF eval, NVS key storage, TFT UI
-  platformio.ini
-.github/workflows/      CI: builds firmware, merges partitions into firmware_merged.bin,
+firmware/              ESP32 firmware (PlatformIO)
+  src/main.cpp           oracle firmware — OPRF eval, DLEQ proof, NVS key storage, TFT UI
+  platformio.ini         env:esp32dev (what the site flashes) plus the encrypted
+                         env:esp32dev-secure / env:esp32dev-provision
+  SECURE_PROVISIONING.md how to move to encrypted flash without losing your key
+.github/workflows/     CI: builds firmware, merges partitions into firmware_merged.bin,
                          commits it back so the site can flash it via WebSerial
 ```
+
+## Upgrading an existing oracle
+
+The oracle protocol is now v2: every answer carries a DLEQ proof, and the browser
+refuses to derive without one. A device running older firmware reports
+`firmware predates protocol v2` — reflash it from the site, or with
+`pio run -e esp32dev -t upload`. Your key and passwords are unchanged by this.
+
+Note that `env:esp32dev` deliberately does **not** enable flash encryption, so `k`
+is readable from flash by anyone holding the board. Closing that is a separate,
+irreversible step — read `firmware/SECURE_PROVISIONING.md` first.
 
 ## Building the firmware
 

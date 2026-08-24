@@ -1,0 +1,31 @@
+# Base settings shared with the default build.
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# ---------------------------------------------------------------------------
+# Flash encryption + encrypted NVS.
+#
+# This is what stops `esptool.py read_flash` from yielding the oracle scalar k.
+# Without it, k sits in plaintext NVS and one moment of physical access is
+# enough to extract it and derive every password offline, forever.
+#
+# READ firmware/SECURE_PROVISIONING.md BEFORE FLASHING THIS.
+#
+# Enabling flash encryption burns eFuses. That is IRREVERSIBLE on real silicon.
+# Development mode is selected deliberately: it keeps UART re-flashing possible.
+# Release mode permanently disables the UART downloader, so a mistake bricks the
+# board with no recovery path.
+# ---------------------------------------------------------------------------
+CONFIG_SECURE_FLASH_ENC_ENABLED=y
+CONFIG_SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT=y
+# (No keysize option here: on the original ESP32 the flash encryption key is
+# always 256-bit. CONFIG_SECURE_FLASH_ENCRYPTION_KEYSIZE_* only exists on the
+# later C3/S3-class parts and is silently ignored on this target.)
+
+# Encrypt the NVS partition holding k. Requires the nvs_keys partition
+# declared in partitions-secure.csv.
+CONFIG_NVS_ENCRYPTION=y
+
+# Leave secure boot off. It is a second, separate one-way eFuse operation and
+# is not needed to protect k at rest; enable it only deliberately.
+# CONFIG_SECURE_BOOT=y

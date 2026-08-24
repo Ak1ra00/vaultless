@@ -11,7 +11,11 @@
 # includes ristretto255 support) is used instead.
 dependencies:
   espressif/libsodium:
-    version: "*"
+    # Pinned rather than "*": this component supplies every primitive the oracle
+    # depends on (crypto_scalarmult_ristretto255, the scalar helpers, the RNG),
+    # so an unconstrained range means an unreviewed crypto implementation can
+    # enter the build silently.
+    version: "1.0.20~3"
     rules:
       - if: "idf_version >=5.0"
   idf:

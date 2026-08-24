@@ -2,15 +2,23 @@
  * Vaultless 2P-OPRF hardware oracle
  * LilyGO T-Display (ESP32 + ST7789 135x240)
  *
- * Protocol (newline-delimited JSON over USB CDC, 115200 baud):
+ * Protocol v2 (newline-delimited JSON over USB CDC, 115200 baud):
  *   -> {"index":0,"point":"<64 hex chars>"}
- *   <- {"point":"<64 hex chars>"}                 on approval
+ *   <- {"point":"<64 hex>","pubkey":"<64 hex>","proof":{"c":"<64 hex>","s":"<64 hex>"}}
  *   <- {"error":"invalid_point"} | {"error":"bad_json"} | {"error":"bad_request"}
  *
  * The device holds a persistent private scalar k in NVS. It never reveals k,
  * never sees the caller's passphrase in any form, and only ever performs a
  * single scalar multiplication on a blinded (indistinguishable-from-random)
  * point.
+ *
+ * Every answer carries a Chaum-Pedersen DLEQ proof that log_G(Y) == log_B(B'),
+ * i.e. that the same k behind the advertised public key Y produced this answer.
+ * Without it the caller cannot distinguish k*B from any other point, and a
+ * swapped or faulty device silently yields different passwords. The browser
+ * additionally pins Y on first use, which is what makes device substitution
+ * detectable — the proof alone would be satisfied by a hostile device proving
+ * consistency with its own key.
  *
  * NOTE: requests are auto-approved — there is no physical confirmation step.
  * Possession of the connected device is therefore the only second factor;
@@ -23,6 +31,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <esp_system.h>
+#include <string.h>
 
 extern "C" {
   #include "sodium.h"
@@ -35,6 +44,7 @@ TFT_eSPI tft = TFT_eSPI();
 Preferences prefs;
 
 static uint8_t g_privkey[32]; // persistent ristretto255 scalar k
+static uint8_t g_pubkey[32];  // Y = k*G, advertised to the caller and pinned by it
 
 // ---------------------------------------------------------------------------
 // Hex helpers
@@ -71,6 +81,13 @@ static String bytesToHex(const uint8_t *data, size_t len) {
 // ---------------------------------------------------------------------------
 // Persistent key management (NVS)
 // ---------------------------------------------------------------------------
+static bool hasStoredPrivateKey() {
+  prefs.begin("oprf", true);
+  const bool present = (prefs.getBytesLength("privkey") == 32);
+  prefs.end();
+  return present;
+}
+
 static void loadOrCreatePrivateKey() {
   prefs.begin("oprf", false);
   size_t stored = prefs.getBytesLength("privkey");
@@ -85,8 +102,17 @@ static void loadOrCreatePrivateKey() {
     randombytes_buf(wide, sizeof(wide));
     crypto_core_ristretto255_scalar_reduce(g_privkey, wide);
     prefs.putBytes("privkey", g_privkey, 32);
+    sodium_memzero(wide, sizeof(wide));
   }
   prefs.end();
+
+  // Y = k*G. Advertised with every answer and pinned by the browser on first
+  // use; deriving it here means k itself is touched only inside libsodium.
+  if (crypto_scalarmult_ristretto255_base(g_pubkey, g_privkey) != 0) {
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.drawString("bad private key in NVS", 4, 4);
+    while (true) { delay(1000); }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +249,61 @@ static void matrixRain(uint32_t durationMs, long index) {
 }
 
 // ---------------------------------------------------------------------------
+// Chaum-Pedersen DLEQ proof that log_G(Y) == log_B(B') == k.
+//
+//   t  <- random scalar
+//   T1 = t*G,  T2 = t*B
+//   c  = H(DST || Y || B || B' || T1 || T2)  reduced mod L
+//   s  = t + c*k  mod L
+//
+// Verifier recomputes T1' = s*G - c*Y and T2' = s*B - c*B' and checks that
+// hashing those reproduces c. Byte encodings must match the browser exactly:
+// every scalar is 32-byte little-endian, every point a 32-byte ristretto255
+// encoding, and the challenge is a 64-byte SHA-512 digest wide-reduced mod L
+// (crypto_core_ristretto255_scalar_reduce == interpreting the digest as a
+// little-endian integer mod L, which is what the browser's
+// bytesToNumberLE(h) % L does).
+// ---------------------------------------------------------------------------
+static const char DLEQ_DST[] = "oprf-vaultless-dleq-v1";
+
+static void dleqChallenge(const uint8_t Y[32], const uint8_t B[32],
+                          const uint8_t Bp[32], const uint8_t T1[32],
+                          const uint8_t T2[32], uint8_t outScalar[32]) {
+  const size_t dstLen = sizeof(DLEQ_DST) - 1; // no NUL
+  uint8_t buf[dstLen + 32 * 5];
+  size_t off = 0;
+  memcpy(buf + off, DLEQ_DST, dstLen); off += dstLen;
+  memcpy(buf + off, Y,  32); off += 32;
+  memcpy(buf + off, B,  32); off += 32;
+  memcpy(buf + off, Bp, 32); off += 32;
+  memcpy(buf + off, T1, 32); off += 32;
+  memcpy(buf + off, T2, 32); off += 32;
+
+  uint8_t digest[64];
+  crypto_hash_sha512(digest, buf, off);
+  crypto_core_ristretto255_scalar_reduce(outScalar, digest);
+  sodium_memzero(digest, sizeof(digest));
+}
+
+// Returns false if any group operation fails (degenerate scalar/point).
+static bool dleqProve(const uint8_t B[32], const uint8_t Bp[32],
+                      const uint8_t Y[32], uint8_t outC[32], uint8_t outS[32]) {
+  uint8_t t[32], T1[32], T2[32], ck[32];
+  crypto_core_ristretto255_scalar_random(t);
+
+  if (crypto_scalarmult_ristretto255_base(T1, t) != 0) { sodium_memzero(t, 32); return false; }
+  if (crypto_scalarmult_ristretto255(T2, t, B) != 0)   { sodium_memzero(t, 32); return false; }
+
+  dleqChallenge(Y, B, Bp, T1, T2, outC);
+  crypto_core_ristretto255_scalar_mul(ck, outC, g_privkey);
+  crypto_core_ristretto255_scalar_add(outS, t, ck);
+
+  sodium_memzero(t, sizeof(t));
+  sodium_memzero(ck, sizeof(ck));
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Core OPRF evaluation: B' = k * B
 // ---------------------------------------------------------------------------
 static bool evaluate(const uint8_t *blindedPoint32, uint8_t *outPoint32) {
@@ -243,9 +324,14 @@ static void sendJsonError(const char *err) {
   Serial.print('\n');
 }
 
-static void sendJsonPoint(const uint8_t *point32) {
-  StaticJsonDocument<128> doc;
-  doc["point"] = bytesToHex(point32, 32);
+static void sendJsonPoint(const uint8_t *point32,
+                          const uint8_t *proofC32, const uint8_t *proofS32) {
+  StaticJsonDocument<512> doc;
+  doc["point"]  = bytesToHex(point32, 32);
+  doc["pubkey"] = bytesToHex(g_pubkey, 32);
+  JsonObject proof = doc["proof"].to<JsonObject>(); // ArduinoJson 7 idiom
+  proof["c"] = bytesToHex(proofC32, 32);
+  proof["s"] = bytesToHex(proofS32, 32);
   serializeJson(doc, Serial);
   Serial.print('\n');
 }
@@ -257,6 +343,50 @@ static void handleLine(const String &line) {
     sendJsonError("bad_json");
     return;
   }
+
+#ifdef VAULTLESS_ALLOW_PROVISION
+  // One-time key import, present only in env:esp32dev-provision. Refuses once a
+  // key exists, so it cannot be used to overwrite a live oracle — but a build
+  // carrying it must never be left on the device: against a *blank* device it
+  // lets whoever reaches the serial port choose k, and a caller who then pins
+  // that public key would be deriving passwords the attacker can reproduce.
+  {
+    const char *cmd = doc["cmd"] | "";
+    if (strcmp(cmd, "provision") == 0) {
+      if (hasStoredPrivateKey()) {
+        sendJsonError("already_provisioned");
+        return;
+      }
+      const char *keyHexC = doc["key"] | "";
+      String keyHex = String(keyHexC);
+      uint8_t k[32];
+      if (keyHex.length() != 64 || !hexToBytes(keyHex, k, 32)) {
+        sodium_memzero(k, sizeof(k));
+        sendJsonError("bad_key");
+        return;
+      }
+      uint8_t probe[32];
+      if (crypto_scalarmult_ristretto255_base(probe, k) != 0) {
+        sodium_memzero(k, sizeof(k));
+        sendJsonError("bad_key");   // zero or otherwise degenerate scalar
+        return;
+      }
+      prefs.begin("oprf", false);
+      prefs.putBytes("privkey", k, 32);
+      prefs.end();
+      memcpy(g_privkey, k, 32);
+      memcpy(g_pubkey, probe, 32);
+      sodium_memzero(k, sizeof(k));
+
+      StaticJsonDocument<128> res;
+      res["pubkey"] = bytesToHex(g_pubkey, 32);
+      serializeJson(res, Serial);
+      Serial.print('\n');
+      showStatus("provisioned", TFT_GREEN);
+      return;
+    }
+  }
+#endif
 
   long index = doc["index"] | -1;
   const char *pointHexC = doc["point"] | "";
@@ -292,8 +422,17 @@ static void handleLine(const String &line) {
     return;
   }
 
+  uint8_t proofC[32], proofS[32];
+  if (!dleqProve(blinded, result, g_pubkey, proofC, proofS)) {
+    showStatus("proof failed!", TFT_RED);
+    sendJsonError("proof_failed");
+    delay(1500);
+    tftBanner();
+    return;
+  }
+
   showStatus("approved - sent", TFT_GREEN);
-  sendJsonPoint(result);
+  sendJsonPoint(result, proofC, proofS);
   delay(900);
   tftBanner();
 }
