@@ -19,15 +19,20 @@ paper      choose → scan it, or: scribble → create → print ───┘
 
 1. The browser hashes `passphrase‖index` to a ristretto255 point `P`, blinds it
    with a random scalar `r` to get `B = r·P`.
-2. `B` is sent to the oracle — the LilyGO device over WebSerial, or the in-browser
-   simulator. (A paper oracle takes a different route; see below.)
+2. `B` — and nothing else — is sent to the oracle: the LilyGO device over WebSerial,
+   or the in-browser simulator. (A paper oracle takes a different route; see below.)
+   The account index used to travel alongside it. It was never part of the oracle's
+   computation, so all it did was tell the device, its display and the serial line
+   which account was being opened; protocol v3 drops it.
 3. The oracle multiplies by its private scalar `k` (generated on-device, stored in NVS,
    never exported) and returns `B' = k·B`, playing a matrix-rain handshake on its display
    while it works.
 4. The oracle also returns its public key `Y = k·G` and a Chaum-Pedersen DLEQ proof
    that `log_G(Y) == log_B(B')`. The browser verifies the proof and checks `Y` against
    the key it pinned on first use, so a swapped or tampered oracle is rejected instead
-   of silently yielding a different password.
+   of silently yielding a different password. It also refuses `Y` or `B'` equal to the
+   identity element: a `k = 0` oracle produces a proof that *verifies*, and would drive
+   every passphrase to the same publicly computable password.
 5. The browser unblinds `S = r⁻¹·B' = k·P` and expands it via HKDF-SHA256 into the final
    password.
 
@@ -121,6 +126,19 @@ refuses to derive without one. A device running older firmware reports
 `firmware predates protocol v2`. Reflash from the site, or with
 `pio run -e esp32dev -t upload`.
 
+Protocol v3 then removed the `index` field from the request, for the reason given in
+step 2 above. That change is backward-compatible in both directions: v3 firmware still
+accepts a request carrying an index, and the browser retries once with the index if a
+v2 device rejects the request without it — noting in the trace that reflashing would
+stop the disclosure. So nothing breaks if you do not reflash; you simply keep telling
+the device which account you are opening.
+
+> **Never tick "erase device" when reflashing an oracle you have used.** Installing
+> firmware leaves NVS — and therefore `k` — alone, which is why your passwords survive
+> a reflash. Erasing wipes NVS, and every password that oracle ever made is gone with
+> no recovery path. `esp-manifest.json` sets `new_install_prompt_erase` to `false` so
+> the site does not offer it, but `esptool erase_flash` will still do it if you ask.
+
 Note that `env:esp32dev` deliberately does **not** enable flash encryption, so `k`
 is readable from flash by anyone holding the board. Closing that is a separate,
 irreversible step — read `firmware/SECURE_PROVISIONING.md` first.
@@ -141,6 +159,17 @@ The site's **Install firmware** button (step 2, hardware path) uses
 [ESP Web Tools](https://esphome.github.io/esp-web-tools/) over WebSerial — no local
 toolchain needed. It reads `esp-manifest.json`, which points at `firmware_merged.bin`,
 kept up to date by CI on every push that touches `firmware/`.
+
+That binary carries a build-provenance attestation, so you do not have to take the
+committed file on trust:
+
+```bash
+gh attestation verify firmware_merged.bin --repo Ak1ra00/SK
+```
+
+The build tooling is pinned to exact versions (`platformio.ini`, the workflow's `pip
+install`, and `idf_component.yml`) so that what the attestation points at can actually
+be rebuilt and compared.
 
 ## Security
 

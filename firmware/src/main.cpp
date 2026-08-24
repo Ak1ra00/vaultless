@@ -2,10 +2,16 @@
  * Vaultless 2P-OPRF hardware oracle
  * LilyGO T-Display (ESP32 + ST7789 135x240)
  *
- * Protocol v2 (newline-delimited JSON over USB CDC, 115200 baud):
- *   -> {"index":0,"point":"<64 hex chars>"}
+ * Protocol v3 (newline-delimited JSON over USB CDC, 115200 baud):
+ *   -> {"point":"<64 hex chars>"}
  *   <- {"point":"<64 hex>","pubkey":"<64 hex>","proof":{"c":"<64 hex>","s":"<64 hex>"}}
  *   <- {"error":"invalid_point"} | {"error":"bad_json"} | {"error":"bad_request"}
+ *
+ * v3 dropped the "index" field. It was never used in the computation — this
+ * device multiplies the blinded point and does nothing else with the request —
+ * so carrying it only disclosed which account was being unlocked, to the serial
+ * line and to this display. It is still ACCEPTED when present, so a browser
+ * predating v3 keeps working; it is simply ignored and never shown.
  *
  * The device holds a persistent private scalar k in NVS. It never reveals k,
  * never sees the caller's passphrase in any form, and only ever performs a
@@ -136,17 +142,22 @@ static void tftBanner() {
   tft.drawString("idle - waiting for request", 4, 28);
 }
 
-static void showRequest(long index) {
+// Counts requests since boot. Shown instead of the account number: a bystander
+// learning that this is the fourth handshake of the session learns nothing,
+// whereas "index: 7" told them which account was being opened.
+static uint32_t g_requestSeq = 0;
+
+static void showRequest(uint32_t seq) {
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   tft.setTextFont(2);
   tft.drawString("DERIVATION REQUEST", 4, 4);
   tft.drawFastHLine(0, 20, tft.width(), TFT_DARKGREY);
 
-  char idxbuf[24];
-  snprintf(idxbuf, sizeof(idxbuf), "index: %ld", index);
+  char seqbuf[24];
+  snprintf(seqbuf, sizeof(seqbuf), "request #%lu", (unsigned long)seq);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.drawString(idxbuf, 4, 46);
+  tft.drawString(seqbuf, 4, 46);
 
   tft.setTextColor(TFT_GREEN, TFT_BLACK);
   tft.drawString("auto-approving...", 4, 90);
@@ -181,7 +192,7 @@ static char randGlyph() {
   return glyphs[random(sizeof(glyphs) - 1)];
 }
 
-static void matrixRain(uint32_t durationMs, long index) {
+static void matrixRain(uint32_t durationMs, uint32_t seq) {
   const int wCols = tft.width() / MTX_CHAR_W;
   const uint8_t cols = (uint8_t)(wCols > MTX_MAX_COLS ? MTX_MAX_COLS : wCols);
   const uint8_t rows = (uint8_t)(tft.height() / MTX_CHAR_H);
@@ -249,10 +260,10 @@ static void matrixRain(uint32_t durationMs, long index) {
   tft.setTextFont(2);
   tft.setTextColor(tft.color565(0, 220, 140), TFT_BLACK);
   tft.drawString("k . B", 4, 30);
-  char idxbuf[24];
-  snprintf(idxbuf, sizeof(idxbuf), "index: %ld", index);
+  char seqbuf[24];
+  snprintf(seqbuf, sizeof(seqbuf), "request #%lu", (unsigned long)seq);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(idxbuf, 4, 52);
+  tft.drawString(seqbuf, 4, 52);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +479,17 @@ static void handleLine(const String &line) {
   }
 #endif
 
-  long index = doc["index"] | -1;
+  // "index" is accepted for compatibility with pre-v3 browsers and validated if
+  // it is there, but it is not read into the computation and not displayed. See
+  // the protocol note at the top of this file.
+  const JsonVariantConst idxField = doc["index"];   // read-only: never inserts
+  const bool hasIndex = !idxField.isNull();
+  const long index = hasIndex ? (idxField | -1L) : 0L;
   const char *pointHexC = doc["point"] | "";
 
   String pointHex = String(pointHexC);
 
-  if (index < 0 || pointHex.length() != 64) {
+  if ((hasIndex && index < 0) || pointHex.length() != 64) {
     sendJsonError("bad_request");
     return;
   }
@@ -484,7 +500,8 @@ static void handleLine(const String &line) {
     return;
   }
 
-  showRequest(index);
+  const uint32_t seq = ++g_requestSeq;
+  showRequest(seq);
   delay(220);
 
   // Requests are auto-approved: the scalar mult runs first, then the matrix
@@ -492,7 +509,7 @@ static void handleLine(const String &line) {
   uint8_t result[32];
   const bool ok = evaluate(blinded, result);
 
-  matrixRain(HANDSHAKE_ANIM_MS, index);
+  matrixRain(HANDSHAKE_ANIM_MS, seq);
 
   if (!ok) {
     showStatus("invalid point!", TFT_RED);

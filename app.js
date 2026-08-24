@@ -126,6 +126,29 @@ function verifyOracleResponse(response, B, pin = true) {
   } catch {
     throw new Error('oracle response is malformed');
   }
+  /* Reject the identity element before doing anything else with it.
+   *
+   * An oracle whose scalar is k = 0 has Y = identity and answers B' = identity,
+   * and its DLEQ proof VERIFIES: with k = 0 the Schnorr equation collapses to
+   * s = t, so both checks (s*G - c*Y and s*B - c*B') reproduce the prover's
+   * commitments exactly. The identity is a perfectly canonical ristretto255
+   * encoding, so point decoding does not catch it either.
+   *
+   * The consequence is total: unblinding gives S = identity for EVERY
+   * passphrase and EVERY index, so the passphrase stops contributing at all and
+   * the derived password becomes a fixed constant anyone can compute offline.
+   * That is precisely the substituted-device attack the proof and the pin exist
+   * to stop, and it lands hardest on first use, when there is no pin yet.
+   *
+   * ristretto255 has prime order, so Y != identity already rules out every
+   * degenerate k; B' is checked too because it costs nothing. The firmware
+   * refuses the same cases (libsodium returns -1 on an identity result) and
+   * decodeRecovery refuses k = 0, so this is the browser catching up with the
+   * two places that already got it right. */
+  if (Y.equals(RistrettoPoint.ZERO) || Bp.equals(RistrettoPoint.ZERO)) {
+    throw new Error('oracle presented a zero key — every password it produced ' +
+                    'would be a public constant; refusing to derive');
+  }
   if (!dleqVerify(Y, B, Bp, c, sScalar)) {
     throw new Error('DLEQ proof failed — this device did not compute k*B with ' +
                     'the key it claims; refusing to derive');
@@ -160,6 +183,21 @@ function trace(step, msg, isErr = false) {
   traceEl.appendChild(row);
   traceEl.scrollTop = traceEl.scrollHeight;
 }
+/* A failure the user has to know about.
+ *
+ * The protocol trace lives inside the expert-only panel, which Simple mode —
+ * the default — hides outright. Tracing alone therefore means a button that
+ * silently does nothing, which is what every input-validation and transport
+ * error in here used to do. Anything a person can act on goes through this, so
+ * it lands in both places: the trace for detail, a toast for visibility.
+ *
+ * `short` exists because the toast is one line on a phone; the trace keeps the
+ * long form. */
+function fail(step, msg, short = msg) {
+  trace(step, msg, true);
+  toast(short);
+}
+
 document.getElementById('clearTrace').onclick = () => {
   traceEl.innerHTML = '<div class="row"><span class="empty">— cleared —</span></div>';
 };
@@ -171,6 +209,15 @@ const wsBadge = document.getElementById('wsBadge');
 const serialSupported = 'serial' in navigator;
 wsBadge.textContent = serialSupported ? 'supported' : 'unsupported';
 wsBadge.classList.add(serialSupported ? 'on' : 'warn');
+/* Say so where the choice is made. Without this a Firefox or Safari user picks
+ * the option the home page labels "strongest", walks three screens into it, and
+ * presses a Connect button that cannot ever work. */
+if (!serialSupported) {
+  for (const id of ['hwUnsupported', 'hwUnsupportedPanel']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = false;
+  }
+}
 
 let port = null, writer = null, reader = null, readableClosed = null;
 const connDot = document.getElementById('connDot');
@@ -182,7 +229,7 @@ function setConnected(state, label) {
   if (getOracleChoice() === 'paper') return;   // the pill is showing the paper oracle
   connDot.className = 'dot' + (state ? ' live' : '');
   connLabel.textContent = label;
-  connectBtn.disabled = state;
+  connectBtn.disabled = state || !serialSupported;
   disconnectBtn.disabled = !state;
   document.getElementById('homeStep2').classList.toggle('done', state);
   setReady(state ? 'Oracle connected and ready' : 'Oracle not connected yet', state);
@@ -232,7 +279,8 @@ async function readLoop() {
 
 async function connectSerial() {
   if (!serialSupported) {
-    trace('serial', 'WebSerial is not supported in this browser', true);
+    fail('serial', 'WebSerial is not supported in this browser',
+         "This browser can't talk to USB devices — try Chrome or Edge, or use a paper oracle.");
     return;
   }
   try {
@@ -245,7 +293,10 @@ async function connectSerial() {
     setConnected(true, 'oracle connected');
     trace('serial', 'WebSerial port opened @ 115200 baud');
   } catch (e) {
-    trace('serial', `connection failed: ${e.message}`, true);
+    // Dismissing the browser's own port picker is a choice, not a fault: it
+    // throws NotFoundError, and toasting an error over it would be nagging.
+    if (e.name === 'NotFoundError') trace('serial', 'no port chosen');
+    else fail('serial', `connection failed: ${e.message}`, 'Could not open the oracle — is it plugged in?');
   }
 }
 
@@ -285,6 +336,7 @@ async function sendToOracle(payloadObj, timeoutMs = 30000) {
 
 connectBtn.onclick = connectSerial;
 disconnectBtn.onclick = disconnectSerial;
+connectBtn.disabled = !serialSupported;
 
 // Reclaim the header pill whenever the route leaves paper mode.
 document.addEventListener('oraclechange', (e) => {
@@ -398,7 +450,7 @@ async function runDerivation(mode) {
   const simBtn = document.getElementById('simBtn');
 
   if (!passphrase) {
-    trace('input', 'master passphrase is required', true);
+    fail('input', 'master passphrase is required', 'Type your secret phrase first.');
     return;
   }
 
@@ -409,20 +461,24 @@ async function runDerivation(mode) {
    * integer, and keep it inside the range the firmware's `long` can hold. */
   const rawIndex = (document.getElementById('index').value || '0').trim();
   if (!/^\d+$/.test(rawIndex)) {
-    trace('input', 'index must be a non-negative whole number', true);
+    fail('input', 'index must be a non-negative whole number',
+         'The account number has to be a whole number, 0 or more.');
     return;
   }
   const index = Number(rawIndex);
   if (!Number.isSafeInteger(index) || index > 2147483647) {
-    trace('input', 'index is out of range (max 2147483647)', true);
+    fail('input', 'index is out of range (max 2147483647)',
+         'That account number is too large — the most is 2147483647.');
     return;
   }
   if (mode === 'hardware' && !writer) {
-    trace('input', 'no oracle connected — connect your hardware oracle, load your paper oracle, or try the demo', true);
+    fail('input', 'no oracle connected — connect your hardware oracle, load your paper oracle, or try the demo',
+         'No oracle connected — set one up on the home page, or try the demo.');
     return;
   }
   if (useSheet && !getSheetKey()) {
-    trace('input', 'no paper oracle loaded — scan its square or type its code first', true);
+    fail('input', 'no paper oracle loaded — scan its square or type its code first',
+         'No paper oracle loaded — scan its square or type its code first.');
     return;
   }
 
@@ -468,7 +524,22 @@ async function runDerivation(mode) {
       response = simulateOracle(blindedHex);
     } else {
       vizOracle('your oracle is stamping it…');
-      response = await sendToOracle({ index, point: blindedHex });
+      /* Protocol v3 drops `index` from the request. The oracle never used it —
+       * it multiplies the blinded point and nothing else — so carrying it only
+       * told the device, its display, and anyone reading the serial line which
+       * account was being unlocked. The index still reaches the derivation
+       * through the hash-to-group input and the HKDF salt, where the blinding
+       * already covers it.
+       *
+       * A device still on v2 firmware requires the field and answers
+       * bad_request without it, so fall back once rather than breaking every
+       * oracle in the field — and say plainly what reflashing would buy. */
+      response = await sendToOracle({ point: blindedHex });
+      if (response.error === 'bad_request') {
+        trace('3/7', 'oracle runs v2 firmware — retrying with the account number in ' +
+                     'the clear; reflash it to stop disclosing which account you open', true);
+        response = await sendToOracle({ index, point: blindedHex });
+      }
     }
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);
     if (!response.point) throw new Error('oracle response missing point');
@@ -484,6 +555,14 @@ async function runDerivation(mode) {
     S = Bp.multiply(rInv);
     }
 
+    /* One more guard covering all three paths at once — hardware, simulator and
+     * paper. Anything that lands on the identity here means the shared secret
+     * carries no key at all, and HKDF would happily expand it into a real-looking
+     * password regardless. */
+    if (S.equals(RistrettoPoint.ZERO)) {
+      throw new Error('derivation collapsed to the identity element — the oracle ' +
+                      'key is degenerate; refusing to derive');
+    }
     const sBytes = S.toRawBytes();
 
     trace(useSheet ? '4/4' : '7/7', 'expanding shared secret via HKDF-SHA256');
@@ -497,7 +576,10 @@ async function runDerivation(mode) {
   } catch (e) {
     trace('error', e.message, true);
     vizReset();
-    toast(e.message.length > 70 ? 'Could not make a password — see the trace' : e.message);
+    // Never send the reader to the trace: in Simple mode it is not on screen.
+    toast(e.message.length > 70
+      ? 'Could not make a password. Switch to Expert mode for the full reason.'
+      : e.message);
   } finally {
     deriveBtn.disabled = false; simBtn.disabled = false;
   }

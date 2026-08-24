@@ -46,6 +46,27 @@ function setKey(k) {
   touchIdle();
 }
 
+/* Wipe every rendered copy of the key.
+ *
+ * Dropping the scalar is only half of forgetting it. After createSheet the full
+ * VLT1- code sits in #sheetCode as text and the same bytes sit in #sheetQR as
+ * canvas pixels, and hiding the panel leaves both in the document. Without this
+ * the idle timer announces "Paper oracle cleared" while the key is still on the
+ * page, and re-opening the create fork shows the old key underneath a status
+ * line reading "No paper oracle loaded". */
+function clearSheetOutput() {
+  $('sheetOutput').style.display = 'none';
+  $('sheetCode').textContent = '';
+  $('sheetFp').textContent = '';
+  $('sheetDate').textContent = '';
+  const qr = $('sheetQR');
+  qr.getContext('2d').clearRect(0, 0, qr.width, qr.height);
+  qr.width = qr.height = 0;          // drop the backing store as well as the paint
+  $('createSheetBtn').textContent = 'Create my paper oracle';
+  // A typed code survives a failed decode in this field; it is the key too.
+  $('sheetManual').value = '';
+}
+
 function forgetKey() {
   sheetKey = null;
   clearTimeout(idleTimer);
@@ -53,6 +74,7 @@ function forgetKey() {
   // last open sitting there with nothing loaded behind it.
   pickFork(PAPER_PANELS, null);
   stopScan();
+  clearSheetOutput();
   renderStatus();
 }
 
@@ -233,6 +255,16 @@ export function initSheet() {
   initEntropyPad();
   renderStatus();
   document.addEventListener('oraclechange', renderStatus);
+
+  /* Nothing above stopped the camera when the scan screen went away: hiding the
+   * <video> leaves the MediaStream live, the tracks open and the machine's
+   * recording light on, which is the wrong signal for a page whose whole claim
+   * is that nothing leaves the device. Tear it down whenever the screen it
+   * belongs to is no longer the one being shown. */
+  document.addEventListener('viewchange', stopScan);
+  document.addEventListener('oraclechange', (e) => {
+    if (e.detail.choice !== 'paper') stopScan();
+  });
 
   $('forkHave').onclick = () => {
     pickFork(PAPER_PANELS, 'forkHave');

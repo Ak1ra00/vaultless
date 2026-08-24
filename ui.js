@@ -292,6 +292,10 @@ function setView(inApp, { push = true } = {}) {
     history.pushState({ inApp }, '', hash || location.pathname);
   }
   scrollTo({ top: 0, behavior: 'auto' });
+  /* Leaving a view has to be able to tear things down — the camera above all,
+   * which otherwise keeps running behind a hidden <video> with the machine's
+   * recording light still on. */
+  document.dispatchEvent(new CustomEvent('viewchange', { detail: { inApp } }));
 }
 
 /* Readiness is reported by whichever module owns the oracle; it also decides

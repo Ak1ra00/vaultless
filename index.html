@@ -279,7 +279,8 @@
   .toast{
     position:fixed;left:50%;bottom:30px;transform:translate(-50%,200%);z-index:50;
     opacity:0;visibility:hidden;pointer-events:none;
-    background:var(--cyan);color:#04100d;font-weight:600;padding:14px 26px;border-radius:999px;
+    max-width:min(560px,calc(100vw - 32px));text-align:center;
+    background:var(--cyan);color:#04100d;font-weight:600;padding:14px 26px;border-radius:22px;
     box-shadow:0 8px 40px rgba(94,234,212,.45);
     transition:transform .38s cubic-bezier(.2,.9,.3,1.3), opacity .25s, visibility .25s;
   }
@@ -339,6 +340,13 @@
   }
   .ch-tag.good{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(94,234,212,.07);}
   .ch-cta{color:var(--cyan);font-weight:600;font-size:16px;margin-top:4px;}
+  /* Warnings that must be read before a choice is made, not after it fails. */
+  .ch-warn{
+    color:var(--amber);font-size:14px;line-height:1.5;
+    border-left:2px solid var(--amber);padding-left:11px;
+  }
+  .ch-warn.block{display:block;margin:0;max-width:62ch;}
+  .ch-warn[hidden]{display:none;}
 
   .just-looking{text-align:center;color:var(--ink-2);margin:30px auto 0;font-size:15px;max-width:600px;}
   .linky{
@@ -494,6 +502,8 @@
         <span class="ch-body">A small LilyGO device on USB. It does the handshake itself and never
           hands its half of the secret to your computer — the safest option.</span>
         <span class="ch-tag good">strongest</span>
+        <span class="ch-warn" id="hwUnsupported" hidden>This browser can't talk to USB
+          devices. Use Chrome or Edge for a hardware oracle — or pick paper below.</span>
         <span class="ch-cta">Use a hardware oracle →</span>
       </button>
 
@@ -532,12 +542,19 @@
               <button class="btn" slot="activate">Install firmware</button>
             </esp-web-install-button>
           </div>
+          <p class="ch-warn block" style="margin-top:14px;"><strong>Never tick “erase device”
+            when reflashing one you have used.</strong> Erasing wipes the oracle's key, and every
+            password it has ever made is gone for good. Installing firmware on its own leaves the
+            key untouched.</p>
           <p class="help" style="margin:14px 0 0;">Done? Then carry on and connect it below.</p>
         </div>
 
         <div class="fork-panel" id="panelConnect" hidden>
           <p class="help">Plug the oracle in and press connect. Your browser will ask permission to
             talk to it — that permission is what keeps other pages away from it.</p>
+          <p class="ch-warn block" id="hwUnsupportedPanel" hidden>This browser has no WebSerial,
+            so it cannot connect to a hardware oracle at all. Open the site in Chrome or Edge,
+            or go back and choose a paper oracle.</p>
           <div class="actions">
             <button class="btn" id="connectBtn">Connect my oracle</button>
             <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
@@ -803,7 +820,10 @@
           <div>
             <div class="lbl" style="margin-bottom:10px;">why this resists theft</div>
             <ul class="doc-list">
-              <li>The oracle only ever sees a blinded point — never the passphrase or index.</li>
+              <li>The oracle only ever sees a blinded point — never the passphrase, and since
+                protocol v3 not the account number either. A device on v2 firmware still requires
+                the account number, so the browser retries once and says so in the trace; reflash
+                to stop disclosing which account you are opening.</li>
               <li>Without <em>k</em>, a stolen passphrase alone regenerates nothing.</li>
               <li>Without the passphrase, a stolen or cloned oracle regenerates nothing either.</li>
               <li>A swapped or tampered oracle is rejected: the DLEQ proof and the pinned public key
