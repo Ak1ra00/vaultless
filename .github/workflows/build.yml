@@ -112,8 +112,8 @@ jobs:
 
       - name: Commit merged firmware back to repo
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "S.K."
+          git config user.email "162945952+Ak1ra00@users.noreply.github.com"
           git add firmware_merged.bin esp-manifest.json
           if git diff --cached --quiet; then
             echo "No changes to firmware_merged.bin — skipping commit."
