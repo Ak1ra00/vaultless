@@ -255,13 +255,6 @@ export function pickFork(panels, chosen) {
   }
 }
 
-export function setReady(text, ready) {
-  const el = $('oracleReady');
-  if (!el) return;
-  el.textContent = text;
-  el.classList.toggle('ready', !!ready);
-}
-
 /* ------------------------------------------------------------------- nav */
 /* Two front doors. The choice decides which oracle's controls exist at all,
  * so neither path is ever shown the other one's buttons to guess at. Kept in
@@ -272,59 +265,91 @@ let oracleChoice = null;
 
 export function getOracleChoice() { return oracleChoice; }
 
-function applyRoute(choice, { push = true } = {}) {
+/* Choosing an oracle no longer jumps into the app — it opens step 2 on the home
+ * page, because setting the oracle up IS the next step. The app view is where
+ * you go once it is actually ready. */
+function setOracle(choice, { remember = true } = {}) {
   oracleChoice = choice;
-  const inApp = choice === 'gadget' || choice === 'paper';
-  document.body.classList.toggle('in-app', inApp);
-  document.body.classList.toggle('oracle-gadget', choice === 'gadget');
+  document.body.classList.toggle('oracle-hw', choice === 'hardware');
   document.body.classList.toggle('oracle-paper', choice === 'paper');
+  $('chooseHardware').setAttribute('aria-pressed', String(choice === 'hardware'));
+  $('choosePaper').setAttribute('aria-pressed', String(choice === 'paper'));
+  $('homeStep1').classList.toggle('done', !!choice);
+  $('homeStep2').hidden = !choice;
+  $('continueRow').hidden = !choice;
+  if (remember && choice) {
+    try { localStorage.setItem(ORACLE_KEY, choice); } catch { /* private mode */ }
+  }
+  document.dispatchEvent(new CustomEvent('oraclechange', { detail: { choice } }));
+}
+
+function setView(inApp, { push = true } = {}) {
+  document.body.classList.toggle('in-app', inApp);
   $('viewHome').hidden = inApp;
   $('viewApp').hidden = !inApp;
-  if (inApp) {
-    try { localStorage.setItem(ORACLE_KEY, choice); } catch { /* private mode */ }
-  } else {
-    try { localStorage.removeItem(ORACLE_KEY); } catch { /* private mode */ }
+  const hash = inApp && oracleChoice ? `#${oracleChoice}` : '';
+  if (push && location.hash !== hash) {
+    history.pushState({ inApp }, '', hash || location.pathname);
   }
-  // Each module owns its own bit of chrome; tell them the route moved rather
-  // than reaching across into their state from here.
-  document.dispatchEvent(new CustomEvent('oraclechange', { detail: { choice } }));
-  const hash = inApp ? `#${choice}` : '';
-  if (push && location.hash !== hash) history.pushState({ choice }, '', hash || location.pathname);
   scrollTo({ top: 0, behavior: 'auto' });
+}
+
+/* Readiness is reported by whichever module owns the oracle; it also decides
+ * whether the way forward is open. */
+export function setReady(text, ready) {
+  const line = $('oracleReady');
+  if (line) {
+    line.textContent = text;
+    line.classList.toggle('ready', !!ready);
+  }
+  const btn = $('continueBtn');
+  if (btn) {
+    btn.disabled = !ready;
+    $('continueHint').textContent = ready
+      ? 'Your oracle is ready.'
+      : 'Finish step 2 and this opens up.';
+  }
 }
 
 function routeFromHash() {
   const h = location.hash.replace('#', '');
-  return (h === 'gadget' || h === 'paper') ? h : null;
+  return (h === 'hardware' || h === 'paper') ? h : null;
 }
 
-function initGadgetFork() {
+function initHardwareFork() {
   const panels = { forkFlash: 'panelFlash', forkReady: 'panelConnect' };
   $('forkFlash').onclick = () => pickFork(panels, 'forkFlash');
   $('forkReady').onclick = () => pickFork(panels, 'forkReady');
 }
 
 function initNav() {
-  let start = routeFromHash();
-  if (!start) {
-    try { start = localStorage.getItem(ORACLE_KEY); } catch { /* private mode */ }
-    if (start !== 'gadget' && start !== 'paper') start = null;
-  }
-  applyRoute(start, { push: false });
+  const routed = routeFromHash();
+  let stored = null;
+  try { stored = localStorage.getItem(ORACLE_KEY); } catch { /* private mode */ }
+  if (stored !== 'hardware' && stored !== 'paper') stored = null;
 
-  $('chooseGadget').onclick = () => applyRoute('gadget');
-  $('choosePaper').onclick = () => applyRoute('paper');
+  setOracle(routed || stored, { remember: false });
+  setView(!!routed, { push: false });
+
+  $('chooseHardware').onclick = () => setOracle('hardware');
+  $('choosePaper').onclick = () => setOracle('paper');
+  $('continueBtn').onclick = () => setView(true);
+  $('homeBtn').onclick = () => setView(false);
   $('chooseDemo').onclick = () => {
-    applyRoute('paper');
-    toast('Type a phrase, then press “Try the demo” at step 4');
+    setOracle(oracleChoice || 'paper');
+    setView(true);
+    toast('Type a phrase, then press “Try the demo” at step 6');
   };
-  $('homeBtn').onclick = () => applyRoute(null);
-  addEventListener('popstate', () => applyRoute(routeFromHash(), { push: false }));
+  addEventListener('popstate', () => {
+    const h = routeFromHash();
+    if (h) setOracle(h, { remember: false });
+    setView(!!h, { push: false });
+  });
 }
 
 export function initChrome() {
   initNav();
-  initGadgetFork();
+  initHardwareFork();
   initRain();
   initMode();
   initStrength();

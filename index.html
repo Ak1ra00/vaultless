@@ -291,7 +291,7 @@
      one value on all of them turns block containers into inline rows. When the
      element should be visible no rule applies at all and it keeps its own. */
   body:not(.in-app) .app-only{display:none;}
-  body:not(.oracle-gadget) .gadget-only{display:none;}
+  body:not(.oracle-hw) .hw-only{display:none;}
   body:not(.oracle-paper) .paper-only{display:none;}
 
   .how-strip{
@@ -370,6 +370,29 @@
   }
   .ready-line.ready{color:var(--green);}
   .ready-line.ready::before{content:'✓';font-weight:700;}
+
+  /* entropy pad ------------------------------------------------------- */
+  .entropy{margin-bottom:20px;}
+  .entropy-pad{
+    display:block;width:100%;max-width:330px;aspect-ratio:1;touch-action:none;cursor:crosshair;
+    background:var(--bg-0);border:1.5px dashed var(--line-bright);border-radius:var(--r-sm);
+    transition:border-color .25s;
+  }
+  .entropy-pad:hover{border-color:var(--cyan-dim);}
+  .entropy-pad.full{border-style:solid;border-color:var(--green);}
+
+  .what-strip{
+    list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:14px;padding:0;margin:0 0 40px;
+  }
+  .what-strip li{display:flex;flex-direction:column;gap:6px;padding:0 2px;}
+  .what-strip strong{font-size:16px;color:var(--cyan);}
+  .what-strip span{color:var(--ink-1);font-size:14.5px;line-height:1.5;}
+
+  .choice[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(94,234,212,.12);}
+  .choice[aria-pressed="true"]::after{opacity:1;}
+  .continue-row{text-align:center;margin:22px 0 6px;}
+  .continue-hint{color:var(--ink-2);font-size:14px;margin:10px 0 0;}
 
   /* paper oracle ------------------------------------------------------ */
   .sheet-panel{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-0);}
@@ -451,70 +474,46 @@
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>
 
-    <ol class="how-strip">
-      <li>
-        <span class="hs-n">1</span>
-        <strong>You type your phrase</strong>
-        <span>It stays in this browser. It is never sent anywhere, and never written down here.</span>
-      </li>
-      <li>
-        <span class="hs-n">2</span>
-        <strong>Your oracle does a handshake</strong>
-        <span>The phrase is disguised first, so the oracle answers without ever learning what you typed.</span>
-      </li>
-      <li>
-        <span class="hs-n">3</span>
-        <strong>Out comes your password</strong>
-        <span>The same two things always give the same password. Nothing is saved, so nothing can leak.</span>
-      </li>
-    </ol>
+    <ul class="what-strip">
+      <li><strong>Nothing is stored</strong><span>No vault, no sync, no account. There is no file
+        anywhere that could be stolen or lost.</span></li>
+      <li><strong>Your phrase never leaves</strong><span>It is disguised before your oracle sees it,
+        so the oracle answers without learning what you typed.</span></li>
+      <li><strong>Always the same answer</strong><span>The same phrase and the same account number
+        give the same password, on any computer, forever.</span></li>
+    </ul>
 
-    <h3 class="choose-h">Which oracle do you have?</h3>
-    <p class="choose-sub">The oracle is the half of the secret that lives outside your head.
-      It can be a small gadget, or a square of paper. Both do the same job.</p>
-
+    <section class="card step" id="homeStep1">
+      <div class="step-h"><span class="num" aria-hidden="true">1</span><h3>Choose your oracle</h3></div>
+      <p class="help">Your oracle is the half of the secret that lives outside your head. It can be
+        a small device, or a square of paper. Both do exactly the same job.</p>
     <div class="choices">
-      <button type="button" class="choice" id="chooseGadget">
+      <button type="button" class="choice" id="chooseHardware">
         <span class="ch-icon" aria-hidden="true">🔐</span>
-        <span class="ch-title">I have the gadget</span>
-        <span class="ch-body">The LilyGO device. Plug it in over USB and it does the handshake
-          on its own — it never hands its half of the secret to your computer.</span>
+        <span class="ch-title">A hardware oracle</span>
+        <span class="ch-body">A small LilyGO device on USB. It does the handshake itself and never
+          hands its half of the secret to your computer — the safest option.</span>
         <span class="ch-tag good">strongest</span>
-        <span class="ch-cta">Use my gadget →</span>
+        <span class="ch-cta">Use a hardware oracle →</span>
       </button>
 
       <button type="button" class="choice" id="choosePaper">
         <span class="ch-icon" aria-hidden="true">🖨️</span>
-        <span class="ch-title">I use paper</span>
-        <span class="ch-body">Print one square of paper that does the very same handshake.
-          Nothing to buy, nothing to charge. Scan it when you need a password.</span>
+        <span class="ch-title">A paper oracle</span>
+        <span class="ch-body">One printed square that does the very same handshake. Nothing to buy,
+          nothing to charge, nothing to keep charged. Scan it when you need a password.</span>
         <span class="ch-tag">no hardware needed</span>
-        <span class="ch-cta">Use paper →</span>
+        <span class="ch-cta">Use a paper oracle →</span>
       </button>
     </div>
+    </section>
 
-    <p class="just-looking">Neither yet? <button type="button" class="linky" id="chooseDemo">Take a
-      look around</button> — the demo runs the whole handshake with a pretend key, so nothing you
-      see is a real password.</p>
-  </section>
-
-  <!-- ===================== APP ===================== -->
-  <div id="viewApp" hidden>
-  <div class="steps">
-
-    <!-- STEP 1 -->
-    <!-- STEP 1 : get an oracle ready -->
-    <section class="card step" id="card0">
-      <div class="step-h">
-        <span class="num" aria-hidden="true">1</span>
-        <h3 class="gadget-only">Get your gadget ready</h3>
-        <h3 class="paper-only">Get your paper oracle ready</h3>
-      </div>
-
-      <!-- ---------- gadget ---------- -->
-      <div class="gadget-only">
-        <p class="help">Is this gadget brand new, or have you used it before?</p>
-        <div class="fork" role="group" aria-label="Gadget state">
+    <section class="card step" id="homeStep2" hidden>
+      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Get it ready</h3></div>
+      <!-- ---------- hardware ---------- -->
+      <div class="hw-only">
+        <p class="help">Is this oracle brand new, or have you used it before?</p>
+        <div class="fork" role="group" aria-label="Hardware oracle state">
           <button type="button" class="forkbtn" id="forkFlash" aria-pressed="false">
             <span class="fk-t">It's brand new</span>
             <span class="fk-s">Needs its firmware installed first — once, then never again</span>
@@ -537,10 +536,10 @@
         </div>
 
         <div class="fork-panel" id="panelConnect" hidden>
-          <p class="help">Plug the gadget in and press connect. Your browser will ask permission to
+          <p class="help">Plug the oracle in and press connect. Your browser will ask permission to
             talk to it — that permission is what keeps other pages away from it.</p>
           <div class="actions">
-            <button class="btn" id="connectBtn">Connect my gadget</button>
+            <button class="btn" id="connectBtn">Connect my oracle</button>
             <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
           </div>
         </div>
@@ -583,8 +582,8 @@
         </div>
 
         <div class="fork-panel" id="panelCreate" hidden>
-<p class="help">The gadget does a secret handshake to make your passwords. This prints a
-        square of paper that does that same handshake instead — so you don't need the gadget at all.
+<p class="help">A hardware oracle does a secret handshake to make your passwords. This prints a
+        square of paper that does that same handshake instead — so you need no device at all.
         Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
         password. <strong>No password is printed on it.</strong></p>
       <div class="warn-box">
@@ -594,12 +593,25 @@
             your passwords. Treat it like a bank card, not a shopping list.</li>
           <li>Lose the paper with no copy and every password it makes is gone for good.
             Print two and store them apart.</li>
-          <li>The gadget is safer: it never hands its half of the secret to your computer.
+          <li>A hardware oracle is safer: it never hands its half of the secret to your computer.
             Paper does, every time you scan it.</li>
         </ul>
       </div>
+      <div class="entropy">
+        <p class="help" style="margin-bottom:12px;"><strong>Scribble in the box.</strong> Your
+          squiggle gets stirred into the randomness your browser already produces. It can only add
+          to it — never replace it — so a lazy scribble is no worse than none, and a wild one is a
+          little better.</p>
+        <canvas id="entropyPad" class="entropy-pad" aria-label="Draw here to add randomness"></canvas>
+        <div class="sbar" style="margin-top:12px;"><i id="entropyBar"></i></div>
+        <div class="stext">
+          <span id="entropyText">Draw in the box to begin…</span>
+          <button type="button" class="linky" id="entropyReset">start again</button>
+        </div>
+      </div>
+
       <div class="actions">
-        <button class="btn primary" id="createSheetBtn">Create my paper oracle</button>
+        <button class="btn primary" id="createSheetBtn" disabled>Create my paper oracle</button>
       </div>
 
       <div id="sheetOutput" style="display:none;">
@@ -630,8 +642,24 @@
       </div>
     </section>
 
+    <div class="continue-row" id="continueRow" hidden>
+      <button class="btn primary" id="continueBtn" disabled>Continue to my password →</button>
+      <p class="continue-hint" id="continueHint">Finish step 2 and this opens up.</p>
+    </div>
+
+    <p class="just-looking">Neither yet? <button type="button" class="linky" id="chooseDemo">Take a
+      look around</button> — the demo runs the whole handshake with a pretend key, so nothing you
+      see is a real password.</p>
+  </section>
+
+  <!-- ===================== APP ===================== -->
+  <div id="viewApp" hidden>
+  <div class="steps">
+
+    <!-- STEP 1 -->
+    <!-- STEP 1 : get an oracle ready -->
     <section class="card step" id="card1">
-      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Your secret phrase</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Your secret phrase</h3></div>
       <p class="help simple-only">Pick something only you know and can always remember. It never leaves this device.</p>
       <p class="help expert-only">Master passphrase. Hashed with the index to a ristretto255 point; never transmitted.</p>
       <div class="pw-row">
@@ -647,7 +675,7 @@
 
     <!-- STEP 2 -->
     <section class="card step" id="card2">
-      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Which account is this for?</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Which account is this for?</h3></div>
       <p class="help simple-only">Every account gets its own number, so every account gets a different password.
         Give it a nickname and we'll remember the number for you — the nickname stays on this device only.</p>
       <p class="help expert-only">Sub-index. Included in the hash-to-group input and the HKDF salt.
@@ -663,7 +691,7 @@
 
     <!-- STEP 3 -->
     <section class="card step" id="card3">
-      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Choose a password style</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">5</span><h3>Choose a password style</h3></div>
       <p class="help simple-only">Not sure? The first one is a good default. Some websites don't allow symbols —
         then pick letters &amp; numbers.</p>
       <p class="help expert-only">Second-stage HKDF keyed by format name, rejection-sampled into the charset.</p>
@@ -681,7 +709,7 @@
 
     <!-- STEP 4 : action -->
     <section class="card step" id="card4">
-      <div class="step-h"><span class="num" aria-hidden="true">5</span><h3>Make my password</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">6</span><h3>Make my password</h3></div>
       <p class="help simple-only" id="actionHelp">That's everything — press the big button.
         You can come back and change the account number any time; the same phrase and number
         always give the same password.</p>
@@ -737,19 +765,19 @@
     <summary>How does this work?</summary>
     <div class="learn-body">
       <div class="simple-only">
-        <p class="doc-p">Think of your little gadget as a keyholder that never tells anyone its key.</p>
+        <p class="doc-p">Think of your oracle as a keyholder that never tells anyone its key.</p>
         <ol class="doc-steps">
           <li>You type your phrase. It stays in this browser — it is never sent anywhere.</li>
           <li>Your browser scrambles the phrase into a puzzle piece and <strong>disguises</strong> it,
-            so even the gadget can't tell what you typed.</li>
-          <li>The gadget stamps the disguised piece with its secret key and hands it back, playing a
+            so even the oracle can't tell what you typed.</li>
+          <li>The oracle stamps the disguised piece with its secret key and hands it back, playing a
             little animation while it works.</li>
           <li>Your browser removes the disguise and turns the result into your password.</li>
         </ol>
-        <p class="doc-p">Because the answer depends on <em>both</em> your phrase <em>and</em> the gadget,
+        <p class="doc-p">Because the answer depends on <em>both</em> your phrase <em>and</em> your oracle,
           someone who steals only one of them gets nothing. And because the same two things always
           produce the same answer, there's no vault to lose, back up, or have stolen.</p>
-        <p class="doc-p"><strong>Worth knowing:</strong> if you lose the gadget, you lose the passwords it
+        <p class="doc-p"><strong>Worth knowing:</strong> if you lose your oracle, you lose the passwords it
           makes. And anything plugged into it while it's connected can ask it to stamp things, so unplug it
           when you're done.</p>
       </div>
@@ -797,7 +825,7 @@
   </details>
 
   <details class="learn" id="learnBuild">
-    <summary>Build your own gadget</summary>
+    <summary>Build your own hardware oracle</summary>
     <div class="learn-body">
       <div class="docs-grid">
         <div>

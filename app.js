@@ -184,8 +184,8 @@ function setConnected(state, label) {
   connLabel.textContent = label;
   connectBtn.disabled = state;
   disconnectBtn.disabled = !state;
-  document.getElementById('card0').classList.toggle('done', state);
-  setReady(state ? 'Gadget connected and ready' : 'Gadget not connected yet', state);
+  document.getElementById('homeStep2').classList.toggle('done', state);
+  setReady(state ? 'Oracle connected and ready' : 'Oracle not connected yet', state);
 }
 
 let lineBuffer = '';
@@ -288,11 +288,11 @@ disconnectBtn.onclick = disconnectSerial;
 
 // Reclaim the header pill whenever the route leaves paper mode.
 document.addEventListener('oraclechange', (e) => {
-  if (e.detail.choice !== 'gadget') return;
+  if (e.detail.choice !== 'hardware') return;
   connDot.className = 'dot' + (writer ? ' live' : '');
   connLabel.textContent = writer ? 'oracle connected' : 'oracle disconnected';
-  document.getElementById('card0').classList.toggle('done', !!writer);
-  setReady(writer ? 'Gadget connected and ready' : 'Gadget not connected yet', !!writer);
+  document.getElementById('homeStep2').classList.toggle('done', !!writer);
+  setReady(writer ? 'Oracle connected and ready' : 'Oracle not connected yet', !!writer);
 });
 
 /* ---------------------------------------------------------------------
@@ -418,7 +418,7 @@ async function runDerivation(mode) {
     return;
   }
   if (mode === 'hardware' && !writer) {
-    trace('input', 'no oracle connected — connect your gadget, load your paper oracle, or try the demo', true);
+    trace('input', 'no oracle connected — connect your hardware oracle, load your paper oracle, or try the demo', true);
     return;
   }
   if (useSheet && !getSheetKey()) {
@@ -429,7 +429,7 @@ async function runDerivation(mode) {
   deriveBtn.disabled = true; simBtn.disabled = true;
   setDemo(useSimulator);
   document.getElementById('resSource').textContent =
-    `source: ${useSimulator ? 'demo simulator' : useSheet ? 'your paper oracle' : 'your gadget'}`;
+    `source: ${useSimulator ? 'demo simulator' : useSheet ? 'your paper oracle' : 'your hardware oracle'}`;
 
   try {
     trace('1/7', `hashing "${index}" to a ristretto255 point`);
@@ -467,7 +467,7 @@ async function runDerivation(mode) {
       await new Promise(r => setTimeout(r, 700));   // let the animation read
       response = simulateOracle(blindedHex);
     } else {
-      vizOracle('your gadget is stamping it…');
+      vizOracle('your oracle is stamping it…');
       response = await sendToOracle({ index, point: blindedHex });
     }
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);

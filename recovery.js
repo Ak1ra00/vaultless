@@ -17,7 +17,7 @@
  * and never appears in the protocol trace.
  */
 
-import { sha256, bytesToHex, utf8ToBytes, concatBytes, RistrettoPoint,
+import { sha256, sha512, bytesToHex, utf8ToBytes, concatBytes, RistrettoPoint,
          bytesToNumberLE, numberToBytesLE } from './vendor/noble-bundle.js';
 import { qrcode, jsQR } from './vendor/qr-bundle.js';
 
@@ -107,15 +107,69 @@ export function decodeRecovery(text) {
   return scalar;
 }
 
-/* Uniform scalar in [1, L), drawn the same way the firmware draws it: 64 bytes
- * wide-reduced, never a 32-byte reduce (that is biased by roughly 6%). */
-export function generateKey() {
-  for (;;) {
-    const buf = new Uint8Array(64);
-    crypto.getRandomValues(buf);
-    const k = bytesToNumberLE(buf) % L;
+/* Uniform scalar in [1, L).
+ *
+ * The system CSPRNG is always the base, and anything the user contributes is
+ * folded in on top of it — never in place of it. That ordering is the whole
+ * safety property here: hashing extra material together with 64 fresh
+ * crypto.getRandomValues bytes cannot make the result more predictable than
+ * those bytes alone, however poor or repetitive the extra material is. A hand
+ * drawing a squiggle produces far less entropy than people imagine, and it is
+ * biased and partly observable; treated as a supplement it is a free
+ * improvement, treated as a source it would be a downgrade.
+ *
+ * Reduction is over a full 64-byte digest, matching the firmware, never a
+ * 32-byte reduce (biased by roughly 6%).
+ */
+const KEY_MIX_DST = 'vaultless-key-mix-v1';
+
+export function generateKey(extra) {
+  for (let ctr = 0; ctr < 8; ctr++) {
+    const sys = new Uint8Array(64);
+    crypto.getRandomValues(sys);
+    const digest = sha512(concatBytes(
+      utf8ToBytes(KEY_MIX_DST),
+      Uint8Array.of(ctr),
+      sys,
+      extra && extra.length ? extra : new Uint8Array(0),
+    ));
+    const k = bytesToNumberLE(digest) % L;
     if (k !== 0n) return k;
   }
+  throw new Error('could not generate a key');
+}
+
+/* ------------------------------------------------------ drawn entropy */
+/* Records where and when a pointer moved. Positions alone are weak and heavily
+ * correlated, so timing deltas go in too, and the estimate below is
+ * deliberately pessimistic — it decides when the UI stops asking, not how
+ * strong the key is. */
+export function createEntropyCollector({ target = 320 } = {}) {
+  const bytes = [];
+  let count = 0, last = null;
+
+  function push16(v) { bytes.push(v & 255, (v >>> 8) & 255); }
+
+  return {
+    /* Returns true if this sample was taken (far enough from the previous). */
+    sample(x, y, t) {
+      const xi = Math.round(x), yi = Math.round(y);
+      if (last) {
+        const dx = xi - last.x, dy = yi - last.y;
+        if (dx * dx + dy * dy < 9) return false;   // ignore jitter and repeats
+      }
+      const dt = last ? Math.min(65535, Math.round((t - last.t) * 1000)) : 0;
+      push16(xi); push16(yi); push16(dt);
+      last = { x: xi, y: yi, t };
+      count++;
+      return true;
+    },
+    get count() { return count; },
+    get progress() { return Math.min(1, count / target); },
+    get done() { return count >= target; },
+    take() { return Uint8Array.from(bytes); },
+    reset() { bytes.length = 0; count = 0; last = null; },
+  };
 }
 
 export function scalarTo32(k) {
