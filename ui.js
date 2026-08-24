@@ -244,7 +244,63 @@ function initFormatKeys() {
   });
 }
 
+
+/* ------------------------------------------------------------------- nav */
+/* Two front doors. The choice decides which oracle's controls exist at all,
+ * so neither path is ever shown the other one's buttons to guess at. Kept in
+ * the URL so a route can be bookmarked, and remembered so a returning user
+ * lands where they left off — Home is always one click away in the header. */
+const ORACLE_KEY = 'vaultless.oracle.choice.v1';
+let oracleChoice = null;
+
+export function getOracleChoice() { return oracleChoice; }
+
+function applyRoute(choice, { push = true } = {}) {
+  oracleChoice = choice;
+  const inApp = choice === 'gadget' || choice === 'paper';
+  document.body.classList.toggle('in-app', inApp);
+  document.body.classList.toggle('oracle-gadget', choice === 'gadget');
+  document.body.classList.toggle('oracle-paper', choice === 'paper');
+  $('viewHome').hidden = inApp;
+  $('viewApp').hidden = !inApp;
+  if (inApp) {
+    try { localStorage.setItem(ORACLE_KEY, choice); } catch { /* private mode */ }
+  } else {
+    try { localStorage.removeItem(ORACLE_KEY); } catch { /* private mode */ }
+  }
+  // Each module owns its own bit of chrome; tell them the route moved rather
+  // than reaching across into their state from here.
+  document.dispatchEvent(new CustomEvent('oraclechange', { detail: { choice } }));
+  const hash = inApp ? `#${choice}` : '';
+  if (push && location.hash !== hash) history.pushState({ choice }, '', hash || location.pathname);
+  scrollTo({ top: 0, behavior: 'auto' });
+}
+
+function routeFromHash() {
+  const h = location.hash.replace('#', '');
+  return (h === 'gadget' || h === 'paper') ? h : null;
+}
+
+function initNav() {
+  let start = routeFromHash();
+  if (!start) {
+    try { start = localStorage.getItem(ORACLE_KEY); } catch { /* private mode */ }
+    if (start !== 'gadget' && start !== 'paper') start = null;
+  }
+  applyRoute(start, { push: false });
+
+  $('chooseGadget').onclick = () => applyRoute('gadget');
+  $('choosePaper').onclick = () => applyRoute('paper');
+  $('chooseDemo').onclick = () => {
+    applyRoute('paper');
+    toast('Type a phrase, then press “Try the demo” at step 4');
+  };
+  $('homeBtn').onclick = () => applyRoute(null);
+  addEventListener('popstate', () => applyRoute(routeFromHash(), { push: false }));
+}
+
 export function initChrome() {
+  initNav();
   initRain();
   initMode();
   initStrength();

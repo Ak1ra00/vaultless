@@ -60,6 +60,11 @@ function renderStatus() {
   // The source is reported on the result card; keep the button one plain verb.
   $('deriveBtn').textContent = 'Make my password';
   $('card4').classList.toggle('done', loaded);
+  // In paper mode the header pill tracks the paper oracle, not WebSerial.
+  if (document.body.classList.contains('oracle-paper')) {
+    $('connDot').className = 'dot' + (loaded ? ' live' : '');
+    $('connLabel').textContent = loaded ? 'paper oracle ready' : 'no paper oracle';
+  }
 }
 
 /* ------------------------------------------------------------- accepting */
@@ -124,6 +129,7 @@ function createSheet() {
 
 export function initSheet() {
   renderStatus();
+  document.addEventListener('oraclechange', renderStatus);
 
   $('sheetBtn').onclick = () => {
     const panel = $('sheetPanel');

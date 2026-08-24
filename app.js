@@ -8,7 +8,7 @@ import {
 } from './vendor/noble-bundle.js';
 import {
   initChrome, toast, setDemo, markResultFilled,
-  vizStart, vizOracle, vizReturn, vizDone, vizReset,
+  vizStart, vizOracle, vizReturn, vizDone, vizReset, getOracleChoice,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
 
@@ -179,6 +179,7 @@ const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 
 function setConnected(state, label) {
+  if (getOracleChoice() === 'paper') return;   // the pill is showing the paper oracle
   connDot.className = 'dot' + (state ? ' live' : '');
   connLabel.textContent = label;
   connectBtn.disabled = state;
@@ -283,6 +284,13 @@ async function sendToOracle(payloadObj, timeoutMs = 30000) {
 connectBtn.onclick = connectSerial;
 disconnectBtn.onclick = disconnectSerial;
 
+// Reclaim the header pill whenever the route leaves paper mode.
+document.addEventListener('oraclechange', (e) => {
+  if (e.detail.choice === 'paper') return;
+  connDot.className = 'dot' + (writer ? ' live' : '');
+  connLabel.textContent = writer ? 'oracle connected' : 'oracle disconnected';
+});
+
 /* ---------------------------------------------------------------------
  * Simulated oracle (in-browser, ephemeral session key — for testing
  * without hardware). The scalar lives only in memory for this tab.
@@ -306,9 +314,9 @@ function simulateOracle(blindedHex) {
 }
 
 document.getElementById('simBtn').onclick = () => runDerivation('simulator');
-/* One button, whichever second factor is actually present. */
+/* The oracle chosen on the home page decides which path this runs. */
 document.getElementById('deriveBtn').onclick = () =>
-  runDerivation(getSheetKey() ? 'sheet' : 'hardware');
+  runDerivation(getOracleChoice() === 'paper' ? 'sheet' : 'hardware');
 
 /* ---------------------------------------------------------------------
  * Format selector

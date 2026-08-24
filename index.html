@@ -288,6 +288,72 @@
   }
   .toast.on{transform:translate(-50%,0);opacity:1;visibility:visible;}
 
+  /* home / entry ------------------------------------------------------ */
+  .app-only{display:none;}
+  body.in-app .app-only{display:inline-flex;}
+  body.in-app .seg.app-only{display:flex;}
+
+  /* Only the controls for the oracle you chose are shown, so neither path
+     ever presents the other one's buttons as something to try. */
+  .gadget-only,.paper-only{display:none;}
+  body.oracle-gadget .gadget-only{display:inline-flex;}
+  body.oracle-paper  .paper-only{display:inline-flex;}
+  body.oracle-paper  section.paper-only{display:block;}
+
+  .how-strip{
+    list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:14px;padding:0;margin:0 0 44px;
+  }
+  .how-strip li{
+    background:linear-gradient(180deg,rgba(20,26,31,.75),rgba(13,17,20,.75));
+    border:1px solid var(--line);border-radius:var(--r);padding:20px;
+    display:flex;flex-direction:column;gap:7px;backdrop-filter:blur(8px);
+  }
+  .hs-n{
+    width:28px;height:28px;display:grid;place-items:center;border-radius:50%;
+    font-family:var(--mono);font-size:13px;font-weight:700;
+    background:var(--bg-3);color:var(--cyan);border:1px solid var(--cyan-dim);margin-bottom:4px;
+  }
+  .how-strip strong{font-size:16.5px;}
+  .how-strip span:last-child{color:var(--ink-1);font-size:14.5px;line-height:1.5;}
+
+  .choose-h{text-align:center;font-size:clamp(22px,3.2vw,30px);font-weight:600;letter-spacing:-.02em;}
+  .choose-sub{text-align:center;color:var(--ink-1);max-width:620px;margin:10px auto 26px;font-size:16px;}
+
+  .choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;}
+  .choice{
+    font:inherit;text-align:left;cursor:pointer;color:var(--ink-0);
+    background:linear-gradient(180deg,rgba(20,26,31,.92),rgba(13,17,20,.92));
+    border:1.5px solid var(--line-bright);border-radius:var(--r);padding:26px;
+    display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;
+    transition:transform .2s cubic-bezier(.2,.9,.3,1.2), border-color .2s, box-shadow .2s;
+  }
+  .choice::after{
+    content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
+    background:radial-gradient(420px 200px at 50% 0%, rgba(94,234,212,.16), transparent 70%);
+  }
+  .choice:hover{transform:translateY(-4px);border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 34px rgba(94,234,212,.18);}
+  .choice:hover::after{opacity:1;}
+  .choice:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
+  .ch-icon{font-size:34px;line-height:1;}
+  .ch-title{font-size:21px;font-weight:600;letter-spacing:-.01em;}
+  .ch-body{color:var(--ink-1);font-size:15px;line-height:1.55;flex:1;}
+  .ch-tag{
+    align-self:flex-start;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--ink-2);border:1px solid var(--line-bright);
+    border-radius:999px;padding:5px 11px;
+  }
+  .ch-tag.good{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(94,234,212,.07);}
+  .ch-cta{color:var(--cyan);font-weight:600;font-size:16px;margin-top:4px;}
+
+  .just-looking{text-align:center;color:var(--ink-2);margin:30px auto 0;font-size:15px;max-width:600px;}
+  .linky{
+    font:inherit;font-size:15px;color:var(--cyan);background:none;border:0;padding:0;
+    cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+  }
+  .linky:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
+  @media(max-width:560px){.choice{padding:22px;}}
+
   /* paper oracle ------------------------------------------------------ */
   .sheet-panel{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-0);}
   .sheet-status{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin-bottom:12px;}
@@ -345,25 +411,78 @@
       </div>
     </div>
     <div class="head-right">
-      <div class="seg" role="group" aria-label="Detail level">
+      <button class="btn small app-only" id="homeBtn" type="button">← Home</button>
+      <div class="seg app-only" role="group" aria-label="Detail level">
         <button id="modeSimple" type="button" aria-pressed="true">Simple</button>
         <button id="modeExpert" type="button" aria-pressed="false">Expert</button>
       </div>
-      <div class="conn">
+      <div class="conn app-only">
         <span class="dot" id="connDot" aria-hidden="true"></span>
         <span id="connLabel">oracle disconnected</span>
       </div>
     </div>
   </header>
 
-  <div class="hero">
-    <h2>Your passwords, <span class="grad">remembered by nobody</span></h2>
-    <p class="simple-only">Type one phrase you already know. Your little gadget does a secret handshake.
-      Out comes a strong password — the same one, every single time. Nothing is ever saved anywhere.</p>
-    <p class="expert-only">Deterministic derivation through a two-party oblivious PRF over ristretto255,
-      with a verified hardware oracle. No vault, no sync, no stored secret.</p>
-  </div>
+  <!-- ===================== HOME ===================== -->
+  <section id="viewHome">
+    <div class="hero">
+      <h2>Your passwords, <span class="grad">remembered by nobody</span></h2>
+      <p class="simple-only">There is no vault here. Nothing is stored, synced, or uploaded —
+        not by us, not on this computer. Your passwords are worked out fresh each time from one
+        phrase you remember and one thing you keep.</p>
+      <p class="expert-only">Deterministic derivation through a two-party oblivious PRF over
+        ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
+    </div>
 
+    <ol class="how-strip">
+      <li>
+        <span class="hs-n">1</span>
+        <strong>You type your phrase</strong>
+        <span>It stays in this browser. It is never sent anywhere, and never written down here.</span>
+      </li>
+      <li>
+        <span class="hs-n">2</span>
+        <strong>Your oracle does a handshake</strong>
+        <span>The phrase is disguised first, so the oracle answers without ever learning what you typed.</span>
+      </li>
+      <li>
+        <span class="hs-n">3</span>
+        <strong>Out comes your password</strong>
+        <span>The same two things always give the same password. Nothing is saved, so nothing can leak.</span>
+      </li>
+    </ol>
+
+    <h3 class="choose-h">Which oracle do you have?</h3>
+    <p class="choose-sub">The oracle is the half of the secret that lives outside your head.
+      It can be a small gadget, or a square of paper. Both do the same job.</p>
+
+    <div class="choices">
+      <button type="button" class="choice" id="chooseGadget">
+        <span class="ch-icon" aria-hidden="true">🔐</span>
+        <span class="ch-title">I have the gadget</span>
+        <span class="ch-body">The LilyGO device. Plug it in over USB and it does the handshake
+          on its own — it never hands its half of the secret to your computer.</span>
+        <span class="ch-tag good">strongest</span>
+        <span class="ch-cta">Use my gadget →</span>
+      </button>
+
+      <button type="button" class="choice" id="choosePaper">
+        <span class="ch-icon" aria-hidden="true">🖨️</span>
+        <span class="ch-title">I use paper</span>
+        <span class="ch-body">Print one square of paper that does the very same handshake.
+          Nothing to buy, nothing to charge. Scan it when you need a password.</span>
+        <span class="ch-tag">no hardware needed</span>
+        <span class="ch-cta">Use paper →</span>
+      </button>
+    </div>
+
+    <p class="just-looking">Neither yet? <button type="button" class="linky" id="chooseDemo">Take a
+      look around</button> — the demo runs the whole handshake with a pretend key, so nothing you
+      see is a real password.</p>
+  </section>
+
+  <!-- ===================== APP ===================== -->
+  <div id="viewApp" hidden>
   <div class="steps">
 
     <!-- STEP 1 -->
@@ -441,10 +560,10 @@
       </div>
 
       <div class="actions" style="margin-top:14px;">
-        <button class="btn small" id="sheetBtn">Use my paper oracle</button>
-        <button class="btn small" id="connectBtn">Connect my gadget</button>
-        <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
-        <esp-web-install-button manifest="esp-manifest.json">
+        <button class="btn small paper-only" id="sheetBtn">Use my paper oracle</button>
+        <button class="btn small gadget-only" id="connectBtn">Connect my gadget</button>
+        <button class="btn small gadget-only" id="disconnectBtn" disabled>Disconnect</button>
+        <esp-web-install-button manifest="esp-manifest.json" class="gadget-only">
           <button class="btn small" slot="activate">Install firmware</button>
         </esp-web-install-button>
       </div>
@@ -496,8 +615,8 @@
     </section>
 
     <!-- CREATE A SHEET -->
-    <section class="card">
-      <div class="step-h"><span class="num" aria-hidden="true">＋</span><h3>No gadget? Print one on paper</h3></div>
+    <section class="card paper-only">
+      <div class="step-h"><span class="num" aria-hidden="true">＋</span><h3>Print your paper oracle</h3></div>
       <p class="help">The gadget does a secret handshake to make your passwords. This prints a
         square of paper that does that same handshake instead — so you don't need the gadget at all.
         Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
@@ -539,6 +658,7 @@
     </section>
 
   </div>
+  </div><!-- /viewApp -->
 
   <details class="learn" id="learnHow">
     <summary>How does this work?</summary>
