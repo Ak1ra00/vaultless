@@ -1,13 +1,13 @@
 {
   "name": "Vaultless Oracle Firmware",
-  "version": "143e25e",
+  "version": "be848c4",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "firmware_merged.bin?v=143e25e",
+          "path": "firmware_merged.bin?v=be848c4",
           "offset": 0
         }
       ]
