@@ -81,12 +81,17 @@ static String bytesToHex(const uint8_t *data, size_t len) {
 // ---------------------------------------------------------------------------
 // Persistent key management (NVS)
 // ---------------------------------------------------------------------------
+// Defined with the DLEQ helpers below; called from loadOrCreatePrivateKey.
+static void deriveNonceKey(void);
+
+#ifdef VAULTLESS_ALLOW_PROVISION
 static bool hasStoredPrivateKey() {
   prefs.begin("oprf", true);
   const bool present = (prefs.getBytesLength("privkey") == 32);
   prefs.end();
   return present;
 }
+#endif
 
 static void loadOrCreatePrivateKey() {
   prefs.begin("oprf", false);
@@ -108,6 +113,8 @@ static void loadOrCreatePrivateKey() {
 
   // Y = k*G. Advertised with every answer and pinned by the browser on first
   // use; deriving it here means k itself is touched only inside libsodium.
+  deriveNonceKey();
+
   if (crypto_scalarmult_ristretto255_base(g_pubkey, g_privkey) != 0) {
     tft.setTextColor(TFT_RED, TFT_BLACK);
     tft.drawString("bad private key in NVS", 4, 4);
@@ -251,7 +258,7 @@ static void matrixRain(uint32_t durationMs, long index) {
 // ---------------------------------------------------------------------------
 // Chaum-Pedersen DLEQ proof that log_G(Y) == log_B(B') == k.
 //
-//   t  <- random scalar
+//   t  <- H(nonce_key || Y || B || B')   -- deterministic, see below
 //   T1 = t*G,  T2 = t*B
 //   c  = H(DST || Y || B || B' || T1 || T2)  reduced mod L
 //   s  = t + c*k  mod L
@@ -263,8 +270,77 @@ static void matrixRain(uint32_t durationMs, long index) {
 // (crypto_core_ristretto255_scalar_reduce == interpreting the digest as a
 // little-endian integer mod L, which is what the browser's
 // bytesToNumberLE(h) % L does).
+//
+// THE NONCE IS DERIVED, NOT SAMPLED.
+//
+// s = t + c*k is a Schnorr equation: two proofs sharing a nonce under different
+// challenges give s1 - s2 = (c1 - c2)*k, so k = (s1 - s2)/(c1 - c2) and the
+// oracle key is gone. Sampling t from the RNG made that a live risk here,
+// because this firmware never enables Wi-Fi or Bluetooth and ESP-IDF documents
+// that with the RF subsystem and SAR ADC both off "the output of the RNG should
+// be considered as pseudo-random only". A PRNG replaying its sequence after a
+// power cycle is exactly the two-proofs-one-nonce case.
+//
+// Deriving t from a secret nonce key and the request (EdDSA / RFC 6979 style)
+// removes the RNG from the request path entirely. Distinct requests give
+// distinct t. An identical request gives an identical t, hence an identical
+// challenge and an identical s -- a byte-for-byte replay of the same proof,
+// which yields no second equation and leaks nothing.
+//
+// This also restores the property the design depends on: the oracle is a pure
+// deterministic function of (k, B). All protocol randomness is the client's
+// blinding scalar r, generated in the browser by a real CSPRNG. That is what
+// lets a commodity microcontroller stand in for a secure element, and it is
+// why no entropy source is needed here at run time.
+//
+// (Hedging -- mixing fresh entropy into the nonce hash -- would additionally
+// harden against fault injection and is safe to add, but it reintroduces a
+// run-time RNG dependency, so it is deliberately not done.)
 // ---------------------------------------------------------------------------
-static const char DLEQ_DST[] = "oprf-vaultless-dleq-v1";
+static const char DLEQ_DST[]  = "oprf-vaultless-dleq-v1";
+static const char NONCE_KEY_DST[] = "oprf-vaultless-nonce-key-v1";
+static const char NONCE_DST[]     = "oprf-vaultless-nonce-v1";
+
+static uint8_t g_noncekey[32]; // SHA-512(NONCE_KEY_DST || k), truncated
+
+// Derived once at boot so k is read as rarely as possible.
+static void deriveNonceKey(void) {
+  const size_t dstLen = sizeof(NONCE_KEY_DST) - 1;
+  uint8_t buf[dstLen + 32];
+  memcpy(buf, NONCE_KEY_DST, dstLen);
+  memcpy(buf + dstLen, g_privkey, 32);
+
+  uint8_t digest[64];
+  crypto_hash_sha512(digest, buf, sizeof(buf));
+  memcpy(g_noncekey, digest, 32);
+
+  sodium_memzero(buf, sizeof(buf));
+  sodium_memzero(digest, sizeof(digest));
+}
+
+// t = reduce(SHA-512(NONCE_DST || nonce_key || Y || B || B' || ctr)).
+// ctr only exists so the function is total: a reduced digest can in principle
+// be zero, which no group operation accepts. At 2^-252 per attempt it will
+// never advance, and an attacker cannot steer it because nonce_key is secret.
+static void dleqNonce(const uint8_t Y[32], const uint8_t B[32],
+                      const uint8_t Bp[32], uint8_t ctr, uint8_t outScalar[32]) {
+  const size_t dstLen = sizeof(NONCE_DST) - 1;
+  uint8_t buf[dstLen + 32 * 4 + 1];
+  size_t off = 0;
+  memcpy(buf + off, NONCE_DST, dstLen);   off += dstLen;
+  memcpy(buf + off, g_noncekey, 32);      off += 32;
+  memcpy(buf + off, Y,  32);              off += 32;
+  memcpy(buf + off, B,  32);              off += 32;
+  memcpy(buf + off, Bp, 32);              off += 32;
+  buf[off++] = ctr;
+
+  uint8_t digest[64];
+  crypto_hash_sha512(digest, buf, off);
+  crypto_core_ristretto255_scalar_reduce(outScalar, digest);
+
+  sodium_memzero(buf, sizeof(buf));
+  sodium_memzero(digest, sizeof(digest));
+}
 
 static void dleqChallenge(const uint8_t Y[32], const uint8_t B[32],
                           const uint8_t Bp[32], const uint8_t T1[32],
@@ -289,10 +365,14 @@ static void dleqChallenge(const uint8_t Y[32], const uint8_t B[32],
 static bool dleqProve(const uint8_t B[32], const uint8_t Bp[32],
                       const uint8_t Y[32], uint8_t outC[32], uint8_t outS[32]) {
   uint8_t t[32], T1[32], T2[32], ck[32];
-  crypto_core_ristretto255_scalar_random(t);
+  bool ok = false;
 
-  if (crypto_scalarmult_ristretto255_base(T1, t) != 0) { sodium_memzero(t, 32); return false; }
-  if (crypto_scalarmult_ristretto255(T2, t, B) != 0)   { sodium_memzero(t, 32); return false; }
+  for (uint8_t ctr = 0; ctr < 8 && !ok; ctr++) {
+    dleqNonce(Y, B, Bp, ctr, t);
+    ok = crypto_scalarmult_ristretto255_base(T1, t) == 0 &&
+         crypto_scalarmult_ristretto255(T2, t, B) == 0;
+  }
+  if (!ok) { sodium_memzero(t, sizeof(t)); return false; }
 
   dleqChallenge(Y, B, Bp, T1, T2, outC);
   crypto_core_ristretto255_scalar_mul(ck, outC, g_privkey);
