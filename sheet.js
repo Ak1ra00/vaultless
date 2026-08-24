@@ -18,7 +18,7 @@ import {
   encodeRecovery, decodeRecovery, generateKey, scalarTo32, fingerprint,
   drawQR, createScanner,
 } from './recovery.js';
-import { toast } from './ui.js';
+import { toast, pickFork, setReady } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const IDLE_MS = 5 * 60 * 1000;
@@ -26,6 +26,8 @@ const IDLE_MS = 5 * 60 * 1000;
 let sheetKey = null;
 let idleTimer = null;
 let scanner = null;
+
+const PAPER_PANELS = { forkHave: 'panelScan', forkCreate: 'panelCreate' };
 
 export function getSheetKey() { return sheetKey; }
 
@@ -47,6 +49,10 @@ function setKey(k) {
 function forgetKey() {
   sheetKey = null;
   clearTimeout(idleTimer);
+  // Put step 1 back to its question, rather than leaving whichever branch was
+  // last open sitting there with nothing loaded behind it.
+  pickFork(PAPER_PANELS, null);
+  stopScan();
   renderStatus();
 }
 
@@ -59,11 +65,14 @@ function renderStatus() {
   $('sheetForget').style.display = loaded ? '' : 'none';
   // The source is reported on the result card; keep the button one plain verb.
   $('deriveBtn').textContent = 'Make my password';
-  $('card4').classList.toggle('done', loaded);
-  // In paper mode the header pill tracks the paper oracle, not WebSerial.
+  $('card0').classList.toggle('done', loaded);
+  // In paper mode the header pill and the step-1 readiness line both track the
+  // paper oracle rather than the (irrelevant) WebSerial connection.
   if (document.body.classList.contains('oracle-paper')) {
     $('connDot').className = 'dot' + (loaded ? ' live' : '');
     $('connLabel').textContent = loaded ? 'paper oracle ready' : 'no paper oracle';
+    setReady(loaded ? `Paper oracle ready · ${fingerprint(sheetKey)}` : 'No paper oracle loaded yet',
+             loaded);
   }
 }
 
@@ -131,12 +140,13 @@ export function initSheet() {
   renderStatus();
   document.addEventListener('oraclechange', renderStatus);
 
-  $('sheetBtn').onclick = () => {
-    const panel = $('sheetPanel');
-    const open = panel.style.display !== 'none';
-    panel.style.display = open ? 'none' : '';
-    if (open) stopScan();
-    else if (!sheetKey) startScan();
+  $('forkHave').onclick = () => {
+    pickFork(PAPER_PANELS, 'forkHave');
+    if (!sheetKey) startScan();
+  };
+  $('forkCreate').onclick = () => {
+    pickFork(PAPER_PANELS, 'forkCreate');
+    stopScan();
   };
   $('sheetScanBtn').onclick = () => startScan();
   $('sheetStopBtn').onclick = () => stopScan();

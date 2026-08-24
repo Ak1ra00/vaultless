@@ -223,10 +223,7 @@
   .viz-label{text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--cyan);margin-top:-6px;min-height:18px;}
 
   /* trace / expert ---------------------------------------------------- */
-  .expert-only{display:none;}
-  body.expert .expert-only{display:block;}
-  body.expert .expert-only.flexy{display:flex;}
-  .simple-only{display:block;}
+  body:not(.expert) .expert-only{display:none;}
   body.expert .simple-only{display:none;}
 
   .trace-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
@@ -289,16 +286,13 @@
   .toast.on{transform:translate(-50%,0);opacity:1;visibility:visible;}
 
   /* home / entry ------------------------------------------------------ */
-  .app-only{display:none;}
-  body.in-app .app-only{display:inline-flex;}
-  body.in-app .seg.app-only{display:flex;}
-
-  /* Only the controls for the oracle you chose are shown, so neither path
-     ever presents the other one's buttons as something to try. */
-  .gadget-only,.paper-only{display:none;}
-  body.oracle-gadget .gadget-only{display:inline-flex;}
-  body.oracle-paper  .paper-only{display:inline-flex;}
-  body.oracle-paper  section.paper-only{display:block;}
+  /* Visibility is expressed by HIDING, never by forcing a display type: these
+     classes sit on buttons, sections and plain containers alike, so imposing
+     one value on all of them turns block containers into inline rows. When the
+     element should be visible no rule applies at all and it keeps its own. */
+  body:not(.in-app) .app-only{display:none;}
+  body:not(.oracle-gadget) .gadget-only{display:none;}
+  body:not(.oracle-paper) .paper-only{display:none;}
 
   .how-strip{
     list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
@@ -353,6 +347,29 @@
   }
   .linky:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
   @media(max-width:560px){.choice{padding:22px;}}
+
+  /* setup forks ------------------------------------------------------- */
+  .fork{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:6px;}
+  .forkbtn{
+    font:inherit;text-align:left;cursor:pointer;color:var(--ink-0);background:var(--bg-0);
+    border:1.5px solid var(--line-bright);border-radius:var(--r-sm);padding:16px 18px;
+    display:flex;flex-direction:column;gap:5px;transition:.18s;min-height:76px;
+  }
+  .forkbtn:hover{border-color:var(--cyan-dim);transform:translateY(-1px);}
+  .forkbtn:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
+  .forkbtn[aria-pressed="true"]{border-color:var(--cyan);background:rgba(94,234,212,.08);box-shadow:0 0 0 3px rgba(94,234,212,.1);}
+  .fk-t{font-weight:600;font-size:16px;}
+  .fk-s{color:var(--ink-1);font-size:14px;line-height:1.45;}
+  .forkbtn[aria-pressed="true"] .fk-s{color:var(--ink-0);}
+  .fork-panel{margin-top:18px;padding-top:18px;border-top:1px solid var(--line);}
+  .fork-panel[hidden]{display:none;}
+  .ready-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  .ready-line{
+    margin-top:18px;font-family:var(--mono);font-size:13px;color:var(--ink-2);
+    display:flex;align-items:center;gap:8px;min-height:20px;
+  }
+  .ready-line.ready{color:var(--green);}
+  .ready-line.ready::before{content:'✓';font-weight:700;}
 
   /* paper oracle ------------------------------------------------------ */
   .sheet-panel{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-0);}
@@ -486,94 +503,69 @@
   <div class="steps">
 
     <!-- STEP 1 -->
-    <section class="card step" id="card1">
-      <div class="step-h"><span class="num" aria-hidden="true">1</span><h3>Your secret phrase</h3></div>
-      <p class="help simple-only">Pick something only you know and can always remember. It never leaves this device.</p>
-      <p class="help expert-only">Master passphrase. Hashed with the index to a ristretto255 point; never transmitted.</p>
-      <div class="pw-row">
-        <input type="password" id="passphrase" placeholder="type your phrase…" autocomplete="off"
-               autocapitalize="off" spellcheck="false" aria-describedby="strengthText">
-        <button class="btn" id="togglePass" type="button" aria-label="Show or hide the phrase">show</button>
+    <!-- STEP 1 : get an oracle ready -->
+    <section class="card step" id="card0">
+      <div class="step-h">
+        <span class="num" aria-hidden="true">1</span>
+        <h3 class="gadget-only">Get your gadget ready</h3>
+        <h3 class="paper-only">Get your paper oracle ready</h3>
       </div>
-      <div class="strength" aria-hidden="false">
-        <div class="sbar"><i id="strengthBar"></i></div>
-        <div class="stext"><span id="strengthText">Waiting for your phrase…</span><span id="strengthTip"></span></div>
-      </div>
-    </section>
 
-    <!-- STEP 2 -->
-    <section class="card step" id="card2">
-      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Which account is this for?</h3></div>
-      <p class="help simple-only">Every account gets its own number, so every account gets a different password.
-        Give it a nickname and we'll remember the number for you — the nickname stays on this device only.</p>
-      <p class="help expert-only">Sub-index. Included in the hash-to-group input and the HKDF salt.
-        Nicknames are a local convenience in localStorage and never affect derivation.</p>
-      <div class="chips" id="accountChips" role="group" aria-label="Saved accounts"></div>
-      <div class="stepper">
-        <button class="btn rnd" id="idxDown" type="button" aria-label="Previous number">−</button>
-        <input type="number" id="index" value="0" min="0" step="1" aria-label="Account number">
-        <button class="btn rnd" id="idxUp" type="button" aria-label="Next number">+</button>
-        <button class="btn small" id="addAccount" type="button">Save nickname</button>
-      </div>
-    </section>
+      <!-- ---------- gadget ---------- -->
+      <div class="gadget-only">
+        <p class="help">Is this gadget brand new, or have you used it before?</p>
+        <div class="fork" role="group" aria-label="Gadget state">
+          <button type="button" class="forkbtn" id="forkFlash" aria-pressed="false">
+            <span class="fk-t">It's brand new</span>
+            <span class="fk-s">Needs its firmware installed first — once, then never again</span>
+          </button>
+          <button type="button" class="forkbtn" id="forkReady" aria-pressed="false">
+            <span class="fk-t">I've used it before</span>
+            <span class="fk-s">Just plug it in and connect</span>
+          </button>
+        </div>
 
-    <!-- STEP 3 -->
-    <section class="card step" id="card3">
-      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Choose a password style</h3></div>
-      <p class="help simple-only">Not sure? The first one is a good default. Some websites don't allow symbols —
-        then pick letters &amp; numbers.</p>
-      <p class="help expert-only">Second-stage HKDF keyed by format name, rejection-sampled into the charset.</p>
-      <div class="fmt-grid" id="fmtGrid" role="radiogroup" aria-label="Password style">
-        <div class="fmt-opt active" data-fmt="complex" data-label="strongest · 20 chars" role="radio" aria-checked="true" tabindex="0">
-          <span class="ft">Strongest</span><span class="fs">20 chars · with symbols</span></div>
-        <div class="fmt-opt" data-fmt="alnum" data-label="letters &amp; numbers · 16 chars" role="radio" aria-checked="false" tabindex="0">
-          <span class="ft">Letters &amp; numbers</span><span class="fs">16 chars · no symbols</span></div>
-        <div class="fmt-opt" data-fmt="b64url" data-label="web-safe · 20 chars" role="radio" aria-checked="false" tabindex="0">
-          <span class="ft">Web-safe</span><span class="fs">20 chars · base64url</span></div>
-        <div class="fmt-opt" data-fmt="pin" data-label="digits only · 6" role="radio" aria-checked="false" tabindex="0">
-          <span class="ft">Just digits</span><span class="fs">6-digit PIN</span></div>
-      </div>
-    </section>
+        <div class="fork-panel" id="panelFlash" hidden>
+          <p class="help">Plug the board into a USB port, then install the firmware. Your computer
+            will ask which device to talk to — pick the one that appears when you plug it in.</p>
+          <div class="actions">
+            <esp-web-install-button manifest="esp-manifest.json">
+              <button class="btn" slot="activate">Install firmware</button>
+            </esp-web-install-button>
+          </div>
+          <p class="help" style="margin:14px 0 0;">Done? Then carry on and connect it below.</p>
+        </div>
 
-    <!-- STEP 4 : action -->
-    <section class="card step" id="card4">
-      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Make my password</h3></div>
-      <p class="help simple-only" id="actionHelp">Plug in your gadget and press the big button.
-        No gadget handy? Try the demo — it shows how it works, but gives a pretend password.</p>
-      <p class="help expert-only">Derive against the hardware oracle over WebSerial, or the in-browser
-        simulator (ephemeral session key, not pinned).</p>
-
-      <div class="viz" id="viz" aria-hidden="true">
-        <div class="viz-inner">
-          <div class="node" id="nodeYou">💻</div>
-          <div class="wire" id="wireOut"><b></b></div>
-          <div class="node" id="nodeOracle">🔐</div>
-          <div class="wire" id="wireIn"><b></b></div>
-          <div class="node" id="nodeDone">🔑</div>
+        <div class="fork-panel" id="panelConnect" hidden>
+          <p class="help">Plug the gadget in and press connect. Your browser will ask permission to
+            talk to it — that permission is what keeps other pages away from it.</p>
+          <div class="actions">
+            <button class="btn" id="connectBtn">Connect my gadget</button>
+            <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
+          </div>
         </div>
       </div>
-      <div class="viz-label" id="vizLabel" aria-live="polite"></div>
 
-      <div class="actions">
-        <button class="btn primary" id="deriveBtn">Make my password</button>
-        <button class="btn" id="simBtn">Try the demo</button>
-      </div>
+      <!-- ---------- paper ---------- -->
+      <div class="paper-only">
+        <p class="help">Do you already have a printed square, or do you need to make one?</p>
+        <div class="fork" role="group" aria-label="Paper oracle state">
+          <button type="button" class="forkbtn" id="forkHave" aria-pressed="false">
+            <span class="fk-t">I already have one</span>
+            <span class="fk-s">Scan the square, or type the code under it</span>
+          </button>
+          <button type="button" class="forkbtn" id="forkCreate" aria-pressed="false">
+            <span class="fk-t">I need to make one</span>
+            <span class="fk-s">Takes a minute — you'll want a printer</span>
+          </button>
+        </div>
 
-      <div class="actions" style="margin-top:14px;">
-        <button class="btn small paper-only" id="sheetBtn">Use my paper oracle</button>
-        <button class="btn small gadget-only" id="connectBtn">Connect my gadget</button>
-        <button class="btn small gadget-only" id="disconnectBtn" disabled>Disconnect</button>
-        <esp-web-install-button manifest="esp-manifest.json" class="gadget-only">
-          <button class="btn small" slot="activate">Install firmware</button>
-        </esp-web-install-button>
-      </div>
-
-      <div class="sheet-panel" id="sheetPanel" style="display:none;">
+        <div class="fork-panel" id="panelScan" hidden>
+      <div class="sheet-panel" id="sheetPanel">
         <div class="sheet-status" id="sheetStatus">No paper oracle loaded</div>
         <div class="actions" style="margin-bottom:12px;">
           <button class="btn small" id="sheetScanBtn">Scan with camera</button>
           <button class="btn small" id="sheetStopBtn">Stop camera</button>
-          <button class="btn small" id="sheetForget" style="display:none;">Forget this oracle</button>
         </div>
         <div id="sheetScanArea" style="display:none;">
           <video id="sheetVideo" class="scan-video" muted playsinline></video>
@@ -588,36 +580,10 @@
         </div>
         <div class="sheet-error" id="sheetError" role="alert"></div>
       </div>
-    </section>
+        </div>
 
-    <!-- RESULT -->
-    <section class="result empty" id="resultCard" aria-live="polite">
-      <div class="demo-badge" id="demoBadge">⚠️ Demo only — this is not your real password</div>
-      <div class="pw" id="pwOut" style="display:none;"></div>
-      <div class="placeholder" id="pwPlaceholder">Your password will appear here</div>
-      <div class="result-meta">
-        <span id="resFmt">style: strongest · 20 chars</span>
-        <span id="resSource">source: —</span>
-      </div>
-      <div class="actions">
-        <button class="btn primary" id="copyBtn" disabled>Copy</button>
-        <button class="btn" id="revealBtn" disabled>Hide</button>
-      </div>
-    </section>
-
-    <!-- TRACE (expert) -->
-    <section class="card expert-only">
-      <div class="trace-head">
-        <h3>protocol trace</h3>
-        <button class="clear" id="clearTrace">clear</button>
-      </div>
-      <div id="trace"><div class="row"><span class="empty">— no handshake yet. derive a password to see the OPRF exchange step by step —</span></div></div>
-    </section>
-
-    <!-- CREATE A SHEET -->
-    <section class="card paper-only">
-      <div class="step-h"><span class="num" aria-hidden="true">＋</span><h3>Print your paper oracle</h3></div>
-      <p class="help">The gadget does a secret handshake to make your passwords. This prints a
+        <div class="fork-panel" id="panelCreate" hidden>
+<p class="help">The gadget does a secret handshake to make your passwords. This prints a
         square of paper that does that same handshake instead — so you don't need the gadget at all.
         Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
         password. <strong>No password is printed on it.</strong></p>
@@ -655,6 +621,113 @@
           <button class="btn primary" id="printSheetBtn">Print my paper oracle</button>
         </div>
       </div>
+        </div>
+      </div>
+
+      <div class="ready-row">
+        <div class="ready-line" id="oracleReady" aria-live="polite"></div>
+        <button class="btn small paper-only" id="sheetForget" style="display:none;">Forget this oracle</button>
+      </div>
+    </section>
+
+    <section class="card step" id="card1">
+      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Your secret phrase</h3></div>
+      <p class="help simple-only">Pick something only you know and can always remember. It never leaves this device.</p>
+      <p class="help expert-only">Master passphrase. Hashed with the index to a ristretto255 point; never transmitted.</p>
+      <div class="pw-row">
+        <input type="password" id="passphrase" placeholder="type your phrase…" autocomplete="off"
+               autocapitalize="off" spellcheck="false" aria-describedby="strengthText">
+        <button class="btn" id="togglePass" type="button" aria-label="Show or hide the phrase">show</button>
+      </div>
+      <div class="strength" aria-hidden="false">
+        <div class="sbar"><i id="strengthBar"></i></div>
+        <div class="stext"><span id="strengthText">Waiting for your phrase…</span><span id="strengthTip"></span></div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section class="card step" id="card2">
+      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Which account is this for?</h3></div>
+      <p class="help simple-only">Every account gets its own number, so every account gets a different password.
+        Give it a nickname and we'll remember the number for you — the nickname stays on this device only.</p>
+      <p class="help expert-only">Sub-index. Included in the hash-to-group input and the HKDF salt.
+        Nicknames are a local convenience in localStorage and never affect derivation.</p>
+      <div class="chips" id="accountChips" role="group" aria-label="Saved accounts"></div>
+      <div class="stepper">
+        <button class="btn rnd" id="idxDown" type="button" aria-label="Previous number">−</button>
+        <input type="number" id="index" value="0" min="0" step="1" aria-label="Account number">
+        <button class="btn rnd" id="idxUp" type="button" aria-label="Next number">+</button>
+        <button class="btn small" id="addAccount" type="button">Save nickname</button>
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="card step" id="card3">
+      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Choose a password style</h3></div>
+      <p class="help simple-only">Not sure? The first one is a good default. Some websites don't allow symbols —
+        then pick letters &amp; numbers.</p>
+      <p class="help expert-only">Second-stage HKDF keyed by format name, rejection-sampled into the charset.</p>
+      <div class="fmt-grid" id="fmtGrid" role="radiogroup" aria-label="Password style">
+        <div class="fmt-opt active" data-fmt="complex" data-label="strongest · 20 chars" role="radio" aria-checked="true" tabindex="0">
+          <span class="ft">Strongest</span><span class="fs">20 chars · with symbols</span></div>
+        <div class="fmt-opt" data-fmt="alnum" data-label="letters &amp; numbers · 16 chars" role="radio" aria-checked="false" tabindex="0">
+          <span class="ft">Letters &amp; numbers</span><span class="fs">16 chars · no symbols</span></div>
+        <div class="fmt-opt" data-fmt="b64url" data-label="web-safe · 20 chars" role="radio" aria-checked="false" tabindex="0">
+          <span class="ft">Web-safe</span><span class="fs">20 chars · base64url</span></div>
+        <div class="fmt-opt" data-fmt="pin" data-label="digits only · 6" role="radio" aria-checked="false" tabindex="0">
+          <span class="ft">Just digits</span><span class="fs">6-digit PIN</span></div>
+      </div>
+    </section>
+
+    <!-- STEP 4 : action -->
+    <section class="card step" id="card4">
+      <div class="step-h"><span class="num" aria-hidden="true">5</span><h3>Make my password</h3></div>
+      <p class="help simple-only" id="actionHelp">That's everything — press the big button.
+        You can come back and change the account number any time; the same phrase and number
+        always give the same password.</p>
+      <p class="help expert-only">Derive against the hardware oracle over WebSerial, or the in-browser
+        simulator (ephemeral session key, not pinned).</p>
+
+      <div class="viz" id="viz" aria-hidden="true">
+        <div class="viz-inner">
+          <div class="node" id="nodeYou">💻</div>
+          <div class="wire" id="wireOut"><b></b></div>
+          <div class="node" id="nodeOracle">🔐</div>
+          <div class="wire" id="wireIn"><b></b></div>
+          <div class="node" id="nodeDone">🔑</div>
+        </div>
+      </div>
+      <div class="viz-label" id="vizLabel" aria-live="polite"></div>
+
+      <div class="actions">
+        <button class="btn primary" id="deriveBtn">Make my password</button>
+        <button class="btn" id="simBtn">Try the demo</button>
+      </div>
+
+    </section>
+
+    <!-- RESULT -->
+    <section class="result empty" id="resultCard" aria-live="polite">
+      <div class="demo-badge" id="demoBadge">⚠️ Demo only — this is not your real password</div>
+      <div class="pw" id="pwOut" style="display:none;"></div>
+      <div class="placeholder" id="pwPlaceholder">Your password will appear here</div>
+      <div class="result-meta">
+        <span id="resFmt">style: strongest · 20 chars</span>
+        <span id="resSource">source: —</span>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="copyBtn" disabled>Copy</button>
+        <button class="btn" id="revealBtn" disabled>Hide</button>
+      </div>
+    </section>
+
+    <!-- TRACE (expert) -->
+    <section class="card expert-only">
+      <div class="trace-head">
+        <h3>protocol trace</h3>
+        <button class="clear" id="clearTrace">clear</button>
+      </div>
+      <div id="trace"><div class="row"><span class="empty">— no handshake yet. derive a password to see the OPRF exchange step by step —</span></div></div>
     </section>
 
   </div>

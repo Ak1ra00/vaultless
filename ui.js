@@ -245,6 +245,23 @@ function initFormatKeys() {
 }
 
 
+/* Exclusive reveal: picking one branch of a setup fork closes the other, so a
+ * step never shows two half-finished paths at once. */
+export function pickFork(panels, chosen) {
+  for (const [id, panelId] of Object.entries(panels)) {
+    const on = id === chosen;
+    $(id).setAttribute('aria-pressed', String(on));
+    $(panelId).hidden = !on;
+  }
+}
+
+export function setReady(text, ready) {
+  const el = $('oracleReady');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('ready', !!ready);
+}
+
 /* ------------------------------------------------------------------- nav */
 /* Two front doors. The choice decides which oracle's controls exist at all,
  * so neither path is ever shown the other one's buttons to guess at. Kept in
@@ -281,6 +298,12 @@ function routeFromHash() {
   return (h === 'gadget' || h === 'paper') ? h : null;
 }
 
+function initGadgetFork() {
+  const panels = { forkFlash: 'panelFlash', forkReady: 'panelConnect' };
+  $('forkFlash').onclick = () => pickFork(panels, 'forkFlash');
+  $('forkReady').onclick = () => pickFork(panels, 'forkReady');
+}
+
 function initNav() {
   let start = routeFromHash();
   if (!start) {
@@ -301,6 +324,7 @@ function initNav() {
 
 export function initChrome() {
   initNav();
+  initGadgetFork();
   initRain();
   initMode();
   initStrength();

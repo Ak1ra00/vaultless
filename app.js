@@ -8,7 +8,7 @@ import {
 } from './vendor/noble-bundle.js';
 import {
   initChrome, toast, setDemo, markResultFilled,
-  vizStart, vizOracle, vizReturn, vizDone, vizReset, getOracleChoice,
+  vizStart, vizOracle, vizReturn, vizDone, vizReset, getOracleChoice, setReady,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
 
@@ -184,6 +184,8 @@ function setConnected(state, label) {
   connLabel.textContent = label;
   connectBtn.disabled = state;
   disconnectBtn.disabled = !state;
+  document.getElementById('card0').classList.toggle('done', state);
+  setReady(state ? 'Gadget connected and ready' : 'Gadget not connected yet', state);
 }
 
 let lineBuffer = '';
@@ -286,9 +288,11 @@ disconnectBtn.onclick = disconnectSerial;
 
 // Reclaim the header pill whenever the route leaves paper mode.
 document.addEventListener('oraclechange', (e) => {
-  if (e.detail.choice === 'paper') return;
+  if (e.detail.choice !== 'gadget') return;
   connDot.className = 'dot' + (writer ? ' live' : '');
   connLabel.textContent = writer ? 'oracle connected' : 'oracle disconnected';
+  document.getElementById('card0').classList.toggle('done', !!writer);
+  setReady(writer ? 'Gadget connected and ready' : 'Gadget not connected yet', !!writer);
 });
 
 /* ---------------------------------------------------------------------
