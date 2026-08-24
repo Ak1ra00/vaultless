@@ -126,10 +126,10 @@ jobs:
           fi
           git commit -m "chore(firmware): update firmware_merged.bin [skip ci]"
           # Passed through the environment rather than interpolated into the
-          # shell: a ${{ }} expansion inside run: is substituted before bash
-          # ever sees it, so a ref name carrying shell metacharacters would be
-          # executed. Constrained to main by the trigger today; this keeps it
-          # safe if that ever widens.
+          # shell. Workflow expressions are substituted into run: blocks before
+          # bash ever sees them, so a ref name carrying shell metacharacters
+          # would be executed. Constrained to main by the trigger today; this
+          # keeps it safe if that ever widens.
           git push origin "HEAD:refs/heads/$TARGET_REF"
 
       - name: Upload build artifacts (debug)
