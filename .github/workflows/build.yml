@@ -46,10 +46,11 @@ jobs:
 
       - name: Locate build artifacts
         id: artifacts
-        working-directory: firmware
         run: |
           set -euo pipefail
-          BUILD_DIR=".pio/build/esp32dev"
+          # Emitted paths are consumed by later steps that run from the repo
+          # root, so they must include the firmware/ prefix.
+          BUILD_DIR="firmware/.pio/build/esp32dev"
           echo "build_dir=$BUILD_DIR" >> "$GITHUB_OUTPUT"
 
           FW_BIN="$BUILD_DIR/firmware.bin"
@@ -74,11 +75,11 @@ jobs:
 
       - name: Merge partitions into single flashable image
         run: |
-          python -m esptool --chip esp32 merge_bin \
+          python -m esptool --chip esp32 merge-bin \
             -o firmware_merged.bin \
-            --flash_mode dio \
-            --flash_freq 40m \
-            --flash_size 4MB \
+            --flash-mode dio \
+            --flash-freq 40m \
+            --flash-size 4MB \
             0x1000   "${{ steps.artifacts.outputs.bootloader_bin }}" \
             0x8000   "${{ steps.artifacts.outputs.partitions_bin }}" \
             0xe000   "${{ steps.artifacts.outputs.boot_app0_bin }}" \
