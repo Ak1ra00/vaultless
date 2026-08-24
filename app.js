@@ -6,6 +6,10 @@ import {
   bytesToHex, hexToBytes, bytesToNumberLE, numberToBytesLE,
   utf8ToBytes, concatBytes, invert, hkdf, sha256, sha512,
 } from './vendor/noble-bundle.js';
+import {
+  initChrome, toast, setDemo, markResultFilled,
+  vizStart, vizOracle, vizReturn, vizDone, vizReset,
+} from './ui.js';
 
 /* ---------------------------------------------------------------------
  * Group order L of ristretto255 / ed25519 (RFC 9380 / RFC 8032).
@@ -298,10 +302,15 @@ document.getElementById('deriveBtn').onclick = () => runDerivation(false);
 let selectedFormat = 'complex';
 document.querySelectorAll('.fmt-opt').forEach(el => {
   el.onclick = () => {
-    document.querySelectorAll('.fmt-opt').forEach(o => o.classList.remove('active'));
+    document.querySelectorAll('.fmt-opt').forEach(o => {
+      o.classList.remove('active');
+      o.setAttribute('aria-checked', 'false');
+    });
     el.classList.add('active');
+    el.setAttribute('aria-checked', 'true');
     selectedFormat = el.dataset.fmt;
-    document.getElementById('resFmt').textContent = `format: ${el.textContent.trim()}`;
+    document.getElementById('resFmt').textContent = `style: ${el.dataset.label}`;
+    document.getElementById('card3').classList.add('done');
   };
 });
 
@@ -385,7 +394,8 @@ async function runDerivation(useSimulator) {
   }
 
   deriveBtn.disabled = true; simBtn.disabled = true;
-  document.getElementById('resSource').textContent = `source: ${useSimulator ? 'simulator' : 'hardware oracle'}`;
+  setDemo(useSimulator);
+  document.getElementById('resSource').textContent = `source: ${useSimulator ? 'demo simulator' : 'your gadget'}`;
 
   try {
     trace('1/7', `hashing "${index}" to a ristretto255 point`);
@@ -399,15 +409,20 @@ async function runDerivation(useSimulator) {
     trace('2/7', `B = ${blindedHex.slice(0, 16)}…`);
 
     trace('3/7', `sending {index, point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
+    vizStart('sending a disguised request…');
     let response;
     if (useSimulator) {
+      vizOracle('the demo key is stamping it…');
+      await new Promise(r => setTimeout(r, 700));   // let the animation read
       response = simulateOracle(blindedHex);
     } else {
+      vizOracle('your gadget is stamping it…');
       response = await sendToOracle({ index, point: blindedHex });
     }
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);
     if (!response.point) throw new Error('oracle response missing point');
     trace('4/7', `received B' = ${response.point.slice(0, 16)}…`);
+    vizReturn('stamped answer coming back…');
 
     trace('5/7', 'verifying DLEQ proof that B\' = k·B under the pinned key');
     const Bp = verifyOracleResponse(response, B, !useSimulator);
@@ -424,9 +439,12 @@ async function runDerivation(useSimulator) {
 
     const password = formatPassword(oprfOutput, selectedFormat);
     showResult(password);
+    vizDone(useSimulator ? 'demo password ready' : 'your password is ready');
     trace('done', `password derived · ${password.length} chars`);
   } catch (e) {
     trace('error', e.message, true);
+    vizReset();
+    toast(e.message.length > 70 ? 'Could not make a password — see the trace' : e.message);
   } finally {
     deriveBtn.disabled = false; simBtn.disabled = false;
   }
@@ -437,7 +455,15 @@ function showResult(pw) {
   const el = document.getElementById('pwOut');
   el.style.display = 'block';
   el.textContent = pw;
+  el.classList.remove('hidden-pw');
+  el.classList.remove('reveal');
+  void el.offsetWidth;            // restart the entrance animation
+  el.classList.add('reveal');
+  const reveal = document.getElementById('revealBtn');
+  reveal.disabled = false;
+  reveal.textContent = 'Hide';
   document.getElementById('copyBtn').disabled = false;
+  markResultFilled(true);
 }
 
 const CLIPBOARD_CLEAR_MS = 60000;
@@ -448,8 +474,9 @@ document.getElementById('copyBtn').onclick = async () => {
   await navigator.clipboard.writeText(pw);
   const btn = document.getElementById('copyBtn');
   const original = btn.textContent;
-  btn.textContent = 'copied ✓';
+  btn.textContent = 'Copied ✓';
   setTimeout(() => (btn.textContent = original), 1400);
+  toast('Copied — clears from the clipboard in 60 seconds');
   // Best-effort clipboard scrub, so a derived password does not sit in the
   // system clipboard indefinitely. Only clears if we still own what we wrote.
   clearTimeout(clipboardTimer);
@@ -462,3 +489,6 @@ document.getElementById('copyBtn').onclick = async () => {
     } catch { /* permission denied or not focused — leave it alone */ }
   }, CLIPBOARD_CLEAR_MS);
 };
+
+/* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
+initChrome();

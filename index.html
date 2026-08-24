@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>vaultless · 2P-OPRF password oracle</title>
+<title>vaultless · passwords from thin air</title>
 <meta name="description" content="A vaultless deterministic password manager backed by a two-party OPRF and a physical hardware oracle.">
 <meta name="theme-color" content="#07090b">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -16,388 +16,537 @@
 <script type="module" src="vendor/esp-web-tools/install-button.js"></script>
 <style>
   :root{
-    --bg-0:#07090b;
-    --bg-1:#0d1114;
-    --bg-2:#12171b;
-    --line:#1e262b;
-    --line-bright:#2a353c;
-    --ink-0:#e8f1ee;
-    --ink-1:#9db3ae;
-    --ink-2:#5f7570;
-    --cyan:#5eead4;
-    --cyan-dim:#2f6b62;
-    --amber:#f2b263;
-    --amber-dim:#7a5a2e;
-    --red:#ef6a5f;
+    --bg-0:#07090b; --bg-1:#0d1114; --bg-2:#141a1f; --bg-3:#1a2228;
+    --line:#1e262b; --line-bright:#2f3d45;
+    --ink-0:#eaf4f1; --ink-1:#a3bab5; --ink-2:#6b817c;
+    --cyan:#5eead4; --cyan-hot:#8affe4; --cyan-dim:#2f6b62;
+    --violet:#a98bff; --amber:#f2b263; --red:#ef6a5f; --green:#5ee89a;
     --mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --sans:'IBM Plex Sans', system-ui, sans-serif;
+    --sans:'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+    --r:16px; --r-sm:10px;
+    --shadow:0 8px 32px rgba(0,0,0,.5);
+    --glow:0 0 0 1px rgba(94,234,212,.35), 0 0 28px rgba(94,234,212,.22);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
   body{
+    background:var(--bg-0); color:var(--ink-0); font-family:var(--sans);
+    font-size:17px; line-height:1.55; min-height:100vh;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  ::selection{background:var(--cyan-dim);color:#fff;}
+  a{color:var(--cyan);text-underline-offset:3px;}
+  h1,h2,h3{line-height:1.2;margin:0;}
+
+  /* animated backdrop ------------------------------------------------ */
+  #rain{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.5;pointer-events:none;}
+  .aurora{
+    position:fixed;inset:0;z-index:0;pointer-events:none;
     background:
-      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(94,234,212,0.06), transparent 60%),
-      var(--bg-0);
-    color:var(--ink-0);
-    font-family:var(--sans);
-    min-height:100vh;
-    -webkit-font-smoothing:antialiased;
+      radial-gradient(900px 500px at 15% -5%, rgba(94,234,212,.16), transparent 60%),
+      radial-gradient(700px 500px at 92% 8%, rgba(169,139,255,.13), transparent 60%),
+      radial-gradient(900px 600px at 50% 105%, rgba(94,234,212,.07), transparent 60%);
+    animation:drift 22s ease-in-out infinite alternate;
   }
-  ::selection{background:var(--cyan-dim);color:var(--ink-0);}
-  a{color:var(--cyan);}
+  @keyframes drift{to{transform:translate3d(0,-18px,0) scale(1.04);}}
 
-  .wrap{max-width:960px;margin:0 auto;padding:28px 20px 80px;}
+  .wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:22px 20px 90px;}
 
-  /* ---------- header / signature strip ---------- */
-  header.top{
-    display:flex;align-items:center;justify-content:space-between;gap:16px;
-    padding-bottom:22px;border-bottom:1px solid var(--line);margin-bottom:26px;
-    flex-wrap:wrap;
-  }
-  .brand{display:flex;align-items:baseline;gap:10px;}
+  /* header ------------------------------------------------------------ */
+  header.top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:30px;}
+  .brand{display:flex;align-items:center;gap:12px;}
   .brand .mark{
-    font-family:var(--mono);font-weight:700;font-size:15px;letter-spacing:.02em;
-    color:var(--bg-0);background:var(--cyan);padding:3px 7px;border-radius:3px;
+    font-family:var(--mono);font-weight:700;font-size:16px;color:#04100d;
+    background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));
+    padding:6px 9px;border-radius:8px;box-shadow:0 0 22px rgba(94,234,212,.45);
   }
-  .brand h1{font-family:var(--mono);font-size:16px;font-weight:600;margin:0;color:var(--ink-0);letter-spacing:.01em;}
-  .brand small{font-family:var(--mono);color:var(--ink-2);font-size:12px;}
+  .brand h1{font-size:23px;letter-spacing:-.02em;font-weight:600;}
+  .brand small{display:block;color:var(--ink-2);font-family:var(--mono);font-size:11.5px;}
+  .head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 
-  .conn{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--ink-1);}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-2);box-shadow:0 0 0 3px transparent;transition:.25s;}
-  .dot.live{background:var(--cyan);box-shadow:0 0 0 3px rgba(94,234,212,.15);}
-  .dot.warn{background:var(--amber);box-shadow:0 0 0 3px rgba(242,178,99,.15);}
+  .seg{display:flex;background:var(--bg-2);border:1px solid var(--line);border-radius:999px;padding:3px;}
+  .seg button{
+    font:inherit;font-size:13.5px;font-weight:600;color:var(--ink-2);background:none;border:0;
+    padding:7px 16px;border-radius:999px;cursor:pointer;transition:.18s;min-height:36px;
+  }
+  .seg button[aria-pressed="true"]{background:var(--cyan);color:#04100d;box-shadow:0 0 16px rgba(94,234,212,.4);}
+  .seg button:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:2px;}
 
-  /* ---------- signature element: live protocol trace ---------- */
-  .trace-band{
-    border:1px solid var(--line);border-radius:10px;background:var(--bg-1);
-    overflow:hidden;margin-bottom:26px;
+  .conn{
+    display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--ink-1);
+    background:var(--bg-2);border:1px solid var(--line);border-radius:999px;padding:7px 14px;
   }
-  .trace-head{
-    display:flex;justify-content:space-between;align-items:center;
-    padding:10px 14px;border-bottom:1px solid var(--line);
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-2);flex:none;}
+  .dot.live{background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{50%{opacity:.45;}}
+
+  /* hero -------------------------------------------------------------- */
+  .hero{text-align:center;padding:6px 0 34px;}
+  .hero h2{font-size:clamp(30px,5.2vw,50px);font-weight:600;letter-spacing:-.03em;margin-bottom:12px;}
+  .hero h2 .grad{
+    background:linear-gradient(100deg,var(--cyan-hot),var(--violet));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
   }
-  .trace-head h2{
-    font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;
-    color:var(--ink-2);margin:0;font-weight:600;
+  .hero p{color:var(--ink-1);font-size:18px;max-width:620px;margin:0 auto;}
+
+  /* steps ------------------------------------------------------------- */
+  .steps{display:grid;gap:16px;}
+  .card{
+    background:linear-gradient(180deg,rgba(20,26,31,.92),rgba(13,17,20,.92));
+    border:1px solid var(--line);border-radius:var(--r);padding:22px;
+    box-shadow:var(--shadow);backdrop-filter:blur(10px);
   }
-  .trace-head .clear{
-    font-family:var(--mono);font-size:11px;color:var(--ink-2);background:none;border:none;
-    cursor:pointer;letter-spacing:.05em;
+  .card.step{transition:border-color .25s, box-shadow .25s;}
+  .card.step:focus-within{border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 0 1px var(--cyan-dim);}
+  .step-h{display:flex;align-items:center;gap:13px;margin-bottom:6px;}
+  .num{
+    width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:50%;
+    font-family:var(--mono);font-weight:700;font-size:15px;
+    background:var(--bg-3);color:var(--cyan);border:1px solid var(--cyan-dim);
   }
-  .trace-head .clear:hover{color:var(--ink-0);}
+  .card.done .num{background:var(--cyan);color:#04100d;border-color:var(--cyan);box-shadow:0 0 18px rgba(94,234,212,.45);}
+  .step-h h3{font-size:20px;font-weight:600;}
+  .help{color:var(--ink-1);font-size:15px;margin:0 0 16px 47px;}
+  @media(max-width:560px){.help{margin-left:0;}}
+
+  /* inputs ------------------------------------------------------------ */
+  .pw-row{display:flex;gap:10px;}
+  input[type=password],input[type=text],input[type=number]{
+    flex:1;width:100%;font:inherit;font-size:18px;color:var(--ink-0);
+    background:var(--bg-0);border:1.5px solid var(--line-bright);border-radius:var(--r-sm);
+    padding:15px 16px;transition:.18s;min-height:56px;
+  }
+  input::placeholder{color:var(--ink-2);}
+  input:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 4px rgba(94,234,212,.14);}
+  input[type=password]{font-family:var(--mono);letter-spacing:.14em;}
+
+  button{font-family:inherit;}
+  .btn{
+    font:inherit;font-size:16px;font-weight:600;cursor:pointer;border-radius:var(--r-sm);
+    padding:15px 22px;min-height:56px;border:1.5px solid var(--line-bright);
+    background:var(--bg-3);color:var(--ink-0);transition:.18s;display:inline-flex;
+    align-items:center;justify-content:center;gap:9px;
+  }
+  .btn:hover:not(:disabled){border-color:var(--cyan-dim);background:var(--bg-2);transform:translateY(-1px);}
+  .btn:active:not(:disabled){transform:translateY(1px) scale(.99);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
+  .btn.primary{
+    background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));color:#04100d;border-color:transparent;
+    box-shadow:0 0 26px rgba(94,234,212,.32);font-size:18px;padding:18px 30px;min-height:62px;
+  }
+  .btn.primary:hover:not(:disabled){box-shadow:0 0 40px rgba(94,234,212,.5);}
+  .btn.small{font-size:14px;padding:10px 15px;min-height:44px;}
+  .btn.wide{width:100%;}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;}
+
+  /* strength ---------------------------------------------------------- */
+  .strength{margin-top:14px;}
+  .sbar{height:8px;border-radius:999px;background:var(--bg-3);overflow:hidden;}
+  .sbar i{display:block;height:100%;width:0;border-radius:999px;transition:width .45s cubic-bezier(.2,.8,.2,1),background .45s;}
+  .stext{font-size:13.5px;color:var(--ink-1);margin-top:8px;display:flex;justify-content:space-between;gap:10px;}
+
+  /* accounts ---------------------------------------------------------- */
+  .chips{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;}
+  .chip{
+    font:inherit;font-size:14.5px;cursor:pointer;border-radius:999px;padding:9px 16px;min-height:42px;
+    background:var(--bg-3);border:1.5px solid var(--line-bright);color:var(--ink-1);transition:.16s;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .chip:hover{border-color:var(--cyan-dim);color:var(--ink-0);}
+  .chip[aria-pressed="true"]{background:var(--cyan);color:#04100d;border-color:var(--cyan);font-weight:600;box-shadow:0 0 18px rgba(94,234,212,.35);}
+  .chip .x{opacity:.55;font-size:16px;line-height:1;}
+  .chip .x:hover{opacity:1;}
+  .chip.add{border-style:dashed;color:var(--ink-2);}
+  .stepper{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  /* The number must never be squeezed to nothing on a narrow screen. */
+  .stepper input{flex:0 1 110px;min-width:86px;max-width:130px;text-align:center;font-family:var(--mono);font-size:20px;}
+  .stepper #addAccount{white-space:nowrap;}
+  .rnd{width:52px;height:52px;flex:none;border-radius:50%;font-size:24px;padding:0;min-height:52px;}
+
+  /* formats ----------------------------------------------------------- */
+  .fmt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px;}
+  .fmt-opt{
+    cursor:pointer;border:1.5px solid var(--line-bright);border-radius:var(--r-sm);
+    padding:15px 16px;background:var(--bg-0);transition:.16s;min-height:64px;
+    display:flex;flex-direction:column;justify-content:center;gap:3px;
+  }
+  .fmt-opt:hover{border-color:var(--cyan-dim);}
+  .fmt-opt .ft{font-weight:600;font-size:15.5px;}
+  .fmt-opt .fs{font-family:var(--mono);font-size:12px;color:var(--ink-2);}
+  .fmt-opt.active{border-color:var(--cyan);background:rgba(94,234,212,.08);box-shadow:0 0 0 3px rgba(94,234,212,.1);}
+  .fmt-opt.active .fs{color:var(--cyan);}
+  .fmt-opt:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:2px;}
+
+  /* result ------------------------------------------------------------ */
+  .result{
+    border:1.5px solid var(--cyan-dim);border-radius:var(--r);padding:26px;text-align:center;
+    background:linear-gradient(180deg,rgba(94,234,212,.07),rgba(13,17,20,.92));position:relative;overflow:hidden;
+  }
+  .result.empty{border-color:var(--line);background:linear-gradient(180deg,rgba(20,26,31,.9),rgba(13,17,20,.9));}
+  .pw{
+    font-family:var(--mono);font-size:clamp(20px,4.4vw,34px);font-weight:600;letter-spacing:.04em;
+    word-break:break-all;color:var(--cyan-hot);text-shadow:0 0 26px rgba(94,234,212,.45);margin:6px 0 4px;
+  }
+  .pw.hidden-pw{filter:blur(11px);user-select:none;}
+  .placeholder{color:var(--ink-2);font-size:16px;padding:14px 0;}
+  .result-meta{display:flex;justify-content:center;gap:8px 20px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);margin-top:10px;}
+  .demo-badge{
+    display:none;align-items:center;gap:8px;justify-content:center;margin-bottom:14px;
+    background:rgba(242,178,99,.14);border:1px solid var(--amber);color:var(--amber);
+    border-radius:999px;padding:9px 18px;font-size:14px;font-weight:600;
+  }
+  .demo-badge.on{display:inline-flex;}
+  .result .actions{justify-content:center;margin-top:18px;}
+  @keyframes popin{from{opacity:0;transform:translateY(10px) scale(.96);}to{opacity:1;transform:none;}}
+  .pw.reveal{animation:popin .45s cubic-bezier(.2,.9,.3,1.2);}
+
+  /* handshake viz ----------------------------------------------------- */
+  .viz{height:0;overflow:hidden;transition:height .35s ease;}
+  .viz.on{height:96px;}
+  .viz-inner{display:flex;align-items:center;justify-content:center;gap:0;height:96px;}
+  .node{
+    width:56px;height:56px;border-radius:14px;display:grid;place-items:center;flex:none;
+    background:var(--bg-3);border:1.5px solid var(--line-bright);font-size:22px;transition:.3s;
+  }
+  .node.hot{border-color:var(--cyan);box-shadow:0 0 24px rgba(94,234,212,.5);}
+  .wire{flex:1;max-width:190px;height:3px;background:var(--bg-3);position:relative;border-radius:2px;}
+  .wire b{
+    position:absolute;top:50%;width:12px;height:12px;border-radius:50%;margin-top:-6px;
+    background:var(--cyan);box-shadow:0 0 16px var(--cyan);opacity:0;
+  }
+  .wire.go b{animation:travel 1.05s cubic-bezier(.5,0,.5,1) forwards;}
+  .wire.back b{animation:travelback 1.05s cubic-bezier(.5,0,.5,1) forwards;}
+  @keyframes travel{0%{left:0;opacity:0;}12%{opacity:1;}88%{opacity:1;}100%{left:100%;opacity:0;}}
+  @keyframes travelback{0%{left:100%;opacity:0;}12%{opacity:1;}88%{opacity:1;}100%{left:0;opacity:0;}}
+  .viz-label{text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--cyan);margin-top:-6px;min-height:18px;}
+
+  /* trace / expert ---------------------------------------------------- */
+  .expert-only{display:none;}
+  body.expert .expert-only{display:block;}
+  body.expert .expert-only.flexy{display:flex;}
+  .simple-only{display:block;}
+  body.expert .simple-only{display:none;}
+
+  .trace-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .trace-head h3{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-2);font-weight:500;}
+  .clear{font:inherit;font-family:var(--mono);font-size:12px;color:var(--ink-2);background:none;border:0;cursor:pointer;padding:6px 10px;border-radius:6px;}
+  .clear:hover{color:var(--cyan);background:var(--bg-3);}
   #trace{
-    height:168px;overflow-y:auto;padding:10px 14px;font-family:var(--mono);font-size:12px;line-height:1.65;
+    font-family:var(--mono);font-size:12.5px;line-height:1.75;max-height:230px;overflow-y:auto;
+    background:var(--bg-0);border:1px solid var(--line);border-radius:var(--r-sm);padding:14px;
   }
-  #trace .row{display:flex;gap:10px;white-space:pre-wrap;word-break:break-all;}
-  #trace .t{color:var(--ink-2);flex-shrink:0;}
-  #trace .step{color:var(--cyan);flex-shrink:0;}
-  #trace .msg{color:var(--ink-1);}
-  #trace .err{color:var(--red);}
+  #trace .row{display:flex;gap:11px;}
+  #trace .t{color:var(--ink-2);flex:none;}
+  #trace .step{color:var(--cyan);flex:none;min-width:34px;}
+  #trace .msg{color:var(--ink-1);word-break:break-word;}
+  #trace .err{color:var(--red);word-break:break-word;}
   #trace .empty{color:var(--ink-2);font-style:italic;}
 
-  /* ---------- layout: form + result ---------- */
-  .grid{display:grid;grid-template-columns:1fr;gap:18px;}
-  @media(min-width:760px){.grid{grid-template-columns:1.1fr .9fr;align-items:start;}}
-
-  .panel{
-    border:1px solid var(--line);border-radius:10px;background:var(--bg-1);padding:20px;
+  /* docs -------------------------------------------------------------- */
+  details.learn{margin-top:16px;border:1px solid var(--line);border-radius:var(--r);background:rgba(13,17,20,.85);overflow:hidden;}
+  details.learn>summary{
+    cursor:pointer;padding:18px 22px;font-weight:600;font-size:17px;list-style:none;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
   }
-  .panel h2{
-    font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.12em;
-    color:var(--ink-2);margin:0 0 16px;font-weight:600;
+  details.learn>summary::-webkit-details-marker{display:none;}
+  details.learn>summary::after{content:'+';font-family:var(--mono);font-size:22px;color:var(--cyan);transition:.25s;}
+  details.learn[open]>summary::after{transform:rotate(45deg);}
+  details.learn>summary:hover{background:var(--bg-2);}
+  details.learn>summary:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:-2px;}
+  .learn-body{padding:0 22px 22px;}
+  .docs-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px;}
+  @media(max-width:820px){.docs-grid{grid-template-columns:1fr;}}
+  .doc-p{color:var(--ink-1);font-size:15.5px;margin:0 0 12px;}
+  .doc-steps,.doc-list{color:var(--ink-1);font-size:15px;padding-left:20px;margin:0 0 12px;}
+  .doc-steps li,.doc-list li{margin-bottom:9px;}
+  .lbl{font-family:var(--mono);font-size:11.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);}
+  .doc-code{
+    font-family:var(--mono);font-size:13px;background:var(--bg-0);border:1px solid var(--line);
+    border-radius:var(--r-sm);padding:14px;overflow-x:auto;color:var(--ink-1);
   }
-
-  .field{margin-bottom:16px;}
-  .field label{
-    display:block;font-family:var(--mono);font-size:12px;color:var(--ink-1);margin-bottom:7px;letter-spacing:.02em;
-  }
-  .field .hint{color:var(--ink-2);font-weight:400;}
-  input[type=text],input[type=password],input[type=number],select{
-    width:100%;background:var(--bg-0);border:1px solid var(--line-bright);color:var(--ink-0);
-    padding:11px 12px;border-radius:7px;font-family:var(--mono);font-size:14px;outline:none;
-    transition:border-color .15s, box-shadow .15s;
-  }
-  input:focus,select:focus{
-    border-color:var(--cyan);box-shadow:0 0 0 3px rgba(94,234,212,.12);
-  }
-  .pw-row{display:flex;gap:8px;}
-  .pw-row input{flex:1;}
-  .iconbtn{
-    background:var(--bg-2);border:1px solid var(--line-bright);border-radius:7px;color:var(--ink-1);
-    padding:0 12px;cursor:pointer;font-family:var(--mono);font-size:12px;
-  }
-  .iconbtn:hover{color:var(--ink-0);border-color:var(--ink-2);}
-
-  .fmt-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
-  .fmt-opt{
-    border:1px solid var(--line-bright);border-radius:7px;padding:10px 12px;cursor:pointer;
-    font-family:var(--mono);font-size:12.5px;color:var(--ink-1);background:var(--bg-0);
-    transition:.15s;
-  }
-  .fmt-opt.active{border-color:var(--cyan);color:var(--cyan);background:rgba(94,234,212,.06);}
-  .fmt-opt:hover{border-color:var(--ink-2);}
-
-  .actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;}
-  button.primary{
-    background:var(--cyan);color:var(--bg-0);border:none;border-radius:7px;
-    font-family:var(--mono);font-weight:600;font-size:13px;padding:12px 18px;cursor:pointer;
-    letter-spacing:.02em;transition:transform .1s, opacity .15s;
-  }
-  button.primary:hover{opacity:.9;}
-  button.primary:active{transform:scale(.98);}
-  button.primary:disabled{opacity:.35;cursor:not-allowed;}
-  button.ghost{
-    background:transparent;border:1px solid var(--line-bright);color:var(--ink-1);
-    border-radius:7px;font-family:var(--mono);font-size:13px;padding:12px 16px;cursor:pointer;
-  }
-  button.ghost:hover{border-color:var(--ink-2);color:var(--ink-0);}
-
-  /* result panel */
-  .result-display{
-    background:var(--bg-0);border:1px solid var(--line-bright);border-radius:8px;
-    padding:18px 14px;text-align:center;margin-bottom:14px;min-height:64px;
-    display:flex;align-items:center;justify-content:center;
-  }
-  .result-display .pw{
-    font-family:var(--mono);font-size:19px;letter-spacing:.03em;color:var(--ink-0);word-break:break-all;
-  }
-  .result-display .placeholder{color:var(--ink-2);font-family:var(--mono);font-size:13px;}
-  .result-meta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-2);margin-bottom:16px;}
-
-  .oracle-state{
-    border-top:1px solid var(--line);margin-top:18px;padding-top:16px;
-  }
-  .oracle-state .lbl{font-family:var(--mono);font-size:11px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;}
-  .esp-row{margin-top:4px;}
-  esp-web-install-button{--esp-tools-button-color:var(--cyan);}
-  esp-web-install-button::part(activate-button){
-    font-family:var(--mono);font-size:13px;background:var(--bg-2);color:var(--cyan);
-    border:1px solid var(--cyan-dim);border-radius:7px;padding:10px 16px;
-  }
+  .pin-table{width:100%;border-collapse:collapse;font-size:14px;color:var(--ink-1);}
+  .pin-table td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+  .pin-table td:first-child{color:var(--ink-0);width:38%;}
+  code,em{font-family:var(--mono);font-style:normal;color:var(--cyan);}
 
   .foot{
-    margin-top:34px;padding-top:18px;border-top:1px solid var(--line);
-    font-family:var(--mono);font-size:11px;color:var(--ink-2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+    display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:34px;
+    padding-top:20px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:12px;color:var(--ink-2);
   }
+  .badge{color:var(--cyan);}
+  .badge.warn{color:var(--amber);}
 
-  .badge{
-    display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
-    padding:2px 7px;border-radius:4px;border:1px solid var(--line-bright);color:var(--ink-2);
+  .toast{
+    position:fixed;left:50%;bottom:30px;transform:translate(-50%,200%);z-index:50;
+    opacity:0;visibility:hidden;pointer-events:none;
+    background:var(--cyan);color:#04100d;font-weight:600;padding:14px 26px;border-radius:999px;
+    box-shadow:0 8px 40px rgba(94,234,212,.45);
+    transition:transform .38s cubic-bezier(.2,.9,.3,1.3), opacity .25s, visibility .25s;
   }
-  .badge.on{border-color:var(--cyan-dim);color:var(--cyan);}
-  .badge.warn{border-color:var(--amber-dim);color:var(--amber);}
+  .toast.on{transform:translate(-50%,0);opacity:1;visibility:visible;}
 
-  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important;}}
-
-  /* ---------- project story / hardware docs ---------- */
-  .docs-grid{display:grid;grid-template-columns:1fr;gap:22px;}
-  @media(min-width:760px){.docs-grid{grid-template-columns:1fr 1fr;}}
-  .doc-p{font-family:var(--sans);font-size:13px;color:var(--ink-1);line-height:1.65;margin:0 0 12px;}
-  .doc-p strong{color:var(--ink-0);font-weight:600;}
-  .doc-p em,.doc-list em,.doc-steps em{font-family:var(--mono);color:var(--cyan);font-style:normal;}
-  .doc-p code{font-family:var(--mono);color:var(--cyan);background:var(--bg-0);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px;}
-  .doc-p a,.doc-list a{color:var(--cyan);text-decoration:none;border-bottom:1px solid var(--cyan-dim);}
-  .doc-p a:hover,.doc-list a:hover{border-color:var(--cyan);}
-  .doc-steps,.doc-list{margin:0 0 12px;padding-left:20px;font-family:var(--sans);font-size:13px;color:var(--ink-1);line-height:1.6;}
-  .doc-steps li,.doc-list li{margin-bottom:8px;}
-  .pin-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px;color:var(--ink-1);}
-  .pin-table td{padding:7px 0;border-bottom:1px solid var(--line);vertical-align:top;}
-  .pin-table td:first-child{color:var(--ink-0);white-space:nowrap;padding-right:12px;}
-  .pin-table td:last-child{text-align:right;white-space:nowrap;}
-  .doc-code{font-family:var(--mono);font-size:12px;color:var(--ink-0);background:var(--bg-0);border:1px solid var(--line-bright);border-radius:7px;padding:12px 14px;overflow-x:auto;line-height:1.6;margin:0;}
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;}
+    html{scroll-behavior:auto;}
+    #rain{display:none;}
+  }
 </style>
 </head>
 <body>
+<canvas id="rain" aria-hidden="true"></canvas>
+<div class="aurora" aria-hidden="true"></div>
+
 <div class="wrap">
 
   <header class="top">
     <div class="brand">
-      <span class="mark">2P</span>
+      <span class="mark" aria-hidden="true">2P</span>
       <div>
         <h1>vaultless</h1>
-        <small>oblivious PRF password oracle · ristretto255</small>
+        <small>passwords from thin air</small>
       </div>
     </div>
-    <div class="conn">
-      <span class="dot" id="connDot"></span>
-      <span id="connLabel">oracle disconnected</span>
+    <div class="head-right">
+      <div class="seg" role="group" aria-label="Detail level">
+        <button id="modeSimple" type="button" aria-pressed="true">Simple</button>
+        <button id="modeExpert" type="button" aria-pressed="false">Expert</button>
+      </div>
+      <div class="conn">
+        <span class="dot" id="connDot" aria-hidden="true"></span>
+        <span id="connLabel">oracle disconnected</span>
+      </div>
     </div>
   </header>
 
-  <!-- signature element: the live handshake trace -->
-  <section class="trace-band">
-    <div class="trace-head">
-      <h2>protocol trace</h2>
-      <button class="clear" id="clearTrace">clear</button>
-    </div>
-    <div id="trace"><div class="row"><span class="empty">— no handshake yet. derive a password to see the OPRF exchange step by step —</span></div></div>
-  </section>
+  <div class="hero">
+    <h2>Your passwords, <span class="grad">remembered by nobody</span></h2>
+    <p class="simple-only">Type one phrase you already know. Your little gadget does a secret handshake.
+      Out comes a strong password — the same one, every single time. Nothing is ever saved anywhere.</p>
+    <p class="expert-only">Deterministic derivation through a two-party oblivious PRF over ristretto255,
+      with a verified hardware oracle. No vault, no sync, no stored secret.</p>
+  </div>
 
-  <div class="grid">
-    <!-- LEFT: inputs -->
-    <section class="panel">
-      <h2>derive</h2>
+  <div class="steps">
 
-      <div class="field">
-        <label for="passphrase">Master passphrase</label>
-        <div class="pw-row">
-          <input type="password" id="passphrase" placeholder="never leaves this device" autocomplete="off">
-          <button class="iconbtn" id="togglePass" type="button">show</button>
-        </div>
+    <!-- STEP 1 -->
+    <section class="card step" id="card1">
+      <div class="step-h"><span class="num" aria-hidden="true">1</span><h3>Your secret phrase</h3></div>
+      <p class="help simple-only">Pick something only you know and can always remember. It never leaves this device.</p>
+      <p class="help expert-only">Master passphrase. Hashed with the index to a ristretto255 point; never transmitted.</p>
+      <div class="pw-row">
+        <input type="password" id="passphrase" placeholder="type your phrase…" autocomplete="off"
+               autocapitalize="off" spellcheck="false" aria-describedby="strengthText">
+        <button class="btn" id="togglePass" type="button" aria-label="Show or hide the phrase">show</button>
       </div>
-
-      <div class="field">
-        <label for="index">Sub-index <span class="hint">— use a different number per account/service</span></label>
-        <input type="number" id="index" value="0" min="0" step="1">
-      </div>
-
-      <div class="field">
-        <label>Output format</label>
-        <div class="fmt-grid" id="fmtGrid">
-          <div class="fmt-opt active" data-fmt="complex">Complex symbols · 20</div>
-          <div class="fmt-opt" data-fmt="alnum">Alphanumeric · 16</div>
-          <div class="fmt-opt" data-fmt="b64url">Base64url · 20</div>
-          <div class="fmt-opt" data-fmt="pin">PIN · 6 digits</div>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button class="primary" id="deriveBtn">Derive via oracle</button>
-        <button class="ghost" id="simBtn">Simulate oracle</button>
-      </div>
-
-      <div class="oracle-state">
-        <div class="lbl">hardware</div>
-        <div class="actions" style="margin-top:0;">
-          <button class="ghost" id="connectBtn">Connect WebSerial</button>
-          <button class="ghost" id="disconnectBtn" disabled>Disconnect</button>
-        </div>
-        <div class="esp-row">
-          <esp-web-install-button manifest="esp-manifest.json">
-            <button class="ghost" slot="activate">Flash LilyGO firmware</button>
-          </esp-web-install-button>
-        </div>
+      <div class="strength" aria-hidden="false">
+        <div class="sbar"><i id="strengthBar"></i></div>
+        <div class="stext"><span id="strengthText">Waiting for your phrase…</span><span id="strengthTip"></span></div>
       </div>
     </section>
 
-    <!-- RIGHT: result -->
-    <section class="panel">
-      <h2>result</h2>
-      <div class="result-display">
-        <div class="pw" id="pwOut" style="display:none;"></div>
-        <div class="placeholder" id="pwPlaceholder">no password derived yet</div>
+    <!-- STEP 2 -->
+    <section class="card step" id="card2">
+      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Which account is this for?</h3></div>
+      <p class="help simple-only">Every account gets its own number, so every account gets a different password.
+        Give it a nickname and we'll remember the number for you — the nickname stays on this device only.</p>
+      <p class="help expert-only">Sub-index. Included in the hash-to-group input and the HKDF salt.
+        Nicknames are a local convenience in localStorage and never affect derivation.</p>
+      <div class="chips" id="accountChips" role="group" aria-label="Saved accounts"></div>
+      <div class="stepper">
+        <button class="btn rnd" id="idxDown" type="button" aria-label="Previous number">−</button>
+        <input type="number" id="index" value="0" min="0" step="1" aria-label="Account number">
+        <button class="btn rnd" id="idxUp" type="button" aria-label="Next number">+</button>
+        <button class="btn small" id="addAccount" type="button">Save nickname</button>
       </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="card step" id="card3">
+      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Choose a password style</h3></div>
+      <p class="help simple-only">Not sure? The first one is a good default. Some websites don't allow symbols —
+        then pick letters &amp; numbers.</p>
+      <p class="help expert-only">Second-stage HKDF keyed by format name, rejection-sampled into the charset.</p>
+      <div class="fmt-grid" id="fmtGrid" role="radiogroup" aria-label="Password style">
+        <div class="fmt-opt active" data-fmt="complex" data-label="strongest · 20 chars" role="radio" aria-checked="true" tabindex="0">
+          <span class="ft">Strongest</span><span class="fs">20 chars · with symbols</span></div>
+        <div class="fmt-opt" data-fmt="alnum" data-label="letters &amp; numbers · 16 chars" role="radio" aria-checked="false" tabindex="0">
+          <span class="ft">Letters &amp; numbers</span><span class="fs">16 chars · no symbols</span></div>
+        <div class="fmt-opt" data-fmt="b64url" data-label="web-safe · 20 chars" role="radio" aria-checked="false" tabindex="0">
+          <span class="ft">Web-safe</span><span class="fs">20 chars · base64url</span></div>
+        <div class="fmt-opt" data-fmt="pin" data-label="digits only · 6" role="radio" aria-checked="false" tabindex="0">
+          <span class="ft">Just digits</span><span class="fs">6-digit PIN</span></div>
+      </div>
+    </section>
+
+    <!-- STEP 4 : action -->
+    <section class="card step" id="card4">
+      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Make my password</h3></div>
+      <p class="help simple-only" id="actionHelp">Plug in your gadget and press the big button.
+        No gadget handy? Try the demo — it shows how it works, but gives a pretend password.</p>
+      <p class="help expert-only">Derive against the hardware oracle over WebSerial, or the in-browser
+        simulator (ephemeral session key, not pinned).</p>
+
+      <div class="viz" id="viz" aria-hidden="true">
+        <div class="viz-inner">
+          <div class="node" id="nodeYou">💻</div>
+          <div class="wire" id="wireOut"><b></b></div>
+          <div class="node" id="nodeOracle">🔐</div>
+          <div class="wire" id="wireIn"><b></b></div>
+          <div class="node" id="nodeDone">🔑</div>
+        </div>
+      </div>
+      <div class="viz-label" id="vizLabel" aria-live="polite"></div>
+
+      <div class="actions">
+        <button class="btn primary" id="deriveBtn">Make my password</button>
+        <button class="btn" id="simBtn">Try the demo</button>
+      </div>
+
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn small" id="connectBtn">Connect my gadget</button>
+        <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
+        <esp-web-install-button manifest="esp-manifest.json">
+          <button class="btn small" slot="activate">Install firmware</button>
+        </esp-web-install-button>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section class="result empty" id="resultCard" aria-live="polite">
+      <div class="demo-badge" id="demoBadge">⚠️ Demo only — this is not your real password</div>
+      <div class="pw" id="pwOut" style="display:none;"></div>
+      <div class="placeholder" id="pwPlaceholder">Your password will appear here</div>
       <div class="result-meta">
-        <span id="resFmt">format: complex · 20</span>
+        <span id="resFmt">style: strongest · 20 chars</span>
         <span id="resSource">source: —</span>
       </div>
       <div class="actions">
-        <button class="ghost" id="copyBtn" disabled>Copy to clipboard</button>
-      </div>
-
-      <div class="oracle-state">
-        <div class="lbl">why this is safe</div>
-        <p style="font-family:var(--mono);font-size:12px;color:var(--ink-1);line-height:1.6;margin:0;">
-          The oracle's private scalar <em>k</em> never leaves the device, and it only ever sees a blinded,
-          random-looking curve point — never your passphrase or the final password. Nothing is
-          stored on this device or in the cloud; the same passphrase and index always regenerate the same password.
-        </p>
+        <button class="btn primary" id="copyBtn" disabled>Copy</button>
+        <button class="btn" id="revealBtn" disabled>Hide</button>
       </div>
     </section>
+
+    <!-- TRACE (expert) -->
+    <section class="card expert-only">
+      <div class="trace-head">
+        <h3>protocol trace</h3>
+        <button class="clear" id="clearTrace">clear</button>
+      </div>
+      <div id="trace"><div class="row"><span class="empty">— no handshake yet. derive a password to see the OPRF exchange step by step —</span></div></div>
+    </section>
+
   </div>
 
-  <!-- ---------- project story ---------- -->
-  <section class="panel" style="margin-top:18px;">
-    <h2>how it works &amp; why it's safe</h2>
-    <div class="docs-grid">
-      <div>
-        <p class="doc-p">
-          vaultless is a <strong>deterministic</strong> password manager: instead of storing a vault of secrets
-          anywhere, every password is re-derived on demand from two things — your master passphrase and a
-          sub-index (pick a different number per account). Same two inputs, same password, every time. Nothing
-          to sync, back up, or leak.
-        </p>
-        <p class="doc-p">
-          The catch with pure deterministic derivation is that anyone who steals your master passphrase can
-          recompute every password you've ever generated offline. vaultless closes that gap with a second factor
-          that never leaves a physical device: a <strong>two-party oblivious PRF</strong> (OPRF) over
-          ristretto255.
-        </p>
+  <details class="learn" id="learnHow">
+    <summary>How does this work?</summary>
+    <div class="learn-body">
+      <div class="simple-only">
+        <p class="doc-p">Think of your little gadget as a keyholder that never tells anyone its key.</p>
         <ol class="doc-steps">
-          <li>Your browser hashes <code>passphrase‖index</code> to a curve point <em>P</em>, then
-            blinds it with a random scalar <em>r</em> to get <em>B = r·P</em> — indistinguishable from a
-            random point.</li>
-          <li><em>B</em> is sent to the oracle (hardware over WebSerial, or the in-browser simulator).</li>
-          <li>The oracle multiplies by its private scalar <em>k</em> and returns <em>B′ = k·B</em>.</li>
-          <li>The browser unblinds: <em>S = r⁻¹·B′ = k·P</em>, then expands <em>S</em> through HKDF-SHA256 into
-            the final password.</li>
+          <li>You type your phrase. It stays in this browser — it is never sent anywhere.</li>
+          <li>Your browser scrambles the phrase into a puzzle piece and <strong>disguises</strong> it,
+            so even the gadget can't tell what you typed.</li>
+          <li>The gadget stamps the disguised piece with its secret key and hands it back, playing a
+            little animation while it works.</li>
+          <li>Your browser removes the disguise and turns the result into your password.</li>
         </ol>
+        <p class="doc-p">Because the answer depends on <em>both</em> your phrase <em>and</em> the gadget,
+          someone who steals only one of them gets nothing. And because the same two things always
+          produce the same answer, there's no vault to lose, back up, or have stolen.</p>
+        <p class="doc-p"><strong>Worth knowing:</strong> if you lose the gadget, you lose the passwords it
+          makes. And anything plugged into it while it's connected can ask it to stamp things, so unplug it
+          when you're done.</p>
       </div>
-      <div>
-        <div class="lbl" style="margin-bottom:10px;">why this resists theft</div>
-        <ul class="doc-list">
-          <li>The oracle only ever sees a blinded point — never your passphrase or index in a form it can
-            use to precompute anything.</li>
-          <li>Without the oracle's private scalar <em>k</em>, a stolen passphrase alone cannot regenerate any
-            password.</li>
-          <li>Without the passphrase, a stolen or cloned oracle alone cannot regenerate any password either —
-            both factors are required.</li>
-          <li>Derivation requires the oracle to be physically connected — but note it auto-approves every
-            request it receives, so anything with access to the serial port can use it while it's plugged in.</li>
-          <li>Nothing is persisted: not the passphrase, not intermediate points, not the resulting password.</li>
-        </ul>
-        <div class="lbl" style="margin:16px 0 10px;">source</div>
-        <p class="doc-p" style="margin:0;">
-          Protocol, firmware, and this page are all open source:
-          <a href="https://github.com/Ak1ra00/SK" target="_blank" rel="noopener">github.com/Ak1ra00/SK</a>
-        </p>
+      <div class="expert-only">
+        <div class="docs-grid">
+          <div>
+            <p class="doc-p">vaultless is a <strong>deterministic</strong> password manager: every password is
+              re-derived on demand from your master passphrase and a sub-index. Same two inputs, same password,
+              every time. Nothing to sync, back up, or leak.</p>
+            <p class="doc-p">Pure deterministic derivation lets anyone who steals the passphrase recompute every
+              password offline. vaultless closes that with a second factor that never leaves a physical device:
+              a <strong>two-party oblivious PRF</strong> over ristretto255.</p>
+            <ol class="doc-steps">
+              <li>The browser hashes <code>passphrase‖index</code> to a curve point <em>P</em> and blinds it with
+                a random scalar <em>r</em> to get <em>B = r·P</em> — indistinguishable from random.</li>
+              <li><em>B</em> goes to the oracle (hardware over WebSerial, or the simulator).</li>
+              <li>The oracle returns <em>B′ = k·B</em>, its public key <em>Y = k·G</em>, and a Chaum-Pedersen
+                DLEQ proof that <code>log_G(Y) == log_B(B′)</code>.</li>
+              <li>The browser verifies the proof, checks <em>Y</em> against the key pinned on first use, unblinds
+                <em>S = r⁻¹·B′ = k·P</em>, and expands it through HKDF-SHA256.</li>
+            </ol>
+          </div>
+          <div>
+            <div class="lbl" style="margin-bottom:10px;">why this resists theft</div>
+            <ul class="doc-list">
+              <li>The oracle only ever sees a blinded point — never the passphrase or index.</li>
+              <li>Without <em>k</em>, a stolen passphrase alone regenerates nothing.</li>
+              <li>Without the passphrase, a stolen or cloned oracle regenerates nothing either.</li>
+              <li>A swapped or tampered oracle is rejected: the DLEQ proof and the pinned public key
+                have to agree.</li>
+              <li>The oracle auto-approves every request, so anything reaching its serial port can use it
+                while it is plugged in.</li>
+              <li>The default firmware stores <em>k</em> in unencrypted flash — see
+                <code>firmware/SECURE_PROVISIONING.md</code>.</li>
+              <li>Nothing is persisted: not the passphrase, not intermediate points, not the password.</li>
+            </ul>
+            <div class="lbl" style="margin:16px 0 10px;">source</div>
+            <p class="doc-p" style="margin:0;">
+              <a href="https://github.com/Ak1ra00/SK" target="_blank" rel="noopener">github.com/Ak1ra00/SK</a>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
-  </section>
+  </details>
 
-  <!-- ---------- hardware build docs ---------- -->
-  <section class="panel" style="margin-top:18px;">
-    <h2>build your own oracle</h2>
-    <div class="docs-grid">
-      <div>
-        <div class="lbl" style="margin-bottom:10px;">parts list</div>
-        <ul class="doc-list">
-          <li><a href="https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board"
-                 target="_blank" rel="noopener">LilyGO T-Display</a> — ESP32 + 1.14" ST7789 LCD (135×240), 4MB flash</li>
-          <li>USB-C or micro-USB data cable (check your board revision)</li>
-          <li>No extra wiring required — display is on-board</li>
-        </ul>
-        <div class="lbl" style="margin:16px 0 10px;">on-board pinout</div>
-        <table class="pin-table">
-          <tr><td>Display (ST7789)</td><td>SPI: MOSI 19 · SCLK 18 · CS 5 · DC 16 · RST 23 · BL 4</td><td></td></tr>
-          <tr><td>Buttons</td><td>unused — requests are auto-approved</td><td></td></tr>
-        </table>
-      </div>
-      <div>
-        <div class="lbl" style="margin-bottom:10px;">flashing</div>
-        <p class="doc-p">Easiest: plug the board in over USB and use the
-          <strong>Flash LilyGO firmware</strong> button above — it uses
-          <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
-          over WebSerial, no local toolchain needed.
-        </p>
-        <p class="doc-p">To build from source instead:</p>
-        <pre class="doc-code">git clone https://github.com/Ak1ra00/SK
+  <details class="learn" id="learnBuild">
+    <summary>Build your own gadget</summary>
+    <div class="learn-body">
+      <div class="docs-grid">
+        <div>
+          <div class="lbl" style="margin-bottom:10px;">parts list</div>
+          <ul class="doc-list">
+            <li><a href="https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board"
+                   target="_blank" rel="noopener">LilyGO T-Display</a> — ESP32 + 1.14" ST7789 LCD (135×240), 4MB flash</li>
+            <li>USB-C or micro-USB data cable (check your board revision)</li>
+            <li>No extra wiring — the display is on-board</li>
+          </ul>
+          <div class="lbl" style="margin:16px 0 10px;">on-board pinout</div>
+          <table class="pin-table">
+            <tr><td>Display (ST7789)</td><td>SPI: MOSI 19 · SCLK 18 · CS 5 · DC 16 · RST 23 · BL 4</td></tr>
+            <tr><td>Buttons</td><td>unused — requests are auto-approved</td></tr>
+          </table>
+        </div>
+        <div>
+          <div class="lbl" style="margin-bottom:10px;">flashing</div>
+          <p class="doc-p">Easiest: plug the board in over USB and press <strong>Install firmware</strong> above.
+            It uses <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
+            over WebSerial — no local toolchain needed.</p>
+          <p class="doc-p">To build from source instead:</p>
+          <pre class="doc-code">git clone https://github.com/Ak1ra00/SK
 cd SK/firmware
 pio run -e esp32dev -t upload</pre>
-        <p class="doc-p" style="margin-top:12px;">
-          The private oracle scalar <em>k</em> is generated on first boot from the hardware RNG and stored in
-          NVS — it never touches the serial line, the browser, or this repo. Firmware source:
-          <a href="https://github.com/Ak1ra00/SK/blob/main/firmware/src/main.cpp" target="_blank" rel="noopener">firmware/src/main.cpp</a>.
-        </p>
+          <p class="doc-p" style="margin-top:12px;">
+            The oracle scalar <em>k</em> is generated on first boot from the hardware RNG and stored in NVS —
+            it never touches the serial line, the browser, or this repo. Source:
+            <a href="https://github.com/Ak1ra00/SK/blob/main/firmware/src/main.cpp" target="_blank" rel="noopener">firmware/src/main.cpp</a>.
+          </p>
+        </div>
       </div>
     </div>
-  </section>
+  </details>
 
   <div class="foot">
     <span>WebSerial: <span class="badge" id="wsBadge">checking…</span></span>
-    <span>protocol: OPRF-RISTRETTO255-HKDFSHA256 · v1</span>
+    <span class="expert-only">protocol: OPRF-RISTRETTO255-HKDFSHA256 · v2 (DLEQ)</span>
   </div>
 </div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script type="module" src="app.js"></script>
 </body>
