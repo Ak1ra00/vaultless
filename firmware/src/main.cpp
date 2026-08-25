@@ -43,7 +43,7 @@ extern "C" {
   #include "sodium.h"
 }
 
-// How long the matrix handshake animation runs before the answer is sent.
+// How long the stamping stage is held on screen before the answer goes back.
 static const uint32_t HANDSHAKE_ANIM_MS = 1100;
 
 TFT_eSPI tft = TFT_eSPI();
@@ -85,9 +85,120 @@ static String bytesToHex(const uint8_t *data, size_t len) {
 }
 
 // ---------------------------------------------------------------------------
+// Display
+//
+// The panel is 240x135 in rotation 1. Every screen shares one frame: an 18px
+// header, a rule, a body, and a footer whose baseline is FOOTER_Y.
+//
+// FOOTER_Y matters. The previous status line was drawn at y=124 with a 16px
+// font, which needs rows 124..139 on a panel that ends at row 134 — so the one
+// line that says what actually happened ("approved - sent", "invalid point!")
+// had its bottom third cut off on every single request.
+//
+// Colours are the web app's palette quantised to 565, so the device and the
+// browser read as one product. The value colour is worth stating plainly: this
+// oracle only ever touches B and k*B, both of which are BLINDED and neither of
+// which it can unblind. Violet means "a disguised value" on the website, so
+// every value this screen can legitimately show is violet. It has no business
+// rendering anything in the colour the site uses for cleartext.
+// ---------------------------------------------------------------------------
+#define RGB565(r, g, b) \
+  ((uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3)))
+
+static const uint16_t C_CHROME = RGB565(0x5e, 0xea, 0xd4);  // titles, rules
+static const uint16_t C_VALUE  = RGB565(0xa9, 0x8b, 0xff);  // a blinded value
+static const uint16_t C_GOOD   = RGB565(0x5e, 0xe8, 0x9a);
+static const uint16_t C_WARN   = RGB565(0xf2, 0xb2, 0x63);
+static const uint16_t C_BAD    = RGB565(0xef, 0x6a, 0x5f);
+static const uint16_t C_INK1   = RGB565(0xa3, 0xba, 0xb5);
+static const uint16_t C_INK2   = RGB565(0x7d, 0x93, 0x8e);
+static const uint16_t C_RULE   = RGB565(0x2f, 0x3d, 0x45);
+
+static const int16_t HEADER_RULE_Y = 18;
+static const int16_t FOOTER_Y      = 117;   // + 16px font = 133, inside 135
+static const int16_t HEX_COLS      = 32;    // 32 * 6px + margin fits 240 twice
+
+static char g_fingerprint[10];              // "xxxx-xxxx", matches the browser
+
+/* SHA-256(Y) truncated to four bytes, formatted exactly as recovery.js
+ * fingerprint() and app.js keyFingerprint() do, so the string on this screen is
+ * character-for-character the one the browser shows when it pins this oracle.
+ * Derived from the PUBLIC key only — safe to display, and the whole point is
+ * that you can read it across the room. */
+static void deriveFingerprint() {
+  uint8_t h[32];
+  crypto_hash_sha256(h, g_pubkey, 32);
+  static const char *hexchars = "0123456789abcdef";
+  size_t o = 0;
+  for (int i = 0; i < 4; i++) {
+    if (i == 2) g_fingerprint[o++] = '-';
+    g_fingerprint[o++] = hexchars[(h[i] >> 4) & 0xF];
+    g_fingerprint[o++] = hexchars[h[i] & 0xF];
+  }
+  g_fingerprint[o] = '\0';
+  sodium_memzero(h, sizeof(h));
+}
+
+static void uiFrame(const char *title, const char *right, uint16_t rightColor) {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setTextColor(C_CHROME, TFT_BLACK);
+  tft.drawString(title, 4, 5);
+  if (right) {
+    tft.setTextColor(rightColor, TFT_BLACK);
+    tft.drawString(right, tft.width() - 4 - tft.textWidth(right, 1), 5);
+  }
+  tft.drawFastHLine(0, HEADER_RULE_Y, tft.width(), C_RULE);
+}
+
+static void uiFooter(const char *text, uint16_t color) {
+  tft.drawFastHLine(0, FOOTER_Y - 4, tft.width(), C_RULE);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setTextColor(color, TFT_BLACK);
+  tft.drawString(text, 4, FOOTER_Y + 3);
+}
+
+/* 64 hex characters as two rows of 32 — the whole value, not a prefix. */
+static void uiHexBlock(const char *hex64, int16_t y, uint16_t color) {
+  char row[HEX_COLS + 1];
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setTextColor(color, TFT_BLACK);
+  for (int r = 0; r < 2; r++) {
+    memcpy(row, hex64 + r * HEX_COLS, HEX_COLS);
+    row[HEX_COLS] = '\0';
+    tft.drawString(row, 6, y + r * 11);
+  }
+}
+
+// Counts requests since boot. Shown instead of the account number: a bystander
+// learning that this is the fourth handshake of the session learns nothing,
+// whereas "index: 7" told them which account was being opened.
+static uint32_t g_requestSeq = 0;
+
+static void showBoot(const char *headline, const char *sub, const char *foot,
+                     uint16_t color) {
+  uiFrame("VAULTLESS ORACLE", "boot", color);
+  tft.setTextFont(2);
+  tft.setTextColor(color, TFT_BLACK);
+  tft.drawString(headline, (tft.width() - tft.textWidth(headline, 2)) / 2, 44);
+  if (sub) {
+    tft.setTextFont(1);
+    tft.setTextColor(C_INK2, TFT_BLACK);
+    tft.drawString(sub, (tft.width() - tft.textWidth(sub, 1)) / 2, 74);
+  }
+  uiFooter(foot, C_INK2);
+}
+
+// ---------------------------------------------------------------------------
 // Persistent key management (NVS)
 // ---------------------------------------------------------------------------
 // Defined with the DLEQ helpers below; called from loadOrCreatePrivateKey.
+// (deriveFingerprint and showBoot are defined in the Display section above,
+// which is why that section comes first — this one draws to the screen.)
 static void deriveNonceKey(void);
 
 #ifdef VAULTLESS_ALLOW_PROVISION
@@ -105,6 +216,8 @@ static void loadOrCreatePrivateKey() {
   if (stored == 32) {
     prefs.getBytes("privkey", g_privkey, 32);
   } else {
+    showBoot("generating key", "first boot - this happens once",
+             "writing to NVS", C_WARN);
     // Generate a fresh scalar using the hardware RNG, reduced into the
     // ristretto255 scalar field via libsodium's wide-reduction helper
     // (feed 64 random bytes in, get a uniformly distributed 32-byte
@@ -122,148 +235,253 @@ static void loadOrCreatePrivateKey() {
   deriveNonceKey();
 
   if (crypto_scalarmult_ristretto255_base(g_pubkey, g_privkey) != 0) {
-    tft.setTextColor(TFT_RED, TFT_BLACK);
-    tft.drawString("bad private key in NVS", 4, 4);
+    showBoot("bad key in NVS", "the stored scalar is not usable",
+             "erase NVS and reflash", C_BAD);
     while (true) { delay(1000); }
   }
+
+  deriveFingerprint();
 }
 
 // ---------------------------------------------------------------------------
-// Display helpers
-// ---------------------------------------------------------------------------
-static void tftBanner() {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextFont(2);
-  tft.drawString("VAULTLESS ORACLE", 4, 4);
-  tft.drawFastHLine(0, 20, tft.width(), TFT_DARKGREY);
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft.drawString("idle - waiting for request", 4, 28);
-}
-
-// Counts requests since boot. Shown instead of the account number: a bystander
-// learning that this is the fourth handshake of the session learns nothing,
-// whereas "index: 7" told them which account was being opened.
-static uint32_t g_requestSeq = 0;
-
-static void showRequest(uint32_t seq) {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setTextFont(2);
-  tft.drawString("DERIVATION REQUEST", 4, 4);
-  tft.drawFastHLine(0, 20, tft.width(), TFT_DARKGREY);
-
-  char seqbuf[24];
-  snprintf(seqbuf, sizeof(seqbuf), "request #%lu", (unsigned long)seq);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.drawString(seqbuf, 4, 46);
-
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft.drawString("auto-approving...", 4, 90);
-}
-
-static void showStatus(const String &line, uint16_t color) {
-  tft.fillRect(0, 124, tft.width(), 16, TFT_BLACK);
-  tft.setTextColor(color, TFT_BLACK);
-  tft.drawString(line, 4, 124);
-}
-
-// ---------------------------------------------------------------------------
-// Matrix rain — played while the oracle "works" on a handshake.
+// Idle pages
 //
-// Drawn straight to the panel (no sprite) to keep RAM free: each column tracks
-// only its head row, fall speed and trail length. Per step a column redraws a
-// bright head glyph, re-tints the two glyphs behind it, and blanks the cell
-// that just fell off the end of its trail.
+// The idle screen used to be a title and the words "idle - waiting for request",
+// which used 44 of 135 rows and told you nothing you could act on. It now leads
+// with the fingerprint, because that is the one thing about this device a person
+// ever needs to read: it is how you tell two oracles apart, how you match a
+// device to a printed sheet, and how you check that the key your browser pinned
+// is the key in front of you.
+//
+// The button cycles pages. It never approves anything — requests are still
+// auto-approved, exactly as SECURITY.md documents, and nothing here is on the
+// path between a request arriving and it being answered.
 // ---------------------------------------------------------------------------
-static const uint8_t MTX_CHAR_W = 6;   // font 1 cell size at textsize 1
-static const uint8_t MTX_CHAR_H = 8;
-static const uint8_t MTX_MAX_COLS = 40;
+static const uint8_t IDLE_PAGES = 3;
+static uint8_t g_idlePage = 0;
 
-static int16_t mtxHead[MTX_MAX_COLS];
-static uint8_t mtxSpeed[MTX_MAX_COLS];
-static uint8_t mtxLen[MTX_MAX_COLS];
-static uint8_t mtxTick[MTX_MAX_COLS];
-
-static char randGlyph() {
-  static const char glyphs[] =
-      "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ<>*/+=$#@&%";
-  return glyphs[random(sizeof(glyphs) - 1)];
+static void showIdle() {
+  char buf[40];
+  switch (g_idlePage) {
+    case 0: {
+      uiFrame("VAULTLESS ORACLE", "ready", C_GOOD);
+      tft.fillCircle(tft.width() - 8 - tft.textWidth("ready", 1) - 7, 8, 3, C_GOOD);
+      tft.setTextFont(4);
+      tft.setTextColor(C_VALUE, TFT_BLACK);
+      tft.drawString(g_fingerprint,
+                     (tft.width() - tft.textWidth(g_fingerprint, 4)) / 2, 44);
+      tft.setTextFont(1);
+      tft.setTextColor(C_INK2, TFT_BLACK);
+      const char *cap = "oracle fingerprint";
+      tft.drawString(cap, (tft.width() - tft.textWidth(cap, 1)) / 2, 80);
+      snprintf(buf, sizeof(buf), "%lu served", (unsigned long)g_requestSeq);
+      uiFooter(buf, C_INK2);
+      tft.setTextColor(C_INK2, TFT_BLACK);
+      tft.drawString("BTN >", tft.width() - 4 - tft.textWidth("BTN >", 1), FOOTER_Y + 3);
+      break;
+    }
+    case 1: {
+      uiFrame("STATUS", "2/3", C_INK2);
+      const uint32_t mins = millis() / 60000UL;
+      tft.setTextFont(1);
+      tft.setTextColor(C_INK2, TFT_BLACK);
+      tft.drawString("requests served", 6, 30);
+      tft.drawString("uptime", 6, 56);
+      tft.drawString("key", 6, 82);
+      tft.setTextFont(2);
+      tft.setTextColor(C_INK1, TFT_BLACK);
+      snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_requestSeq);
+      tft.drawString(buf, 130, 26);
+      snprintf(buf, sizeof(buf), "%luh %02lum",
+               (unsigned long)(mins / 60), (unsigned long)(mins % 60));
+      tft.drawString(buf, 130, 52);
+      tft.setTextColor(C_GOOD, TFT_BLACK);
+      tft.drawString("in NVS", 130, 78);
+      uiFooter("protocol v3", C_INK2);
+      break;
+    }
+    default: {
+      uiFrame("ABOUT", "3/3", C_INK2);
+      tft.setTextFont(1);
+      tft.setTextColor(C_INK1, TFT_BLACK);
+      tft.drawString("Requests are auto-approved.", 6, 30);
+      tft.drawString("Anything on this USB port can", 6, 44);
+      tft.drawString("use the key while plugged in.", 6, 58);
+      tft.setTextColor(C_WARN, TFT_BLACK);
+      tft.drawString("Unplug when you are done.", 6, 78);
+      uiFooter("k never leaves this device", C_INK2);
+      break;
+    }
+  }
 }
 
-static void matrixRain(uint32_t durationMs, uint32_t seq) {
-  const int wCols = tft.width() / MTX_CHAR_W;
-  const uint8_t cols = (uint8_t)(wCols > MTX_MAX_COLS ? MTX_MAX_COLS : wCols);
-  const uint8_t rows = (uint8_t)(tft.height() / MTX_CHAR_H);
+// ---------------------------------------------------------------------------
+// Backlight and buttons
+//
+// On/off only, via digitalWrite. PWM dimming would be nicer but the LEDC API
+// changed shape between Arduino-ESP32 2.x and 3.x, and a display that refuses to
+// light up is a worse outcome than one that cannot fade.
+//
+// Both buttons are inputs and nothing else: GPIO 0 has an internal pull-up,
+// GPIO 35 is input-only on the ESP32 and relies on the T-Display's onboard one.
+// ---------------------------------------------------------------------------
+#ifndef VAULTLESS_BTN_A
+#define VAULTLESS_BTN_A 35
+#endif
+#ifndef VAULTLESS_BTN_B
+#define VAULTLESS_BTN_B 0
+#endif
 
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextFont(1);
-  tft.setTextSize(1);
-  tft.setTextDatum(TL_DATUM);
+static const uint32_t SCREEN_SLEEP_MS = 5UL * 60UL * 1000UL;
 
-  for (uint8_t c = 0; c < cols; c++) {
-    mtxHead[c]  = -(int16_t)random(rows);
-    mtxSpeed[c] = 1 + (uint8_t)random(3);
-    mtxLen[c]   = 4 + (uint8_t)random(rows > 6 ? rows - 4 : 4);
-    mtxTick[c]  = (uint8_t)random(mtxSpeed[c] + 1);
-  }
+static bool     g_backlightOn = true;
+static uint32_t g_lastActivity = 0;
 
-  const uint16_t headCol = tft.color565(200, 255, 225);
-  const uint16_t bodyCol = tft.color565(0, 200, 130);
-  const uint16_t tailCol = tft.color565(0, 90, 60);
+static void setBacklight(bool on) {
+  if (on == g_backlightOn) return;
+  g_backlightOn = on;
+  digitalWrite(TFT_BL, on ? TFT_BACKLIGHT_ON : !TFT_BACKLIGHT_ON);
+}
 
-  char buf[2] = {0, 0};
-  const uint32_t start = millis();
+static void noteActivity() {
+  g_lastActivity = millis();
+  setBacklight(true);
+}
 
-  while (millis() - start < durationMs) {
-    for (uint8_t c = 0; c < cols; c++) {
-      if (++mtxTick[c] < mtxSpeed[c]) continue;
-      mtxTick[c] = 0;
+/* Polled from loop(), never blocking: a held button must not stall the serial
+ * reader, because that is the path a derivation request arrives on. */
+static void pollButtons() {
+  static bool lastA = true, lastB = true;
+  static uint32_t lastChange = 0;
+  const uint32_t now = millis();
+  if (now - lastChange < 40) return;              // debounce
 
-      const int16_t head = mtxHead[c];
-      const int16_t x = c * MTX_CHAR_W;
+  const bool a = digitalRead(VAULTLESS_BTN_A);
+  const bool b = digitalRead(VAULTLESS_BTN_B);
 
-      if (head - 3 >= 0 && head - 3 < rows) {
-        buf[0] = randGlyph();
-        tft.setTextColor(tailCol, TFT_BLACK);
-        tft.drawString(buf, x, (head - 3) * MTX_CHAR_H);
-      }
-      if (head - 1 >= 0 && head - 1 < rows) {
-        buf[0] = randGlyph();
-        tft.setTextColor(bodyCol, TFT_BLACK);
-        tft.drawString(buf, x, (head - 1) * MTX_CHAR_H);
-      }
-      if (head >= 0 && head < rows) {
-        buf[0] = randGlyph();
-        tft.setTextColor(headCol, TFT_BLACK);
-        tft.drawString(buf, x, head * MTX_CHAR_H);
-      }
-
-      const int16_t tail = head - mtxLen[c];
-      if (tail >= 0 && tail < rows) {
-        tft.fillRect(x, tail * MTX_CHAR_H, MTX_CHAR_W, MTX_CHAR_H, TFT_BLACK);
-      }
-
-      mtxHead[c]++;
-      if (mtxHead[c] - mtxLen[c] > rows) {
-        mtxHead[c]  = -(int16_t)random(6);
-        mtxSpeed[c] = 1 + (uint8_t)random(3);
-        mtxLen[c]   = 4 + (uint8_t)random(rows > 6 ? rows - 4 : 4);
-      }
+  if ((a != lastA && !a) || (b != lastB && !b)) { // active low, on press
+    lastChange = now;
+    const bool wasAsleep = !g_backlightOn;
+    noteActivity();
+    // The first press after the screen sleeps only wakes it; it does not also
+    // change the page out from under whoever just pressed it.
+    if (!wasAsleep) {
+      g_idlePage = (uint8_t)((g_idlePage + (!b ? IDLE_PAGES - 1 : 1)) % IDLE_PAGES);
+      showIdle();
+    } else {
+      showIdle();
     }
-    delay(28);
   }
+  lastA = a;
+  lastB = b;
 
-  // Settle on a legible summary of what was just evaluated.
-  tft.fillScreen(TFT_BLACK);
+  if (g_backlightOn && now - g_lastActivity > SCREEN_SLEEP_MS) setBacklight(false);
+}
+
+// ---------------------------------------------------------------------------
+// Handshake staging
+//
+// Mirrors what the browser now shows, so glancing between the two tells one
+// story rather than two: the blinded point arrives, k multiplies it, the
+// stamped answer goes back. The values are the real ones, in full.
+//
+// Both B and k*B are safe to put on a screen. B is blinded and k*B is still
+// blinded — neither can be undone without the browser's r, and both are already
+// on the wire. What is NOT here is as deliberate: no passphrase (this device has
+// never seen one), no account index (protocol v3 stopped sending it), and no k.
+//
+// This replaces the matrix rain. The rain was decoration that happened during
+// the one moment the screen could be saying something true.
+// ---------------------------------------------------------------------------
+static const uint32_t DWELL_RECV_MS  = 700;
+static const uint32_t DWELL_SENT_MS  = 1200;
+
+static char randHexChar() {
+  static const char hexchars[] = "0123456789abcdef";
+  return hexchars[random(16)];
+}
+
+static void showReceiving(uint32_t seq, const char *blindedHex) {
+  char title[24];
+  snprintf(title, sizeof(title), "REQUEST #%lu", (unsigned long)seq);
+  uiFrame(title, "receiving", C_VALUE);
+
   tft.setTextFont(2);
-  tft.setTextColor(tft.color565(0, 220, 140), TFT_BLACK);
-  tft.drawString("k . B", 4, 30);
-  char seqbuf[24];
-  snprintf(seqbuf, sizeof(seqbuf), "request #%lu", (unsigned long)seq);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(seqbuf, 4, 52);
+  tft.setTextColor(C_VALUE, TFT_BLACK);
+  tft.drawString("B", 6, 24);
+  tft.setTextFont(1);
+  tft.setTextColor(C_INK2, TFT_BLACK);
+  tft.drawString("blinded point in", 22, 29);
+
+  uiHexBlock(blindedHex, 50, C_VALUE);
+  uiFooter("disguised - the phrase is not in here", C_INK2);
+}
+
+/* The scalar multiplication takes a few milliseconds; this runs for long enough
+ * to be read, and churns the value rather than freezing it, exactly as the
+ * browser's readout does while it is waiting on this device. */
+static void showStamping(uint32_t seq, uint32_t durationMs) {
+  char title[24];
+  snprintf(title, sizeof(title), "REQUEST #%lu", (unsigned long)seq);
+  uiFrame(title, "stamping", C_CHROME);
+
+  tft.setTextFont(2);
+  tft.setTextColor(C_CHROME, TFT_BLACK);
+  tft.drawString("k . B", 6, 24);
+
+  const uint16_t churnCol = RGB565(0x4a, 0x7a, 0x74);
+  const int16_t barX = 6, barY = 104, barW = tft.width() - 12;
+  tft.fillRect(barX, barY, barW, 3, C_RULE);
+
+  char row[HEX_COLS + 1];
+  row[HEX_COLS] = '\0';
+  const uint32_t start = millis();
+  uint32_t elapsed = 0;
+  while ((elapsed = millis() - start) < durationMs) {
+    tft.setTextFont(1);
+    tft.setTextColor(churnCol, TFT_BLACK);
+    for (int r = 0; r < 2; r++) {
+      for (int i = 0; i < HEX_COLS; i++) row[i] = randHexChar();
+      tft.drawString(row, 6, 50 + r * 11);
+    }
+    tft.fillRect(barX, barY, (int16_t)((uint32_t)barW * elapsed / durationMs), 3, C_CHROME);
+    delay(45);
+  }
+  tft.fillRect(barX, barY, barW, 3, C_CHROME);
+}
+
+static void showSent(uint32_t seq, const char *resultHex) {
+  char title[24];
+  snprintf(title, sizeof(title), "REQUEST #%lu", (unsigned long)seq);
+  uiFrame(title, "sent", C_GOOD);
+
+  tft.setTextFont(2);
+  tft.setTextColor(C_VALUE, TFT_BLACK);
+  tft.drawString("B'", 6, 24);
+  tft.setTextFont(1);
+  tft.setTextColor(C_INK2, TFT_BLACK);
+  tft.drawString("stamped, still blinded", 30, 29);
+
+  uiHexBlock(resultHex, 50, C_VALUE);
+  uiFooter("answer + DLEQ proof sent", C_GOOD);
+}
+
+/* Errors say what happened and what it means, on a screen that is fully
+ * visible. The old version was a clipped half-line of red text. */
+static void showError(uint32_t seq, const char *headline,
+                      const char *line1, const char *line2, const char *code) {
+  char title[24];
+  snprintf(title, sizeof(title), "REQUEST #%lu", (unsigned long)seq);
+  uiFrame(title, "rejected", C_BAD);
+
+  tft.setTextFont(2);
+  tft.setTextColor(C_BAD, TFT_BLACK);
+  tft.drawString(headline, 6, 34);
+  tft.setTextFont(1);
+  tft.setTextColor(C_INK1, TFT_BLACK);
+  if (line1) tft.drawString(line1, 6, 62);
+  if (line2) tft.drawString(line2, 6, 76);
+  uiFooter(code, C_BAD);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,7 +691,7 @@ static void handleLine(const String &line) {
       res["pubkey"] = bytesToHex(g_pubkey, 32);
       serializeJson(res, Serial);
       Serial.print('\n');
-      showStatus("provisioned", TFT_GREEN);
+      showBoot("provisioned", g_fingerprint, "flash the secure build now", C_GOOD);
       return;
     }
   }
@@ -501,37 +719,46 @@ static void handleLine(const String &line) {
   }
 
   const uint32_t seq = ++g_requestSeq;
-  showRequest(seq);
-  delay(220);
+  noteActivity();                       // a request always wakes the screen
+  showReceiving(seq, pointHex.c_str());
+  delay(DWELL_RECV_MS);
 
-  // Requests are auto-approved: the scalar mult runs first, then the matrix
+  // Requests are auto-approved: the scalar mult runs first, then the staged
   // handshake plays before the answer goes back over the wire.
   uint8_t result[32];
   const bool ok = evaluate(blinded, result);
 
-  matrixRain(HANDSHAKE_ANIM_MS, seq);
+  showStamping(seq, HANDSHAKE_ANIM_MS);
 
   if (!ok) {
-    showStatus("invalid point!", TFT_RED);
+    showError(seq, "invalid point",
+              "Not a ristretto255 element.", "Nothing was stamped.",
+              "error: invalid_point");
     sendJsonError("invalid_point");
-    delay(1500);
-    tftBanner();
+    delay(2200);
+    showIdle();
     return;
   }
 
   uint8_t proofC[32], proofS[32];
   if (!dleqProve(blinded, result, g_pubkey, proofC, proofS)) {
-    showStatus("proof failed!", TFT_RED);
+    showError(seq, "proof failed",
+              "Could not prove the answer", "came from this key.",
+              "error: proof_failed");
     sendJsonError("proof_failed");
-    delay(1500);
-    tftBanner();
+    delay(2200);
+    showIdle();
     return;
   }
 
-  showStatus("approved - sent", TFT_GREEN);
   sendJsonPoint(result, proofC, proofS);
-  delay(900);
-  tftBanner();
+  // Named rather than inlined: passing .c_str() of a temporary String is legal
+  // but reads like a lifetime bug, and this file should not make a reviewer
+  // stop to check that it isn't one.
+  const String resultHex = bytesToHex(result, 32);
+  showSent(seq, resultHex.c_str());
+  delay(DWELL_SENT_MS);
+  showIdle();
 }
 
 // ---------------------------------------------------------------------------
@@ -544,23 +771,30 @@ void setup() {
   uint32_t bootStart = millis();
   while (!Serial && millis() - bootStart < 2000) { delay(10); }
 
-  randomSeed(esp_random()); // vary the matrix rain between boots
+  randomSeed(esp_random()); // vary the stamping churn between boots
 
   tft.init();
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
 
+  pinMode(VAULTLESS_BTN_A, INPUT);          // input-only pin, board pulls it up
+  pinMode(VAULTLESS_BTN_B, INPUT_PULLUP);
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, TFT_BACKLIGHT_ON);
+  noteActivity();
+
   if (sodium_init() < 0) {
-    tft.setTextColor(TFT_RED, TFT_BLACK);
-    tft.drawString("libsodium init FAILED", 4, 4);
+    showBoot("libsodium failed", "the crypto library did not start",
+             "reflash the firmware", C_BAD);
     while (true) { delay(1000); }
   }
 
   loadOrCreatePrivateKey();
-  tftBanner();
+  showIdle();
 }
 
 void loop() {
+  pollButtons();
   while (Serial.available()) {
     char c = (char)Serial.read();
     if (c == '\n') {

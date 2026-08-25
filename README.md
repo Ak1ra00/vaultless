@@ -25,8 +25,10 @@ paper      choose → scan it, or: scribble → create → print ───┘
    computation, so all it did was tell the device, its display and the serial line
    which account was being opened; protocol v3 drops it.
 3. The oracle multiplies by its private scalar `k` (generated on-device, stored in NVS,
-   never exported) and returns `B' = k·B`, playing a matrix-rain handshake on its display
-   while it works.
+   never exported) and returns `B' = k·B`. Its screen shows the same three stages the
+   browser does — the blinded point arriving, `k·B` being computed, the stamped answer
+   going back — with the real values in full. Both are blinded and neither can be undone
+   without the browser's `r`, so putting them on a screen gives nothing away.
 4. The oracle also returns its public key `Y = k·G` and a Chaum-Pedersen DLEQ proof
    that `log_G(Y) == log_B(B')`. The browser verifies the proof and checks `Y` against
    the key it pinned on first use, so a swapped or tampered oracle is rejected instead
@@ -82,7 +84,10 @@ that key onto a device with `env:esp32dev-provision`.
 > **Note:** the oracle auto-approves every request it receives — there is no
 > physical confirmation step. Possession of the connected device is the whole
 > second factor, so anything that can reach its serial port while it's plugged in
-> can evaluate `k·B` on points of its choosing.
+> can evaluate `k·B` on points of its choosing. The device's buttons cycle its
+> information pages and wake the screen; they are deliberately not on the path
+> between a request arriving and it being answered, so pressing one can never
+> approve anything.
 
 ## Repo layout
 
@@ -105,6 +110,8 @@ esp-manifest.json      ESP Web Tools flashing manifest (points at firmware_merge
 icons/, favicon.svg    site icons
 firmware/              ESP32 firmware (PlatformIO)
   src/main.cpp           oracle firmware — OPRF eval, DLEQ proof, NVS key storage, TFT UI
+                         (the idle screen shows the oracle's fingerprint, the same
+                          xxxx-xxxx string the browser pins and a paper sheet prints)
   platformio.ini         env:esp32dev (what the site flashes) plus the encrypted
                          env:esp32dev-secure / env:esp32dev-provision
   SECURE_PROVISIONING.md how to move to encrypted flash without losing your key

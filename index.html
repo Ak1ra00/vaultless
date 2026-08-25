@@ -485,7 +485,10 @@
           <div class="lbl" style="margin:16px 0 10px;">on-board pinout</div>
           <table class="pin-table">
             <tr><td>Display (ST7789)</td><td>SPI: MOSI 19 · SCLK 18 · CS 5 · DC 16 · RST 23 · BL 4</td></tr>
-            <tr><td>Buttons</td><td>unused — requests are auto-approved</td></tr>
+            <tr><td>Buttons</td><td>GPIO 35 / GPIO 0 — cycle the info pages and wake the
+              screen. Requests are still auto-approved; a button never approves one.</td></tr>
+            <tr><td>Backlight</td><td>GPIO 4 — sleeps after 5 minutes idle, wakes on a
+              button or an incoming request</td></tr>
           </table>
         </div>
         <div>
