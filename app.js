@@ -141,8 +141,20 @@ function dleqProve(k, B, Bp, Y) {
 async function enforcePin(pubkeyHex, whatItIs) {
   const trusted = loadTrusted();
   if (!trusted.length) {
+    const fp = keyFingerprint(pubkeyHex);
     saveTrusted([pubkeyHex]);
-    trace('pin', `trusting ${whatItIs} ${keyFingerprint(pubkeyHex)} (first use)`);
+    trace('pin', `trusting ${whatItIs} ${fp} (first use)`);
+    /* Say it out loud. This used to trace only, and the trace lives in the
+     * expert-only panel that Simple mode hides — so the single moment the whole
+     * trust-on-first-use scheme hangs on happened with no visible sign at all.
+     *
+     * It matters more than it looks: the trusted set lives in localStorage,
+     * which is per-origin, so it does not survive a move to a new domain. Every
+     * returning user is a first use again, and this is their one chance to
+     * notice that the key being trusted is not the key they expect. The device
+     * prints the same fingerprint on its idle screen and a paper oracle prints
+     * it on the sheet, so there is something to compare it against. */
+    toast(`Trusting ${whatItIs} ${fp} — check it matches your device or sheet.`);
     return;
   }
   if (trusted.includes(pubkeyHex)) return;

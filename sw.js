@@ -27,7 +27,7 @@
 /* Bump on every shell change. The shell is served cache-first, so a stale
  * VERSION means returning visitors keep the previous index.html and styles.css
  * indefinitely — the activate handler drops old caches only once this differs. */
-const VERSION = 'vaultless-v2';
+const VERSION = 'vaultless-v3';
 
 /* The app shell: markup, the four modules, the vendored crypto, fonts, icons.
  * esp-web-tools is deliberately absent — it is a large graph that only the
