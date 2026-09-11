@@ -31,6 +31,32 @@ if (self !== top) {
 }
 
 /* ---------------------------------------------------------------------
+ * Secure-context guard.
+ *
+ * On plain HTTP the browser withholds navigator.mediaDevices and
+ * navigator.serial, so the camera and the hardware oracle both vanish — and the
+ * old code reported that as "No camera available", which sends people hunting
+ * for a hardware fault that is not there. The camera is the symptom; the cause
+ * is that the page itself arrived over a channel anyone could rewrite.
+ *
+ * crypto.getRandomValues is NOT secure-context gated, so derivation keeps
+ * working on HTTP. That is the dangerous part: the page will cheerfully make
+ * real passwords while a network attacker is free to have replaced app.js with
+ * one that posts the master phrase somewhere. Everything this project claims
+ * rests on the delivered code being the audited code.
+ *
+ * localhost and file:// are secure contexts, so development and a downloaded
+ * copy are unaffected.
+ * ------------------------------------------------------------------- */
+const SECURE = window.isSecureContext;
+if (!SECURE) {
+  const gate = document.getElementById('insecureGate');
+  const where = document.getElementById('insecureOrigin');
+  if (where) where.textContent = location.origin;
+  if (gate) gate.hidden = false;
+}
+
+/* ---------------------------------------------------------------------
  * Group order L of ristretto255 / ed25519 (RFC 9380 / RFC 8032).
  * ------------------------------------------------------------------- */
 const L = 2n ** 252n + 27742317777372353535851937790883648493n;
@@ -291,7 +317,11 @@ document.getElementById('clearTrace').onclick = () => {
  * WebSerial transport
  * ------------------------------------------------------------------- */
 const wsBadge = document.getElementById('wsBadge');
+/* Chrome and Edge DO have WebSerial; on an insecure origin the browser simply
+ * does not expose it. Saying "this browser can't" would be a lie that costs
+ * someone an afternoon. */
 const serialSupported = 'serial' in navigator;
+const serialBlockedByHttp = !serialSupported && !SECURE;
 wsBadge.textContent = serialSupported ? 'supported' : 'unsupported';
 wsBadge.classList.add(serialSupported ? 'on' : 'warn');
 /* Say so where the choice is made. Without this a Firefox or Safari user picks
@@ -364,8 +394,13 @@ async function readLoop() {
 
 async function connectSerial() {
   if (!serialSupported) {
-    fail('serial', 'WebSerial is not supported in this browser',
-         "This browser can't talk to USB devices — try Chrome or Edge, or use a paper oracle.");
+    fail('serial',
+         serialBlockedByHttp
+           ? 'WebSerial is hidden because this page is not on HTTPS'
+           : 'WebSerial is not supported in this browser',
+         serialBlockedByHttp
+           ? 'This page is not on HTTPS, so the browser hides USB devices. Open the https:// address.'
+           : "This browser can't talk to USB devices — try Chrome or Edge, or use a paper oracle.");
     return;
   }
   try {
@@ -540,6 +575,14 @@ async function runDerivation(mode) {
   const passphrase = document.getElementById('passphrase').value;
   const deriveBtn = document.getElementById('deriveBtn');
   const simBtn = document.getElementById('simBtn');
+
+  /* Refusing here as well as behind the gate: the gate is DOM, and DOM can be
+   * dismissed from a console or defeated by a stylesheet that never loaded. */
+  if (!SECURE) {
+    fail('input', 'refusing to derive: this page is not in a secure context',
+         'Not on HTTPS — this page could have been altered in transit. Refusing to make a password.');
+    return;
+  }
 
   if (!passphrase) {
     fail('input', 'master passphrase is required', 'Type your secret phrase first.');

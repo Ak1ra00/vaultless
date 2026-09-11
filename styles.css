@@ -648,6 +648,35 @@
   @keyframes askIn{from{opacity:0;transform:translateY(14px) scale(.97);}to{opacity:1;transform:none;}}
   @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 
+  /* insecure context -------------------------------------------------- */
+  /* Deliberately not dismissible. A "continue anyway" button on this would be
+     clicked through, and the thing it guards is the master phrase. */
+  .insecure-gate{
+    position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;
+    background:rgba(4,6,8,.94);backdrop-filter:blur(6px);overflow-y:auto;
+  }
+  .insecure-gate[hidden]{display:none;}
+  .insecure-card{
+    max-width:620px;background:var(--bg-2);border:1.5px solid var(--red);
+    border-radius:var(--r);padding:30px 32px;box-shadow:0 20px 70px rgba(0,0,0,.6);
+  }
+  .insecure-mark{
+    display:grid;place-items:center;width:42px;height:42px;border-radius:50%;
+    background:var(--red);color:#1a0603;font-family:var(--mono);font-weight:700;
+    font-size:24px;margin-bottom:16px;
+  }
+  .insecure-card h2{font-size:23px;font-weight:600;margin-bottom:14px;letter-spacing:-.01em;}
+  .insecure-card p{color:var(--ink-1);font-size:15.5px;line-height:1.6;margin:0 0 13px;}
+  .insecure-card p:last-child{margin-bottom:0;}
+  .insecure-card code{
+    font-family:var(--mono);font-size:.88em;color:var(--amber);
+    background:var(--bg-0);padding:.12em .4em;border-radius:4px;
+  }
+  .insecure-also{
+    border-left:2px solid var(--amber);padding-left:13px;color:var(--ink-2) !important;
+  }
+  @media(max-width:560px){.insecure-card{padding:22px 20px;}}
+
   @media print{
     body{background:#fff;}
     #rain,.aurora,.toast{display:none !important;}

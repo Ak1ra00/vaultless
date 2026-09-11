@@ -229,6 +229,20 @@ export function createScanner({ video, canvas, onResult, onError }) {
 
   async function start() {
     stopped = false;
+    /* Checked before calling, because on an insecure origin mediaDevices is not
+     * merely empty — it is undefined, and reaching through it throws a
+     * TypeError that the catch below used to report as "No camera available".
+     * That reads as a broken webcam, so it gets diagnosed as one: on a PC, then
+     * on a phone, then on another phone, all of which fail identically because
+     * the fault is the page's origin rather than any of the cameras. */
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      onError(window.isSecureContext
+        ? 'This browser does not offer camera access — you can type the code instead.'
+        : 'The camera needs a secure (https://) connection. This page is not on one, '
+          + 'so no device will offer its camera. Type the code instead, or open the '
+          + 'https:// address.');
+      return false;
+    }
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' }, audio: false,

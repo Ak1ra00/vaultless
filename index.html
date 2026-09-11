@@ -516,6 +516,31 @@ pio run -e esp32dev -t upload</pre>
   </div>
 </div>
 
+<!-- Shown only when the page is not in a secure context. Everything this site
+     does rests on the code arriving unmodified; on plain HTTP it has not. -->
+<div class="insecure-gate" id="insecureGate" hidden role="alertdialog"
+     aria-labelledby="insecureTitle" aria-describedby="insecureBody">
+  <div class="insecure-card">
+    <span class="insecure-mark" aria-hidden="true">!</span>
+    <h2 id="insecureTitle">This page did not arrive over a secure connection</h2>
+    <div id="insecureBody">
+      <p>You are reading <code id="insecureOrigin"></code> over plain HTTP. Anyone
+        between you and the server — a network, an ISP, whoever runs the Wi-Fi — can
+        change this page before it reaches you, and a changed page can send your
+        master phrase and every password it makes straight to them.</p>
+      <p>This site is refusing to make passwords here. That is deliberate: its whole
+        premise is that the code you audited is the code that runs, and over HTTP
+        nobody can promise that.</p>
+      <p class="insecure-also">Two things are already broken and are not your device's
+        fault: the camera and the USB hardware oracle both require HTTPS, so both
+        report as missing on every machine you try.</p>
+      <p><strong>If this is your site:</strong> serve it over HTTPS and turn on
+        "Enforce HTTPS". <strong>If you are a visitor:</strong> try the
+        <code>https://</code> address, and do not type your phrase until it loads.</p>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- One dialog, reused for asking and confirming. No <form method="dialog">:
