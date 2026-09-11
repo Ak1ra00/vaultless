@@ -2,15 +2,59 @@
  * A third party able to serve script to this page could read the master
  * passphrase and every derived password, so nothing here loads cross-origin. */
 import {
-  RistrettoPoint, hashToRistretto255, ed25519,
+  RistrettoPoint, hashToRistretto255,
   bytesToHex, hexToBytes, bytesToNumberLE, numberToBytesLE,
   utf8ToBytes, concatBytes, invert, hkdf, sha256, sha512,
 } from './vendor/noble-bundle.js';
 import {
-  initChrome, toast, setDemo, markResultFilled,
-  vizStart, vizOracle, vizReturn, vizDone, vizReset, getOracleChoice, setReady,
+  initChrome, toast, setDemo, markResultFilled, confirmDialog, clearResult,
+  vizStart, vizBlind, vizSend, vizOracle, vizReturn, vizUnblind, vizDone, vizReset,
+  revealPassword, getOracleChoice, setReady,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
+
+/* ---------------------------------------------------------------------
+ * Clickjacking guard.
+ *
+ * frame-ancestors cannot be expressed in a <meta> CSP and GitHub Pages cannot
+ * send real headers, so this is the only defence available to a page that shows
+ * live passwords and holds a master phrase: refuse to run framed. Blank the
+ * document first and navigate second — a busting redirect can be cancelled by
+ * the framing page, but an emptied document has nothing left to click on. The
+ * throw stops the rest of this module, and with it every DOM handler below.
+ * ------------------------------------------------------------------- */
+if (self !== top) {
+  document.documentElement.replaceChildren(
+    document.createElement('head'), document.createElement('body'));
+  try { top.location = self.location; } catch { /* cross-origin: blank is the point */ }
+  throw new Error('vaultless refuses to run inside a frame');
+}
+
+/* ---------------------------------------------------------------------
+ * Secure-context guard.
+ *
+ * On plain HTTP the browser withholds navigator.mediaDevices and
+ * navigator.serial, so the camera and the hardware oracle both vanish — and the
+ * old code reported that as "No camera available", which sends people hunting
+ * for a hardware fault that is not there. The camera is the symptom; the cause
+ * is that the page itself arrived over a channel anyone could rewrite.
+ *
+ * crypto.getRandomValues is NOT secure-context gated, so derivation keeps
+ * working on HTTP. That is the dangerous part: the page will cheerfully make
+ * real passwords while a network attacker is free to have replaced app.js with
+ * one that posts the master phrase somewhere. Everything this project claims
+ * rests on the delivered code being the audited code.
+ *
+ * localhost and file:// are secure contexts, so development and a downloaded
+ * copy are unaffected.
+ * ------------------------------------------------------------------- */
+const SECURE = window.isSecureContext;
+if (!SECURE) {
+  const gate = document.getElementById('insecureGate');
+  const where = document.getElementById('insecureOrigin');
+  if (where) where.textContent = location.origin;
+  if (gate) gate.hidden = false;
+}
 
 /* ---------------------------------------------------------------------
  * Group order L of ristretto255 / ed25519 (RFC 9380 / RFC 8032).
@@ -58,7 +102,35 @@ function scalarToBytes(s) {
  *     Pinning is what makes a substituted device detectable.
  * ------------------------------------------------------------------- */
 const DLEQ_DST = utf8ToBytes('oprf-vaultless-dleq-v1');
-const PIN_KEY = 'vaultless.oracle.pubkey.v1';
+const PIN_KEY = 'vaultless.oracle.pubkey.v1';      // legacy: one key, replaced on accept
+const TRUST_KEY = 'vaultless.oracle.trusted.v1';   // current: the set of keys you trust
+
+/* The same short identifier the paper oracle prints on its sheet — SHA-256 of
+ * the public key, truncated — so a device and a sheet holding one key show one
+ * fingerprint, and the mismatch dialog can name keys instead of showing 24
+ * characters of hex nobody can compare. */
+function keyFingerprint(pubkeyHex) {
+  const h = bytesToHex(sha256(hexToBytes(pubkeyHex))).slice(0, 8);
+  return `${h.slice(0, 4)}-${h.slice(4, 8)}`;
+}
+
+function loadTrusted() {
+  try {
+    const raw = localStorage.getItem(TRUST_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (Array.isArray(v)) return v.filter(x => typeof x === 'string' && x.length === 64);
+    }
+    // Carry across the single key pinned before this was a set.
+    const legacy = localStorage.getItem(PIN_KEY);
+    if (legacy) return [legacy];
+  } catch { /* private mode, or corrupt value: start empty rather than throw */ }
+  return [];
+}
+
+function saveTrusted(list) {
+  try { localStorage.setItem(TRUST_KEY, JSON.stringify(list)); } catch { /* private mode */ }
+}
 
 function dleqChallenge(Y, B, Bp, T1, T2) {
   const h = sha512(concatBytes(
@@ -92,27 +164,53 @@ function dleqProve(k, B, Bp, Y) {
  * device, and equally a sheet that is not the one this browser has been using —
  * scanning last year's sheet would otherwise derive different passwords with no
  * error anywhere. */
-function enforcePin(pubkeyHex, whatItIs) {
-  let pinned = null;
-  try { pinned = localStorage.getItem(PIN_KEY); } catch { /* private mode */ }
-  if (!pinned) {
-    try { localStorage.setItem(PIN_KEY, pubkeyHex); } catch { /* private mode */ }
-    trace('pin', `pinned ${whatItIs} ${pubkeyHex.slice(0, 16)}… (first use)`);
+async function enforcePin(pubkeyHex, whatItIs) {
+  const trusted = loadTrusted();
+  if (!trusted.length) {
+    const fp = keyFingerprint(pubkeyHex);
+    saveTrusted([pubkeyHex]);
+    trace('pin', `trusting ${whatItIs} ${fp} (first use)`);
+    /* Say it out loud. This used to trace only, and the trace lives in the
+     * expert-only panel that Simple mode hides — so the single moment the whole
+     * trust-on-first-use scheme hangs on happened with no visible sign at all.
+     *
+     * It matters more than it looks: the trusted set lives in localStorage,
+     * which is per-origin, so it does not survive a move to a new domain. Every
+     * returning user is a first use again, and this is their one chance to
+     * notice that the key being trusted is not the key they expect. The device
+     * prints the same fingerprint on its idle screen and a paper oracle prints
+     * it on the sheet, so there is something to compare it against. */
+    toast(`Trusting ${whatItIs} ${fp} — check it matches your device or sheet.`);
     return;
   }
-  if (pinned === pubkeyHex) return;
-  const okToRepin = confirm(
-    `WARNING: this ${whatItIs} is not the one previously pinned.\n\n` +
-    `pinned: ${pinned.slice(0, 24)}…\n` +
-    `this:   ${pubkeyHex.slice(0, 24)}…\n\n` +
-    'A different key derives DIFFERENT passwords. Only continue if you ' +
-    'deliberately replaced it. Trust this key from now on?');
-  if (!okToRepin) throw new Error(`${whatItIs} public key does not match the pinned one`);
-  try { localStorage.setItem(PIN_KEY, pubkeyHex); } catch { /* private mode */ }
-  trace('pin', `re-pinned ${whatItIs} ${pubkeyHex.slice(0, 16)}…`, true);
+  if (trusted.includes(pubkeyHex)) return;
+
+  const fp = keyFingerprint(pubkeyHex);
+  const ok = await confirmDialog({
+    title: `This ${whatItIs} is not one you have used here`,
+    lines: [
+      `It presents ${fp}. This browser already trusts ` +
+      `${trusted.map(keyFingerprint).join(', ')}.`,
+      'A different key makes different passwords — none of the ones you already ' +
+      'use. Continue only if you meant to add another oracle. If you did not, ' +
+      'stop: something has taken the place of yours.',
+    ],
+    confirmLabel: `Also trust ${fp}`,
+    cancelLabel: 'Stop',
+    danger: true,
+  });
+  if (!ok) throw new Error(`${whatItIs} public key is not one this browser trusts`);
+
+  /* Added, never substituted. Replacing the pinned key meant that owning two
+   * legitimate oracles — a device and a work device, or a device and a sheet
+   * carrying a different k — silently disarmed the protection for whichever one
+   * you had used a minute ago, and trained you to click through the single
+   * prompt that matters. */
+  saveTrusted([...trusted, pubkeyHex]);
+  trace('pin', `now also trusting ${whatItIs} ${fp}`, true);
 }
 
-function verifyOracleResponse(response, B, pin = true) {
+async function verifyOracleResponse(response, B, pin = true) {
   if (!response.pubkey || !response.proof) {
     throw new Error('oracle did not supply a DLEQ proof — firmware predates ' +
                     'protocol v2, reflash it before deriving');
@@ -126,12 +224,39 @@ function verifyOracleResponse(response, B, pin = true) {
   } catch {
     throw new Error('oracle response is malformed');
   }
+  /* Reject the identity element before doing anything else with it.
+   *
+   * An oracle whose scalar is k = 0 has Y = identity and answers B' = identity,
+   * and its DLEQ proof VERIFIES: with k = 0 the Schnorr equation collapses to
+   * s = t, so both checks (s*G - c*Y and s*B - c*B') reproduce the prover's
+   * commitments exactly. The identity is a perfectly canonical ristretto255
+   * encoding, so point decoding does not catch it either.
+   *
+   * The consequence is total: unblinding gives S = identity for EVERY
+   * passphrase and EVERY index, so the passphrase stops contributing at all and
+   * the derived password becomes a fixed constant anyone can compute offline.
+   * That is precisely the substituted-device attack the proof and the pin exist
+   * to stop, and it lands hardest on first use, when there is no pin yet.
+   *
+   * ristretto255 has prime order, so Y != identity already rules out every
+   * degenerate k; B' is checked too because it costs nothing. The firmware
+   * refuses the same cases (libsodium returns -1 on an identity result) and
+   * decodeRecovery refuses k = 0, so this is the browser catching up with the
+   * two places that already got it right. */
+  if (Y.equals(RistrettoPoint.ZERO) || Bp.equals(RistrettoPoint.ZERO)) {
+    throw new Error('oracle presented a zero key — every password it produced ' +
+                    'would be a public constant; refusing to derive');
+  }
   if (!dleqVerify(Y, B, Bp, c, sScalar)) {
     throw new Error('DLEQ proof failed — this device did not compute k*B with ' +
                     'the key it claims; refusing to derive');
   }
   if (!pin) return Bp;
-  enforcePin(response.pubkey, 'oracle');
+  /* Y as re-encoded from the parsed point, never response.pubkey as it arrived.
+   * The comparison is string equality, so an oracle answering in uppercase hex
+   * would trip the "not one you have used here" dialog with nothing actually
+   * wrong — and that is the one dialog users must not be taught to dismiss. */
+  await enforcePin(bytesToHex(Y.toRawBytes()), 'oracle');
   return Bp;
 }
 
@@ -160,17 +285,54 @@ function trace(step, msg, isErr = false) {
   traceEl.appendChild(row);
   traceEl.scrollTop = traceEl.scrollHeight;
 }
+/* A failure the user has to know about.
+ *
+ * The protocol trace lives inside the expert-only panel, which Simple mode —
+ * the default — hides outright. Tracing alone therefore means a button that
+ * silently does nothing, which is what every input-validation and transport
+ * error in here used to do. Anything a person can act on goes through this, so
+ * it lands in both places: the trace for detail, a toast for visibility.
+ *
+ * `short` exists because the toast is one line on a phone; the trace keeps the
+ * long form. */
+function fail(step, msg, short = msg) {
+  trace(step, msg, true);
+  toast(short);
+}
+
 document.getElementById('clearTrace').onclick = () => {
-  traceEl.innerHTML = '<div class="row"><span class="empty">— cleared —</span></div>';
+  // Built as nodes rather than markup. The string is a literal today, but an
+  // innerHTML sink on the page holding the master phrase is not worth keeping
+  // around for someone to later feed a variable into.
+  const row = document.createElement('div');
+  row.className = 'row';
+  const empty = document.createElement('span');
+  empty.className = 'empty';
+  empty.textContent = '— cleared —';
+  row.appendChild(empty);
+  traceEl.replaceChildren(row);
 };
 
 /* ---------------------------------------------------------------------
  * WebSerial transport
  * ------------------------------------------------------------------- */
 const wsBadge = document.getElementById('wsBadge');
+/* Chrome and Edge DO have WebSerial; on an insecure origin the browser simply
+ * does not expose it. Saying "this browser can't" would be a lie that costs
+ * someone an afternoon. */
 const serialSupported = 'serial' in navigator;
+const serialBlockedByHttp = !serialSupported && !SECURE;
 wsBadge.textContent = serialSupported ? 'supported' : 'unsupported';
 wsBadge.classList.add(serialSupported ? 'on' : 'warn');
+/* Say so where the choice is made. Without this a Firefox or Safari user picks
+ * the option the home page labels "strongest", walks three screens into it, and
+ * presses a Connect button that cannot ever work. */
+if (!serialSupported) {
+  for (const id of ['hwUnsupported', 'hwUnsupportedPanel']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = false;
+  }
+}
 
 let port = null, writer = null, reader = null, readableClosed = null;
 const connDot = document.getElementById('connDot');
@@ -182,7 +344,7 @@ function setConnected(state, label) {
   if (getOracleChoice() === 'paper') return;   // the pill is showing the paper oracle
   connDot.className = 'dot' + (state ? ' live' : '');
   connLabel.textContent = label;
-  connectBtn.disabled = state;
+  connectBtn.disabled = state || !serialSupported;
   disconnectBtn.disabled = !state;
   document.getElementById('homeStep2').classList.toggle('done', state);
   setReady(state ? 'Oracle connected and ready' : 'Oracle not connected yet', state);
@@ -232,7 +394,13 @@ async function readLoop() {
 
 async function connectSerial() {
   if (!serialSupported) {
-    trace('serial', 'WebSerial is not supported in this browser', true);
+    fail('serial',
+         serialBlockedByHttp
+           ? 'WebSerial is hidden because this page is not on HTTPS'
+           : 'WebSerial is not supported in this browser',
+         serialBlockedByHttp
+           ? 'This page is not on HTTPS, so the browser hides USB devices. Open the https:// address.'
+           : "This browser can't talk to USB devices — try Chrome or Edge, or use a paper oracle.");
     return;
   }
   try {
@@ -245,7 +413,10 @@ async function connectSerial() {
     setConnected(true, 'oracle connected');
     trace('serial', 'WebSerial port opened @ 115200 baud');
   } catch (e) {
-    trace('serial', `connection failed: ${e.message}`, true);
+    // Dismissing the browser's own port picker is a choice, not a fault: it
+    // throws NotFoundError, and toasting an error over it would be nagging.
+    if (e.name === 'NotFoundError') trace('serial', 'no port chosen');
+    else fail('serial', `connection failed: ${e.message}`, 'Could not open the oracle — is it plugged in?');
   }
 }
 
@@ -261,6 +432,7 @@ async function disconnectSerial() {
   }
   port = null; writer = null; reader = null;
   setConnected(false, 'oracle disconnected');
+  clearResult();          // the oracle is gone; its password should not linger
   trace('serial', 'port closed');
 }
 
@@ -285,6 +457,7 @@ async function sendToOracle(payloadObj, timeoutMs = 30000) {
 
 connectBtn.onclick = connectSerial;
 disconnectBtn.onclick = disconnectSerial;
+connectBtn.disabled = !serialSupported;
 
 // Reclaim the header pill whenever the route leaves paper mode.
 document.addEventListener('oraclechange', (e) => {
@@ -340,11 +513,17 @@ document.querySelectorAll('.fmt-opt').forEach(el => {
   };
 });
 
+/* The button used to carry a fixed aria-label ("Show or hide the phrase"), which
+ * overrides its visible text — so sighted users read "show" then "hide" while
+ * screen-reader users heard the same string both times and never learned which
+ * state they were in. The label now follows the state, like the text does. */
 document.getElementById('togglePass').onclick = () => {
   const el = document.getElementById('passphrase');
   const btn = document.getElementById('togglePass');
   el.type = el.type === 'password' ? 'text' : 'password';
-  btn.textContent = el.type === 'password' ? 'show' : 'hide';
+  const hidden = el.type === 'password';
+  btn.textContent = hidden ? 'show' : 'hide';
+  btn.setAttribute('aria-label', hidden ? 'Show the phrase' : 'Hide the phrase');
 };
 
 /* ---------------------------------------------------------------------
@@ -397,8 +576,16 @@ async function runDerivation(mode) {
   const deriveBtn = document.getElementById('deriveBtn');
   const simBtn = document.getElementById('simBtn');
 
+  /* Refusing here as well as behind the gate: the gate is DOM, and DOM can be
+   * dismissed from a console or defeated by a stylesheet that never loaded. */
+  if (!SECURE) {
+    fail('input', 'refusing to derive: this page is not in a secure context',
+         'Not on HTTPS — this page could have been altered in transit. Refusing to make a password.');
+    return;
+  }
+
   if (!passphrase) {
-    trace('input', 'master passphrase is required', true);
+    fail('input', 'master passphrase is required', 'Type your secret phrase first.');
     return;
   }
 
@@ -406,23 +593,33 @@ async function runDerivation(mode) {
    * exactly what the user meant. parseInt was too forgiving: "12x" silently
    * became 12, and anything non-numeric became NaN, which stringifies to
    * "NaN" and derives a password from it. Require a plain non-negative
-   * integer, and keep it inside the range the firmware's `long` can hold. */
+   * integer, and keep it inside the range the firmware's `long` can hold.
+   *
+   * The field is type="text" inputmode="numeric" for this to work at all. As a
+   * number input it returned "" for anything the browser judged invalid — "-5",
+   * "1e5", "abc" — so the `|| '0'` below turned every one of them into account
+   * ZERO and derived a confident, correctly formatted password for the wrong
+   * account. The validation was already right; it just never saw the input. */
   const rawIndex = (document.getElementById('index').value || '0').trim();
   if (!/^\d+$/.test(rawIndex)) {
-    trace('input', 'index must be a non-negative whole number', true);
+    fail('input', 'index must be a non-negative whole number',
+         'The account number has to be a whole number, 0 or more.');
     return;
   }
   const index = Number(rawIndex);
   if (!Number.isSafeInteger(index) || index > 2147483647) {
-    trace('input', 'index is out of range (max 2147483647)', true);
+    fail('input', 'index is out of range (max 2147483647)',
+         'That account number is too large — the most is 2147483647.');
     return;
   }
   if (mode === 'hardware' && !writer) {
-    trace('input', 'no oracle connected — connect your hardware oracle, load your paper oracle, or try the demo', true);
+    fail('input', 'no oracle connected — connect your hardware oracle, load your paper oracle, or try the demo',
+         'No oracle connected — set one up on the home page, or try the demo.');
     return;
   }
   if (useSheet && !getSheetKey()) {
-    trace('input', 'no paper oracle loaded — scan its square or type its code first', true);
+    fail('input', 'no paper oracle loaded — scan its square or type its code first',
+         'No paper oracle loaded — scan its square or type its code first.');
     return;
   }
 
@@ -444,46 +641,79 @@ async function runDerivation(mode) {
        * point, and therefore exactly the same password, as the hardware. */
       const k = getSheetKey();
       trace('2/4', 'using your paper oracle (its key is here, so no round trip)');
-      enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
+      await enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
       trace('3/4', 'computing S = k·P locally');
-      vizStart('reading your paper oracle…');
-      vizOracle('doing the handshake…');
-      await new Promise(r => setTimeout(r, 450));
+      /* No blinding stage here, and the animation says so: with k in hand there
+       * is no second party to hide the input from, so nothing crosses a channel.
+       * Showing a disguise step the paper path does not perform would be the one
+       * kind of prettiness this project cannot afford. */
+      await vizStart('turning your phrase into a point on the curve…', bytesToHex(P.toRawBytes()));
+      const stampingPaper = vizOracle('your paper oracle is doing the handshake…');
       S = P.multiply(k);
-      vizReturn('done…');
+      await stampingPaper;
+      await vizUnblind('landing on the shared secret…', bytesToHex(S.toRawBytes()));
     } else {
+
+    await vizStart('turning your phrase into a point on the curve…', bytesToHex(P.toRawBytes()));
 
     trace('2/7', 'generating blinding scalar r and computing B = r·P');
     const r = randomScalar();
     const B = P.multiply(r);
     const blindedHex = bytesToHex(B.toRawBytes());
     trace('2/7', `B = ${blindedHex.slice(0, 16)}…`);
+    await vizBlind('disguising it — this is all the oracle ever sees…', blindedHex);
 
-    trace('3/7', `sending {index, point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
-    vizStart('sending a disguised request…');
+    trace('3/7', `sending {point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
+    await vizSend('handing it over…');
     let response;
     if (useSimulator) {
-      vizOracle('the demo key is stamping it…');
-      await new Promise(r => setTimeout(r, 700));   // let the animation read
+      const stamping = vizOracle('the demo key is stamping it…');
       response = simulateOracle(blindedHex);
+      await stamping;                                // let the animation read
     } else {
-      vizOracle('your oracle is stamping it…');
-      response = await sendToOracle({ index, point: blindedHex });
+      const stamping = vizOracle('your oracle is stamping it…');
+      /* Protocol v3 drops `index` from the request. The oracle never used it —
+       * it multiplies the blinded point and nothing else — so carrying it only
+       * told the device, its display, and anyone reading the serial line which
+       * account was being unlocked. The index still reaches the derivation
+       * through the hash-to-group input and the HKDF salt, where the blinding
+       * already covers it.
+       *
+       * A device still on v2 firmware requires the field and answers
+       * bad_request without it, so fall back once rather than breaking every
+       * oracle in the field — and say plainly what reflashing would buy. */
+      response = await sendToOracle({ point: blindedHex });
+      if (response.error === 'bad_request') {
+        trace('3/7', 'oracle runs v2 firmware — retrying with the account number in ' +
+                     'the clear; reflash it to stop disclosing which account you open', true);
+        response = await sendToOracle({ index, point: blindedHex });
+      }
+      await stamping;
     }
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);
     if (!response.point) throw new Error('oracle response missing point');
     trace('4/7', `received B' = ${response.point.slice(0, 16)}…`);
-    vizReturn('stamped answer coming back…');
+    await vizReturn('stamped, and on its way back…', response.point);
 
     trace('5/7', 'verifying DLEQ proof that B\' = k·B under the pinned key');
-    const Bp = verifyOracleResponse(response, B, !useSimulator);
+    const Bp = await verifyOracleResponse(response, B, !useSimulator);
     trace('5/7', useSimulator ? 'proof ok (simulator, not pinned)' : 'proof ok · oracle key matches pin');
 
     trace('6/7', 'unblinding: S = r⁻¹·B\'');
     const rInv = invMod(r, L);
     S = Bp.multiply(rInv);
+    await vizUnblind('taking the disguise off — only you can do this…',
+                     bytesToHex(S.toRawBytes()));
     }
 
+    /* One more guard covering all three paths at once — hardware, simulator and
+     * paper. Anything that lands on the identity here means the shared secret
+     * carries no key at all, and HKDF would happily expand it into a real-looking
+     * password regardless. */
+    if (S.equals(RistrettoPoint.ZERO)) {
+      throw new Error('derivation collapsed to the identity element — the oracle ' +
+                      'key is degenerate; refusing to derive');
+    }
     const sBytes = S.toRawBytes();
 
     trace(useSheet ? '4/4' : '7/7', 'expanding shared secret via HKDF-SHA256');
@@ -497,7 +727,10 @@ async function runDerivation(mode) {
   } catch (e) {
     trace('error', e.message, true);
     vizReset();
-    toast(e.message.length > 70 ? 'Could not make a password — see the trace' : e.message);
+    // Never send the reader to the trace: in Simple mode it is not on screen.
+    toast(e.message.length > 70
+      ? 'Could not make a password. Switch to Expert mode for the full reason.'
+      : e.message);
   } finally {
     deriveBtn.disabled = false; simBtn.disabled = false;
   }
@@ -507,7 +740,7 @@ function showResult(pw) {
   document.getElementById('pwPlaceholder').style.display = 'none';
   const el = document.getElementById('pwOut');
   el.style.display = 'block';
-  el.textContent = pw;
+  revealPassword(el, pw);
   el.classList.remove('hidden-pw');
   el.classList.remove('reveal');
   void el.offsetWidth;            // restart the entrance animation
@@ -521,6 +754,30 @@ function showResult(pw) {
 
 const CLIPBOARD_CLEAR_MS = 60000;
 let clipboardTimer = null;
+
+/* Best-effort scrub, so a derived password does not sit in the system clipboard.
+ *
+ * Reading the clipboard back is the precise way to do this — only clear what we
+ * put there — but navigator.clipboard.readText() raises a permission prompt in
+ * Chromium, and it would arrive a full minute after the copy with nothing on
+ * screen to explain it. On a security tool that is exactly the prompt people
+ * should refuse, and refusing it meant no clearing at all.
+ *
+ * So: read back only where permission has already been granted — permissions
+ * .query() never prompts — and otherwise simply overwrite. Clobbering something
+ * copied since is a small annoyance; leaving a password in the clipboard is not. */
+async function scrubClipboard(pw) {
+  try {
+    let mayRead = false;
+    try {
+      const st = await navigator.permissions.query({ name: 'clipboard-read' });
+      mayRead = st.state === 'granted';
+    } catch { /* Firefox and Safari do not know this permission name */ }
+    if (mayRead && (await navigator.clipboard.readText()) !== pw) return;  // theirs, not ours
+    await navigator.clipboard.writeText('');
+    trace('clipboard', 'cleared after 60s');
+  } catch { /* not focused, or write denied — leave it alone */ }
+}
 document.getElementById('copyBtn').onclick = async () => {
   const pw = document.getElementById('pwOut').textContent;
   if (!pw) return;
@@ -528,21 +785,30 @@ document.getElementById('copyBtn').onclick = async () => {
   const btn = document.getElementById('copyBtn');
   const original = btn.textContent;
   btn.textContent = 'Copied ✓';
-  setTimeout(() => (btn.textContent = original), 1400);
-  toast('Copied — clears from the clipboard in 60 seconds');
-  // Best-effort clipboard scrub, so a derived password does not sit in the
-  // system clipboard indefinitely. Only clears if we still own what we wrote.
+  setTimeout(() => (btn.textContent = original), 2400);
+  toast('Copied — cleared from the clipboard in 60 seconds');
   clearTimeout(clipboardTimer);
-  clipboardTimer = setTimeout(async () => {
-    try {
-      if (await navigator.clipboard.readText() === pw) {
-        await navigator.clipboard.writeText('');
-        trace('clipboard', 'cleared after 60s');
-      }
-    } catch { /* permission denied or not focused — leave it alone */ }
-  }, CLIPBOARD_CLEAR_MS);
+  clipboardTimer = setTimeout(() => scrubClipboard(pw), CLIPBOARD_CLEAR_MS);
 };
 
 /* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
 initChrome();
 initSheet();
+
+/* ---------------------------------------------------------------------
+ * Offline shell.
+ *
+ * A password manager that needs the network to hand you a password is not much
+ * of one — and every load without this re-fetches the derivation code from the
+ * host, so the code you audited last week is only the code that runs today if
+ * the host is still honest. Caching the shell pins it between updates.
+ *
+ * Registration is last and its failure is never fatal: no service worker means
+ * the site behaves exactly as it did before, which is also what happens on
+ * file:// and in browsers that do not support one.
+ * ------------------------------------------------------------------- */
+if ('serviceWorker' in navigator && isSecureContext) {
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* not fatal */ });
+  });
+}

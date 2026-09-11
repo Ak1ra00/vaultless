@@ -12,3 +12,11 @@ CONFIG_FREERTOS_HZ=1000
 # running loop() on a separate 8KB loopTask; give the main task comparable
 # headroom instead.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# Core dumps off, explicitly.
+#
+# ESP-IDF already defaults to this, but both partition tables reserve a coredump
+# partition, so the only thing standing between a panic and k landing in flash is
+# a default nobody has written down. On the unencrypted build the task memory a
+# core dump captures contains g_privkey and g_noncekey in the clear.
+CONFIG_ESP_COREDUMP_ENABLE_TO_NONE=y

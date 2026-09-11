@@ -18,7 +18,7 @@ import {
   encodeRecovery, decodeRecovery, generateKey, scalarTo32, fingerprint,
   drawQR, createScanner, createEntropyCollector,
 } from './recovery.js';
-import { toast, pickFork, setReady } from './ui.js';
+import { toast, pickFork, setReady, confirmDialog, clearResult } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const IDLE_MS = 5 * 60 * 1000;
@@ -46,6 +46,27 @@ function setKey(k) {
   touchIdle();
 }
 
+/* Wipe every rendered copy of the key.
+ *
+ * Dropping the scalar is only half of forgetting it. After createSheet the full
+ * VLT1- code sits in #sheetCode as text and the same bytes sit in #sheetQR as
+ * canvas pixels, and hiding the panel leaves both in the document. Without this
+ * the idle timer announces "Paper oracle cleared" while the key is still on the
+ * page, and re-opening the create fork shows the old key underneath a status
+ * line reading "No paper oracle loaded". */
+function clearSheetOutput() {
+  $('sheetOutput').style.display = 'none';
+  $('sheetCode').textContent = '';
+  $('sheetFp').textContent = '';
+  $('sheetDate').textContent = '';
+  const qr = $('sheetQR');
+  qr.getContext('2d').clearRect(0, 0, qr.width, qr.height);
+  qr.width = qr.height = 0;          // drop the backing store as well as the paint
+  $('createSheetBtn').textContent = 'Create my paper oracle';
+  // A typed code survives a failed decode in this field; it is the key too.
+  $('sheetManual').value = '';
+}
+
 function forgetKey() {
   sheetKey = null;
   clearTimeout(idleTimer);
@@ -53,6 +74,8 @@ function forgetKey() {
   // last open sitting there with nothing loaded behind it.
   pickFork(PAPER_PANELS, null);
   stopScan();
+  clearSheetOutput();
+  clearResult();       // the password this oracle made should not outlive it
   renderStatus();
 }
 
@@ -77,6 +100,8 @@ function renderStatus() {
 }
 
 /* ------------------------------------------------------------- accepting */
+/* Returns false when the text is not a usable code, which is what tells the
+ * scanner to keep looking rather than stopping on the first thing it decodes. */
 function acceptCode(text) {
   let k;
   try {
@@ -209,7 +234,25 @@ function initEntropyPad() {
 }
 
 /* -------------------------------------------------------------- creating */
-function createSheet() {
+async function createSheet() {
+  /* One click used to replace the loaded key and its rendered sheet outright.
+   * If the previous one had been created but not yet printed, it was gone for
+   * good — and there is no way to get it back, because nothing anywhere stores
+   * it. Ask, and make keeping it the default answer. */
+  if (sheetKey) {
+    const ok = await confirmDialog({
+      title: 'Replace the paper oracle you have loaded?',
+      lines: [
+        `The one loaded now is ${fingerprint(sheetKey)}.`,
+        'If you have not printed it, it cannot be recovered — nothing here ' +
+        'stores it. Passwords made with it would need making again with the new one.',
+      ],
+      confirmLabel: 'Make a new one anyway',
+      cancelLabel: 'Keep this one',
+      danger: true,
+    });
+    if (!ok) return;
+  }
   const k = generateKey(entropy ? entropy.take() : undefined);
   const code = encodeRecovery(scalarTo32(k));
   const fp = fingerprint(k);
@@ -229,10 +272,56 @@ function createSheet() {
   toast(`Paper oracle created · ${fp} — print it now`);
 }
 
+/* -------------------------------------------------------------- printing */
+/* Print the sheet, and only the sheet.
+ *
+ * The old print rule hid the app with visibility:hidden, which preserves layout:
+ * the sheet came out on page one followed by several blank pages, because the
+ * whole document was still being paginated behind it. It could not be fixed with
+ * position tricks either — .wrap is the positioned ancestor, so collapsing it
+ * would clip the sheet. Lifting the node to the top of <body> for the duration
+ * of the job leaves nothing behind it to paginate.
+ *
+ * It also fixes the other half: #printable used to sit inside a display:none
+ * container until a sheet existed, so Ctrl+P from anywhere else printed a blank
+ * page. Now that only happens on a deliberate press of the print button. */
+let printAnchor = null;
+
+function printSheet() {
+  const node = $('printable');
+  printAnchor = document.createComment('printable');
+  node.parentNode.insertBefore(printAnchor, node);
+  document.body.appendChild(node);
+  document.body.classList.add('printing-sheet');
+  window.print();
+  // Safari fires afterprint unreliably; restoring on the next tick as well is
+  // harmless because restore() is idempotent.
+  setTimeout(restoreAfterPrint, 0);
+}
+
+function restoreAfterPrint() {
+  if (!printAnchor) return;
+  printAnchor.parentNode.insertBefore($('printable'), printAnchor);
+  printAnchor.remove();
+  printAnchor = null;
+  document.body.classList.remove('printing-sheet');
+}
+
 export function initSheet() {
+  addEventListener('afterprint', restoreAfterPrint);
   initEntropyPad();
   renderStatus();
   document.addEventListener('oraclechange', renderStatus);
+
+  /* Nothing above stopped the camera when the scan screen went away: hiding the
+   * <video> leaves the MediaStream live, the tracks open and the machine's
+   * recording light on, which is the wrong signal for a page whose whole claim
+   * is that nothing leaves the device. Tear it down whenever the screen it
+   * belongs to is no longer the one being shown. */
+  document.addEventListener('viewchange', stopScan);
+  document.addEventListener('oraclechange', (e) => {
+    if (e.detail.choice !== 'paper') stopScan();
+  });
 
   $('forkHave').onclick = () => {
     pickFork(PAPER_PANELS, 'forkHave');
@@ -252,7 +341,7 @@ export function initSheet() {
     if (e.key === 'Enter') { e.preventDefault(); $('sheetManualBtn').click(); }
   });
   $('createSheetBtn').onclick = createSheet;
-  $('printSheetBtn').onclick = () => window.print();
+  $('printSheetBtn').onclick = printSheet;
 
   // Any interaction with a loaded key restarts its idle countdown.
   for (const ev of ['click', 'keydown']) document.addEventListener(ev, touchIdle, true);

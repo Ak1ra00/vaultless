@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Build provenance: the binary this job commits is flashed onto users'
+      # devices straight from the website, so it has to be verifiable against
+      # the workflow run and commit that produced it.
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
@@ -39,9 +44,13 @@ jobs:
             pio-${{ runner.os }}-
 
       - name: Install PlatformIO & esptool
+        # Pinned, not --upgrade. This step builds the image the site flashes over
+        # WebSerial; an unpinned install means the firmware users receive depends
+        # on whatever PyPI served that morning, and nobody — including the
+        # maintainer — can rebuild it and check it matches. Bump deliberately.
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade platformio esptool
+          pip install platformio==6.1.19 esptool==5.3.1
 
       - name: Build firmware (esp32dev)
         working-directory: firmware
@@ -131,6 +140,11 @@ jobs:
           # would be executed. Constrained to main by the trigger today; this
           # keeps it safe if that ever widens.
           git push origin "HEAD:refs/heads/$TARGET_REF"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
+        with:
+          subject-path: firmware_merged.bin
 
       - name: Upload build artifacts (debug)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
