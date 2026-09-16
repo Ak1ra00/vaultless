@@ -152,7 +152,7 @@ irreversible step — read `firmware/SECURE_PROVISIONING.md` first.
 
 ## Moving domains
 
-The site moved from `vaultless.space` to `vaultless.space`. Derivation is entirely
+The site moved to `vaultless.space` from an earlier domain. Derivation is entirely
 domain-independent — same phrase, same oracle, same passwords — but three things do
 not travel, and one of them matters:
 
