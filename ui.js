@@ -453,7 +453,8 @@ export function vizDone(label) {
 const PW_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@#$%^&*-_=+';
 let pwRaf = null;
 
-export function revealPassword(el, pw) {
+/* Internal now: the reveal is driven by renderPassword, not by app.js. */
+function revealPassword(el, pw) {
   cancelAnimationFrame(pwRaf);
   if (reduceMotion) { el.textContent = pw; return; }
   const ms = BEAT * 1.8;
@@ -473,6 +474,70 @@ export function revealPassword(el, pw) {
 }
 
 /* --------------------------------------------------------- result chrome */
+/* The derived password lives HERE, in a module variable, and reaches the DOM
+ * only while it is revealed.
+ *
+ * The previous version blurred the text with CSS, which hides it from a glance
+ * and from nothing else: the characters stayed in the document, so the
+ * aria-live region announced them, find-in-page matched them, select-all copied
+ * them, any extension could read them, and a blur is partly reversible from a
+ * screenshot. Masking means the page genuinely does not contain the password
+ * until someone asks for it.
+ *
+ * Copy keeps working while hidden because it reads getResultPassword() rather
+ * than the element — the whole point being that you can paste a password you
+ * have never put on screen. */
+const MASK_CHAR = '•';
+let currentPassword = '';
+let revealed = false;
+let animateNextReveal = false;
+
+export function getResultPassword() { return currentPassword; }
+
+function renderPassword({ animate = false } = {}) {
+  const el = $('pwOut'), btn = $('revealBtn');
+  el.replaceChildren();
+  el.classList.toggle('masked', !revealed);
+
+  if (revealed) {
+    if (animate) revealPassword(el, currentPassword);
+    else el.textContent = currentPassword;
+  } else if (currentPassword) {
+    /* Dots for the eye, a sentence for a screen reader — which would otherwise
+     * read twenty bullet characters aloud, one at a time. */
+    const dots = document.createElement('span');
+    dots.setAttribute('aria-hidden', 'true');
+    dots.textContent = MASK_CHAR.repeat(currentPassword.length);
+    const spoken = document.createElement('span');
+    spoken.className = 'sr-only';
+    spoken.textContent =
+      `Password ready, ${currentPassword.length} characters, hidden. ` +
+      'Use Reveal to show it, or Copy to copy it without showing it.';
+    el.append(dots, spoken);
+  }
+
+  btn.textContent = revealed ? 'Hide' : 'Reveal';
+  btn.setAttribute('aria-pressed', String(revealed));
+}
+
+/* Hidden by default: a password appears as dots and stays that way until asked
+ * for, so deriving one in front of someone reveals nothing. */
+export function showPassword(pw) {
+  currentPassword = pw;
+  revealed = false;
+  animateNextReveal = true;      // the settle animation belongs to the reveal
+  $('pwPlaceholder').style.display = 'none';
+  const el = $('pwOut');
+  el.style.display = 'block';
+  el.classList.remove('reveal');
+  void el.offsetWidth;           // restart the entrance animation
+  el.classList.add('reveal');
+  $('revealBtn').disabled = false;
+  $('copyBtn').disabled = false;
+  renderPassword();
+  markResultFilled(true);
+}
+
 export function setDemo(isDemo) {
   $('demoBadge').classList.toggle('on', isDemo);
 }
@@ -487,10 +552,13 @@ export function markResultFilled(filled) {
  * secret with a lifetime was the one the user could not read off the glass.
  * Called whenever an oracle goes away: forgotten, idled out, or disconnected. */
 export function clearResult() {
+  currentPassword = '';          // the value itself, not merely what is drawn
+  revealed = false;
+  animateNextReveal = false;
   const pw = $('pwOut');
-  pw.textContent = '';
+  pw.replaceChildren();
   pw.style.display = 'none';
-  pw.classList.remove('reveal', 'hidden-pw');
+  pw.classList.remove('reveal', 'masked');
   $('pwPlaceholder').style.display = '';
   $('copyBtn').disabled = true;
   const reveal = $('revealBtn');
@@ -504,10 +572,14 @@ export function clearResult() {
 }
 
 function initReveal() {
-  const pw = $('pwOut'), btn = $('revealBtn');
-  btn.onclick = () => {
-    const hidden = pw.classList.toggle('hidden-pw');
-    btn.textContent = hidden ? 'Reveal' : 'Hide';
+  $('revealBtn').onclick = () => {
+    if (!currentPassword) return;
+    revealed = !revealed;
+    /* Animate the first reveal of a given password, because that is the moment
+     * worth watching. Toggling it back and forth afterwards swaps instantly —
+     * a 1.6s flourish on every press would just be in the way. */
+    renderPassword({ animate: revealed && animateNextReveal });
+    if (revealed) animateNextReveal = false;
   };
 }
 

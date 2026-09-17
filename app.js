@@ -9,7 +9,7 @@ import {
 import {
   initChrome, toast, setDemo, markResultFilled, confirmDialog, clearResult,
   vizStart, vizBlind, vizSend, vizOracle, vizReturn, vizUnblind, vizDone, vizReset,
-  revealPassword, getOracleChoice, setReady,
+  showPassword, getResultPassword, getOracleChoice, setReady,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
 
@@ -736,20 +736,10 @@ async function runDerivation(mode) {
   }
 }
 
+/* ui.js owns the result card, including whether the password is on screen at
+ * all — it arrives hidden. */
 function showResult(pw) {
-  document.getElementById('pwPlaceholder').style.display = 'none';
-  const el = document.getElementById('pwOut');
-  el.style.display = 'block';
-  revealPassword(el, pw);
-  el.classList.remove('hidden-pw');
-  el.classList.remove('reveal');
-  void el.offsetWidth;            // restart the entrance animation
-  el.classList.add('reveal');
-  const reveal = document.getElementById('revealBtn');
-  reveal.disabled = false;
-  reveal.textContent = 'Hide';
-  document.getElementById('copyBtn').disabled = false;
-  markResultFilled(true);
+  showPassword(pw);
 }
 
 const CLIPBOARD_CLEAR_MS = 60000;
@@ -779,7 +769,9 @@ async function scrubClipboard(pw) {
   } catch { /* not focused, or write denied — leave it alone */ }
 }
 document.getElementById('copyBtn').onclick = async () => {
-  const pw = document.getElementById('pwOut').textContent;
+  // From the module variable, never the element — while hidden the element
+  // holds dots, and copying dots would be a memorable kind of useless.
+  const pw = getResultPassword();
   if (!pw) return;
   await navigator.clipboard.writeText(pw);
   const btn = document.getElementById('copyBtn');

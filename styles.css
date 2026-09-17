@@ -184,7 +184,9 @@
     font-family:var(--mono);font-size:clamp(20px,4.4vw,34px);font-weight:600;letter-spacing:.04em;
     word-break:break-all;color:var(--cyan-hot);text-shadow:0 0 26px rgba(94,234,212,.45);margin:6px 0 4px;
   }
-  .pw.hidden-pw{filter:blur(11px);user-select:none;}
+  /* Masked: these are dots, not the password with a filter over it. Selecting
+     them would yield bullets, so steer people to the Copy button instead. */
+  .pw.masked{letter-spacing:.2em;user-select:none;cursor:default;}
   .placeholder{color:var(--ink-2);font-size:16px;padding:14px 0;}
   .result-meta{display:flex;justify-content:center;gap:8px 20px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);margin-top:10px;}
   .demo-badge{
@@ -634,7 +636,7 @@
     45%{text-shadow:0 0 40px rgba(94,234,212,.75);}
     100%{text-shadow:0 0 26px rgba(94,234,212,.45);letter-spacing:.04em;opacity:1;}
   }
-  .pw{transition:filter .5s ease;}
+  .pw{transition:letter-spacing .4s ease;}
 
   /* the connection dot breathes rather than blinks ---------------------- */
   .dot.live{animation:pulse 2.6s ease-in-out infinite;}
