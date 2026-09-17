@@ -62,8 +62,13 @@
     <section class="card welcome" id="welcomeBack" hidden>
       <span class="wb-eyebrow">Welcome back</span>
       <h2 class="wb-title">Your oracle is already trusted here</h2>
-      <p class="wb-line">This browser trusts <b class="wb-fp" id="wbFp"></b>. Present it and
-        you are straight at your passwords — nothing to set up again.</p>
+      <p class="wb-line">Present it and you are straight at your passwords — nothing to set
+        up again.</p>
+      <div class="wb-trust">
+        <span class="lbl">trusted on this browser</span>
+        <div class="chips" id="wbFps" role="group" aria-label="Oracles this browser trusts"></div>
+        <button type="button" class="linky wb-forgetall" id="wbForgetAll" hidden>forget all of them</button>
+      </div>
       <p class="wb-last" id="wbLast" hidden>Picking up where you left off:
         <b id="wbLastText"></b></p>
       <div class="actions">
@@ -74,9 +79,10 @@
 
     <div class="hero">
       <h2>Your passwords, <span class="grad">remembered by nobody</span></h2>
-      <p class="simple-only">There is no vault here. Nothing is stored, synced, or uploaded —
-        not by us, not on this computer. Your passwords are worked out fresh each time from one
-        phrase you remember and one thing you keep.</p>
+      <p class="simple-only">There is no vault. Your passphrase, your passwords and your
+        oracle's key are never written to this computer or anywhere else — they are worked
+        out fresh each time. The site remembers only your nicknames and which oracles you
+        trust.</p>
       <p class="expert-only">Deterministic derivation through a two-party oblivious PRF over
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>

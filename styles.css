@@ -714,6 +714,19 @@
   .wb-title{font-size:clamp(22px,3.4vw,30px);font-weight:600;letter-spacing:-.02em;margin-bottom:12px;}
   .wb-line{color:var(--ink-1);font-size:16px;margin:0 0 10px;max-width:60ch;}
   .wb-fp{font-family:var(--mono);color:var(--violet);font-size:.95em;}
+  .wb-trust{margin:0 0 18px;}
+  .wb-trust .lbl{display:block;margin-bottom:9px;}
+  .wb-trust .chips{margin-bottom:0;}
+  .wb-trust .chip{cursor:default;}
+  .wb-trust .chip .x{
+    font:inherit;background:none;border:0;cursor:pointer;color:inherit;
+    padding:0 0 0 2px;line-height:1;opacity:.55;
+  }
+  .wb-trust .chip .x:hover{opacity:1;color:var(--red);}
+  .wb-trust .chip .x:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:2px;border-radius:3px;}
+  .wb-forgetall{display:inline-block;margin-top:11px;font-size:13.5px;color:var(--ink-2);}
+  .wb-forgetall:hover{color:var(--red);}
+  .wb-forgetall[hidden]{display:none;}
   .wb-last{
     color:var(--ink-2);font-size:14.5px;margin:0 0 18px;font-family:var(--mono);
     border-left:2px solid var(--cyan-dim);padding-left:12px;

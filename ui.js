@@ -789,13 +789,78 @@ function unlock() {
   $('homeStep2').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
 }
 
+/* Trust has to be revocable from the page.
+ *
+ * Pinning an oracle was a one-way door: the only way to drop one was DevTools,
+ * so a browser that had seen a few oracles kept listing them for ever with no
+ * way to tidy up. Each is a chip with an x, the same shape as the account
+ * nicknames, and forgetting one is confirmed because it is a security control
+ * being switched off, not a preference.
+ *
+ * `forget` is supplied by app.js — it owns the store — and hands back whatever
+ * is left so this can redraw without knowing how any of that works. */
+let forgetTrusted = null;
+
+function renderTrusted(fingerprints) {
+  const wrap = $('wbFps');
+  wrap.replaceChildren();
+  for (const fp of fingerprints) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    const name = document.createElement('span');
+    name.className = 'wb-fp';
+    name.textContent = fp;
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'x';
+    x.textContent = '×';
+    x.setAttribute('aria-label', `Forget oracle ${fp}`);
+    x.title = `Forget ${fp}`;
+    x.onclick = () => forgetOne(fp);
+    chip.append(name, x);
+    wrap.appendChild(chip);
+  }
+  $('wbForgetAll').hidden = fingerprints.length < 2;
+}
+
+async function forgetOne(fp, all = false) {
+  const ok = await confirmDialog({
+    title: all ? 'Forget every oracle this browser trusts?' : `Forget oracle ${fp}?`,
+    lines: [
+      all
+        ? 'None of them will be recognised here again.'
+        : `${fp} will not be recognised here again.`,
+      'Your passwords do not change — they come from the phrase and the oracle, ' +
+      'not from this list. What you lose is the warning: the next oracle to answer ' +
+      'will be trusted on first use without being questioned, so check its ' +
+      'fingerprint when it is.',
+    ],
+    confirmLabel: all ? 'Forget all' : 'Forget it',
+    cancelLabel: 'Keep it',
+    danger: true,
+  });
+  if (!ok) return;
+
+  const left = forgetTrusted ? forgetTrusted(all ? null : fp) : [];
+  if (!left.length) {
+    showSetup();
+    toast(all ? 'All oracles forgotten' : `Forgot oracle ${fp}`);
+    $('homeStep1').scrollIntoView({ block: 'start' });
+    return;
+  }
+  renderTrusted(left);
+  toast(`Forgot oracle ${fp}`);
+}
+
 /* app.js hands over the fingerprints, because it owns the trusted-key store and
  * the hashing needed to shorten them. No fingerprints means no fast lane. */
-export function initReturning(fingerprints) {
+export function initReturning(fingerprints, forget) {
   if (!fingerprints || !fingerprints.length) return;
   if (document.body.classList.contains('in-app')) return;   // deep-linked; leave it
 
-  $('wbFp').textContent = fingerprints.join(' · ');
+  forgetTrusted = forget;
+  renderTrusted(fingerprints);
+  $('wbForgetAll').onclick = () => forgetOne(null, true);
   const last = loadLastUse();
   if (last) {
     const opt = document.querySelector(`.fmt-opt[data-fmt="${CSS.escape(last.fmt || '')}"]`);

@@ -793,7 +793,18 @@ initSheet();
 /* Offer the fast lane to anyone this browser has already derived for. The
  * trusted-key store and the hashing live here, so the fingerprints are handed
  * over rather than looked up in the presentation layer. */
-initReturning(loadTrusted().map(keyFingerprint));
+initReturning(
+  loadTrusted().map(keyFingerprint),
+  /* Remove one trusted key, or all of them when fp is null, and report what is
+   * left. Matching on the fingerprint rather than the raw key keeps the public
+   * keys themselves out of the presentation layer. */
+  (fp) => {
+    const left = fp === null ? [] : loadTrusted().filter(k => keyFingerprint(k) !== fp);
+    saveTrusted(left);
+    trace('pin', fp === null ? 'forgot every trusted oracle' : `forgot oracle ${fp}`, true);
+    return left.map(keyFingerprint);
+  },
+);
 
 /* ---------------------------------------------------------------------
  * Offline shell.
