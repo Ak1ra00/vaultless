@@ -329,10 +329,15 @@ wsBadge.classList.add(serialSupported ? 'on' : 'warn');
  * the option the home page labels "strongest", walks three screens into it, and
  * presses a Connect button that cannot ever work. */
 if (!serialSupported) {
-  for (const id of ['hwUnsupported', 'hwUnsupportedPanel']) {
+  for (const id of ['hwUnsupported', 'hwUnsupportedPanel', 'quickHwWarn']) {
     const el = document.getElementById(id);
     if (el) el.hidden = false;
   }
+  /* The quick entry is one press straight into the connect panel. With no
+   * WebSerial there is nothing behind it, so it goes dead next to its reason
+   * rather than opening a panel whose only button cannot work. */
+  const quickHw = document.getElementById('quickHw');
+  if (quickHw) quickHw.disabled = true;
 }
 
 let port = null, writer = null, reader = null, readableClosed = null;

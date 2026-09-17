@@ -770,13 +770,17 @@ function applyLastUse() {
 function showSetup() {
   document.body.classList.remove('returning');
   $('welcomeBack').hidden = true;
+  $('haveOracle').hidden = false;
 }
 
-/* One press: pick up the remembered oracle, open the branch that presents it,
- * and start the camera or offer the connect button. */
-function unlock() {
-  const choice = oracleChoice || 'paper';
+/* One press: take the named oracle (or the remembered one), open the branch
+ * that presents it, and start the camera or offer the connect button. */
+function unlock(choice = oracleChoice || 'paper') {
   showSetup();
+  /* The shortcut has done its job. Leaving it sitting above a running camera
+   * only invites a second press, which would tear the scan down and restart
+   * it. */
+  $('haveOracle').hidden = true;
   setOracle(choice);
   fastLaneArmed = true;                 // setReady() takes it from here
   if (choice === 'paper') {
@@ -871,8 +875,28 @@ export function initReturning(fingerprints, forget) {
   }
   document.body.classList.add('returning');
   $('welcomeBack').hidden = false;
-  $('wbGo').onclick = unlock;
+  $('wbGo').onclick = () => unlock();
   $('wbSetup').onclick = () => { showSetup(); $('homeStep1').scrollIntoView({ block: 'start' }); };
+}
+
+/* The welcome card needs a trusted key to appear, so it can only ever help
+ * someone on a browser that has already derived a password here. The case it
+ * misses is the one a long-standing user hits most often — a new laptop, a
+ * cleared profile, a private window — where nothing stored proves anything and
+ * the page has no choice but to show the first-timer's tour.
+ *
+ * So the same shortcut is offered up front, unconditionally, and answers a
+ * question instead of guessing at one. It runs `unlock`, which means the fork
+ * buttons, the scanner and the derivation path are all exactly the ones the
+ * long way round uses. */
+function initQuickEntry() {
+  $('quickPaper').onclick = () => unlock('paper');
+  $('quickHw').onclick = () => unlock('hardware');
+  $('quickNew').onclick = () =>
+    $('homeStep1').scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
 }
 
 function routeFromHash() {
@@ -932,6 +956,7 @@ function initNav() {
 
 export function initChrome() {
   initNav();
+  initQuickEntry();
   initHardwareFork();
   initRain();
   initMode();

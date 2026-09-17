@@ -584,10 +584,12 @@
   body.in-app .steps > *:nth-child(5){animation-delay:.36s;}
   body.in-app .steps > *:nth-child(6){animation-delay:.44s;}
   body:not(.in-app) .hero,
+  body:not(.in-app) #haveOracle,
   body:not(.in-app) .what-strip,
   body:not(.in-app) #homeStep1{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) backwards;}
-  body:not(.in-app) .what-strip{animation-delay:.08s;}
-  body:not(.in-app) #homeStep1{animation-delay:.16s;}
+  body:not(.in-app) #haveOracle{animation-delay:.08s;}
+  body:not(.in-app) .what-strip{animation-delay:.16s;}
+  body:not(.in-app) #homeStep1{animation-delay:.24s;}
 
   /* a completed step stamps a check over its number -------------------- */
   .num{position:relative;overflow:hidden;}
@@ -696,6 +698,7 @@
      working oracle does not need to be sold the idea again. */
   body.returning .hero,
   body.returning .what-strip,
+  body.returning #haveOracle,
   body.returning #homeStep1,
   body.returning #homeStep2,
   body.returning #continueRow{display:none;}
@@ -733,6 +736,53 @@
   }
   .wb-last[hidden]{display:none;}
   .wb-last b{color:var(--ink-1);font-weight:500;}
+
+  /* the same shortcut for a browser that has never seen you --------------- */
+  /* The welcome card can only appear where a trusted key was stored, so on a
+     new laptop or in a private window a long-standing user is shown the
+     first-timer's tour. This is the shortcut offered up front instead. Violet
+     rather than cyan: cyan marks the guided path, and these two are the way
+     around it. */
+  .quick{
+    border-color:rgba(169,139,255,.34);
+    background:linear-gradient(180deg,rgba(169,139,255,.07),rgba(13,17,20,.92));
+    box-shadow:var(--shadow),0 0 40px rgba(169,139,255,.09);
+    margin-bottom:26px;
+  }
+  .quick[hidden]{display:none;}
+  .q-eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--violet);display:block;margin-bottom:9px;
+  }
+  .q-title{font-size:clamp(19px,2.6vw,24px);font-weight:600;letter-spacing:-.02em;}
+  .q-line{color:var(--ink-1);font-size:15.5px;margin:9px 0 18px;max-width:62ch;}
+
+  .q-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px;}
+  .q-btn{
+    font:inherit;text-align:left;cursor:pointer;color:var(--ink-0);background:var(--bg-0);
+    border:1.5px solid var(--line-bright);border-radius:var(--r-sm);padding:17px 18px;
+    display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;
+    column-gap:14px;row-gap:4px;align-items:center;
+    transition:border-color .32s ease, transform .32s cubic-bezier(.2,.9,.3,1.2),
+               background .32s ease, box-shadow .32s ease;
+  }
+  .q-mark{grid-row:1 / 3;width:30px;height:30px;color:var(--violet);
+    transition:color .4s ease, transform .5s cubic-bezier(.2,.9,.3,1.2);}
+  .q-t{font-weight:600;font-size:16px;align-self:end;}
+  .q-s{color:var(--ink-1);font-size:13.5px;line-height:1.45;align-self:start;}
+  .q-btn:hover{
+    border-color:rgba(169,139,255,.55);background:rgba(169,139,255,.07);
+    transform:translateY(-2px);box-shadow:0 0 28px rgba(169,139,255,.16);
+  }
+  .q-btn:hover .q-mark{color:#c3aeff;transform:scale(1.07);}
+  .q-btn:focus-visible{outline:2px solid var(--cyan-hot);outline-offset:3px;}
+  .q-btn[disabled]{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none;
+    border-color:var(--line);background:var(--bg-0);}
+  .q-btn[disabled] .q-mark{color:var(--ink-2);transform:none;}
+
+  #quickHwWarn{margin-top:15px;}
+  .q-new{color:var(--ink-2);font-size:14.5px;margin:16px 0 0;}
+  .q-new .linky{font-size:14.5px;}
 
   @media print{
     body{background:#fff;}

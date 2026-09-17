@@ -87,9 +87,52 @@
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>
 
+    <!-- Steps 1 and 2 exist to explain what an oracle is and to get one made.
+         Someone who already owns one needs neither — they need the camera, or
+         the connect button. The welcome card above covers the case where this
+         browser remembers them; this covers the case where it does not, which
+         is every new laptop, cleared profile and private window. It presses the
+         very same controls a person would, so there is no second path through
+         setup to keep in step with the first. -->
+    <section class="card quick" id="haveOracle">
+      <span class="q-eyebrow">Already have an oracle?</span>
+      <h3 class="q-title">Go straight to your passwords</h3>
+      <p class="q-line">Present the one you already own. There is nothing to set up again
+        and nothing to make — one press lands you at the phrase box.</p>
+      <div class="q-row">
+        <button type="button" class="q-btn" id="quickPaper">
+          <svg class="q-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <path d="M3 8.5V4.8A1.8 1.8 0 0 1 4.8 3H8.5M15.5 3h3.7A1.8 1.8 0 0 1 21 4.8v3.7M21 15.5v3.7a1.8 1.8 0 0 1-1.8 1.8h-3.7M8.5 21H4.8A1.8 1.8 0 0 1 3 19.2v-3.7"
+                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <rect x="7.3" y="7.3" width="4.2" height="4.2" rx=".9" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M14 12.6h2.8M13.2 15.6h3.6M7.6 14.8h2.4v2.2" stroke="currentColor"
+                  stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
+          </svg>
+          <span class="q-t">Scan my paper square</span>
+          <span class="q-s">Opens the camera. Typing the code printed under it works too.</span>
+        </button>
+        <button type="button" class="q-btn" id="quickHw">
+          <svg class="q-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+            <rect x="6.2" y="2.6" width="11.6" height="18.8" rx="2.4" stroke="currentColor" stroke-width="1.8"/>
+            <rect x="8.6" y="5.4" width="6.8" height="4.6" rx="1" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
+            <circle cx="12" cy="15.8" r="2.7" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M12 14.2v1.7l1.2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span class="q-t">Plug in my device</span>
+          <span class="q-s">Opens the connect button for a LilyGO oracle on USB.</span>
+        </button>
+      </div>
+      <p class="ch-warn block" id="quickHwWarn" hidden>This browser cannot talk to USB devices, so
+        “Plug in my device” is switched off here. Open the site in Chrome or Edge to use a
+        hardware oracle — a paper one works in any browser.</p>
+      <p class="q-new">First time here? <button type="button" class="linky" id="quickNew">Start from
+        the beginning</button> — it takes a couple of minutes, once.</p>
+    </section>
+
     <ul class="what-strip">
-      <li><strong>Nothing is stored</strong><span>No vault, no sync, no account. There is no file
-        anywhere that could be stolen or lost.</span></li>
+      <li><strong>No vault to steal</strong><span>No secret is written down here — not your
+        phrase, not your passwords, not your oracle's key. This browser keeps only your
+        nicknames and which oracles you trust.</span></li>
       <li><strong>Your phrase never leaves</strong><span>It is disguised before your oracle sees it,
         so the oracle answers without learning what you typed.</span></li>
       <li><strong>Always the same answer</strong><span>The same phrase and the same account number
