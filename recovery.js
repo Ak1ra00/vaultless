@@ -87,8 +87,26 @@ export function encodeRecovery(k32) {
  * substitutions people actually make when copying by hand. */
 export function decodeRecovery(text) {
   let s = String(text).toUpperCase().replace(/[^0-9A-Z]/g, '');
-  if (s.startsWith(PREFIX)) s = s.slice(PREFIX.length);
-  else if (s.startsWith('VLT')) throw new Error('this looks like a different sheet version');
+
+  /* The prefix is handled before the Crockford substitutions, and its version
+   * digit is normalised on its own.
+   *
+   * The substitutions cannot simply run first: PREFIX contains an L, so
+   * I/L -> 1 would turn VLT1 into V1T1 and no sheet would ever be recognised.
+   * But testing for a literal "VLT1" first is just as wrong in the other
+   * direction — someone copying the code by hand writes VLTI, which is the exact
+   * confusion Crockford base32 exists to absorb, and that fell through to the
+   * "different sheet version" branch. A one-character slip was reported as the
+   * wrong sheet entirely, which sends people looking for a sheet they do not
+   * have instead of retyping a character.
+   *
+   * So: match VLT, then normalise only the character after it. Body characters
+   * are still substituted below, untouched by any of this. */
+  if (s.startsWith('VLT')) {
+    const version = (s[3] || '').replace(/[IL]/g, '1');
+    if (version !== '1') throw new Error('this looks like a different sheet version');
+    s = s.slice(PREFIX.length);
+  }
   s = s.replace(/[IL]/g, '1').replace(/O/g, '0');
   if (s.includes('U')) throw new Error('unexpected character “U” in the code');
   if (!s.length) throw new Error('no code found');

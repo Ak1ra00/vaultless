@@ -569,6 +569,15 @@ export function clearResult() {
   $('passphrase').dispatchEvent(new Event('input'));   // reset the strength meter
   setDemo(false);
   markResultFilled(false);
+  /* The one copy this function cannot reach.
+   *
+   * Everything above is in this document, but a password the user copied is in
+   * the system clipboard on its own 60-second timer owned by app.js. Without
+   * this, pressing Forget — or letting the paper oracle idle out — reported the
+   * password gone while it was still pasteable for up to another minute, which
+   * is precisely the promise this function exists to keep. app.js scrubs on
+   * hearing it; the event carries nothing, because the password must not. */
+  document.dispatchEvent(new CustomEvent('resultcleared'));
 }
 
 function initReveal() {

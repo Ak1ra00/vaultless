@@ -347,11 +347,20 @@ const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
 
 function setConnected(state, label) {
+  /* The two buttons belong to the hardware panel and describe the port, so they
+   * are updated whatever the page is currently showing. Only the shared header
+   * pill and the step-1 readiness line are conditional — those are surfaces the
+   * paper oracle borrows, and in paper mode they are its to report.
+   *
+   * Returning before this left them frozen at whatever the port last did while
+   * hardware was selected: Connect enabled on a live port, or Disconnect greyed
+   * out on one that was still open. */
+  connectBtn.disabled = state || !serialSupported;
+  disconnectBtn.disabled = !state;
+
   if (getOracleChoice() === 'paper') return;   // the pill is showing the paper oracle
   connDot.className = 'dot' + (state ? ' live' : '');
   connLabel.textContent = label;
-  connectBtn.disabled = state || !serialSupported;
-  disconnectBtn.disabled = !state;
   document.getElementById('homeStep2').classList.toggle('done', state);
   setReady(state ? 'Oracle connected and ready' : 'Oracle not connected yet', state);
 }
@@ -366,7 +375,12 @@ let pending = [];
 
 async function readLoop() {
   const decoder = new TextDecoderStream();
-  readableClosed = port.readable.pipeTo(decoder.writable);
+  /* Unplugging the device rejects this pipe, and an uncaught rejection here is
+   * an "Uncaught (in promise)" in the console of a page whose users are told to
+   * watch it for exactly this kind of signal. Losing the port is ordinary, so
+   * it is absorbed rather than reported; the read loop below notices and says so
+   * in the trace. */
+  readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
   reader = decoder.readable.getReader();
   try {
     while (true) {
@@ -413,7 +427,9 @@ async function connectSerial() {
     port = await navigator.serial.requestPort();
     await port.open({ baudRate: 115200 });
     const encoder = new TextEncoderStream();
-    encoder.readable.pipeTo(port.writable);
+    // Same as the read side: this pipe rejects when the port goes away, and an
+    // unhandled rejection is noise in the one console users are asked to trust.
+    encoder.readable.pipeTo(port.writable).catch(() => {});
     writer = encoder.writable.getWriter();
     readLoop();
     setConnected(true, 'oracle connected');
@@ -752,6 +768,10 @@ function showResult(pw) {
 
 const CLIPBOARD_CLEAR_MS = 60000;
 let clipboardTimer = null;
+/* What was last written to the clipboard, kept so the scrub can tell our own
+ * copy from something the user copied since. Cleared as soon as it is scrubbed;
+ * it is the same secret as the one on screen and gets the same treatment. */
+let copiedPassword = '';
 
 /* Best-effort scrub, so a derived password does not sit in the system clipboard.
  *
@@ -788,8 +808,28 @@ document.getElementById('copyBtn').onclick = async () => {
   setTimeout(() => (btn.textContent = original), 2400);
   toast('Copied — cleared from the clipboard in 60 seconds');
   clearTimeout(clipboardTimer);
-  clipboardTimer = setTimeout(() => scrubClipboard(pw), CLIPBOARD_CLEAR_MS);
+  copiedPassword = pw;
+  clipboardTimer = setTimeout(() => {
+    copiedPassword = '';
+    scrubClipboard(pw);
+  }, CLIPBOARD_CLEAR_MS);
 };
+
+/* Scrub on demand, not only on the timer.
+ *
+ * ui.js clears the result card whenever an oracle goes away — forgotten, idled
+ * out, or unplugged — and its whole point is that the password should not
+ * outlive the oracle that made it. The clipboard copy is the one that used to,
+ * for up to a full minute after the app said everything was cleared. Forgetting
+ * is a deliberate "wipe it now", so it takes the clipboard with it. */
+document.addEventListener('resultcleared', () => {
+  if (!copiedPassword) return;
+  clearTimeout(clipboardTimer);
+  clipboardTimer = null;
+  const pw = copiedPassword;
+  copiedPassword = '';
+  scrubClipboard(pw);
+});
 
 /* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
 initChrome();
