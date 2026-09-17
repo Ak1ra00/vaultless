@@ -10,6 +10,7 @@ import {
   initChrome, toast, setDemo, markResultFilled, confirmDialog, clearResult,
   vizStart, vizBlind, vizSend, vizOracle, vizReturn, vizUnblind, vizDone, vizReset,
   showPassword, getResultPassword, getOracleChoice, setReady,
+  initReturning, rememberLastUse,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
 
@@ -722,6 +723,8 @@ async function runDerivation(mode) {
 
     const password = formatPassword(oprfOutput, selectedFormat);
     showResult(password);
+    // So the next visit opens on this account and style instead of account 0.
+    rememberLastUse(index, selectedFormat);
     vizDone(useSimulator ? 'demo password ready' : 'your password is ready');
     trace('done', `password derived · ${password.length} chars`);
   } catch (e) {
@@ -786,6 +789,11 @@ document.getElementById('copyBtn').onclick = async () => {
 /* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
 initChrome();
 initSheet();
+
+/* Offer the fast lane to anyone this browser has already derived for. The
+ * trusted-key store and the hashing live here, so the fingerprints are handed
+ * over rather than looked up in the presentation layer. */
+initReturning(loadTrusted().map(keyFingerprint));
 
 /* ---------------------------------------------------------------------
  * Offline shell.

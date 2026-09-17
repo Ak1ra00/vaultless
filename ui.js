@@ -696,6 +696,16 @@ function setView(inApp, { push = true } = {}) {
 /* Readiness is reported by whichever module owns the oracle; it also decides
  * whether the way forward is open. */
 export function setReady(text, ready) {
+  /* The fast lane's last step. Once the oracle is actually ready there is
+   * nothing left for "Continue" to confirm, so skip it and put the cursor where
+   * the only remaining input goes. */
+  if (ready && fastLaneArmed) {
+    fastLaneArmed = false;
+    setView(true);
+    applyLastUse();
+    $('passphrase').focus({ preventScroll: true });
+    toast('Oracle ready — type your phrase');
+  }
   const line = $('oracleReady');
   if (line) {
     line.textContent = text;
@@ -708,6 +718,96 @@ export function setReady(text, ready) {
       ? 'Your oracle is ready.'
       : 'Finish step 2 and this opens up.';
   }
+}
+
+/* ------------------------------------------------- returning visitors */
+/* Someone who has derived a password here before should not be walked through
+ * setup again. The trusted-key set proves they have — it is only written after
+ * an oracle has actually answered — so it is the signal this keys off.
+ *
+ * The one thing that genuinely cannot be skipped is presenting the oracle: it
+ * is the second factor, the paper key is deliberately wiped on reload, and a
+ * device has to be plugged in. Everything AROUND that can go: which kind of
+ * oracle, which branch of the fork, and the press of "Continue".
+ *
+ * This drives the existing controls rather than reimplementing them — it clicks
+ * the same fork buttons a person would — so the setup and derivation paths stay
+ * exactly as they were and there is nothing new to keep in step. */
+const LAST_KEY = 'vaultless.lastuse.v1';
+let fastLaneArmed = false;
+
+function loadLastUse() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
+    if (v && typeof v === 'object' && /^\d+$/.test(String(v.index ?? ''))) return v;
+  } catch { /* private mode, or corrupt */ }
+  return null;
+}
+
+/* Called after a password is actually produced, so the next visit can land on
+ * the same account and style instead of resetting to account 0 every time. */
+export function rememberLastUse(index, fmt) {
+  try {
+    localStorage.setItem(LAST_KEY, JSON.stringify({ index: String(index), fmt }));
+  } catch { /* private mode */ }
+}
+
+function applyLastUse() {
+  const last = loadLastUse();
+  if (!last) return;
+  const idx = $('index');
+  idx.value = String(last.index);
+  idx.dispatchEvent(new Event('input'));
+  if (last.fmt) {
+    // Click the option rather than setting state directly: app.js owns which
+    // format is selected, and clicking is how it finds out.
+    const opt = document.querySelector(`.fmt-opt[data-fmt="${CSS.escape(last.fmt)}"]`);
+    if (opt) opt.click();
+  }
+}
+
+/* Leaves the fast lane and puts the ordinary setup pages back. */
+function showSetup() {
+  document.body.classList.remove('returning');
+  $('welcomeBack').hidden = true;
+}
+
+/* One press: pick up the remembered oracle, open the branch that presents it,
+ * and start the camera or offer the connect button. */
+function unlock() {
+  const choice = oracleChoice || 'paper';
+  showSetup();
+  setOracle(choice);
+  fastLaneArmed = true;                 // setReady() takes it from here
+  if (choice === 'paper') {
+    $('forkHave').click();              // opens the scan panel and starts the camera
+    $('sheetManual').focus({ preventScroll: true });
+  } else {
+    $('forkReady').click();             // opens the connect panel
+    $('connectBtn').focus({ preventScroll: true });
+  }
+  $('homeStep2').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+}
+
+/* app.js hands over the fingerprints, because it owns the trusted-key store and
+ * the hashing needed to shorten them. No fingerprints means no fast lane. */
+export function initReturning(fingerprints) {
+  if (!fingerprints || !fingerprints.length) return;
+  if (document.body.classList.contains('in-app')) return;   // deep-linked; leave it
+
+  $('wbFp').textContent = fingerprints.join(' · ');
+  const last = loadLastUse();
+  if (last) {
+    const opt = document.querySelector(`.fmt-opt[data-fmt="${CSS.escape(last.fmt || '')}"]`);
+    const style = opt ? opt.dataset.label : null;
+    $('wbLastText').textContent =
+      `account ${last.index}${style ? ` · ${style}` : ''}`;
+    $('wbLast').hidden = false;
+  }
+  document.body.classList.add('returning');
+  $('welcomeBack').hidden = false;
+  $('wbGo').onclick = unlock;
+  $('wbSetup').onclick = () => { showSetup(); $('homeStep1').scrollIntoView({ block: 'start' }); };
 }
 
 function routeFromHash() {
