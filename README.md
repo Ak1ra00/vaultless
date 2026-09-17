@@ -195,7 +195,7 @@ That binary carries a build-provenance attestation, so you do not have to take t
 committed file on trust:
 
 ```bash
-gh attestation verify firmware_merged.bin --repo Ak1ra00/SK
+gh attestation verify firmware_merged.bin --repo Ak1ra00/vaultless
 ```
 
 The build tooling is pinned to exact versions (`platformio.ini`, the workflow's `pip
