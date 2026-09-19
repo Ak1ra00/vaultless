@@ -81,8 +81,8 @@
       <h2>Your passwords, <span class="grad">remembered by nobody</span></h2>
       <p class="simple-only">There is no vault. Your passphrase, your passwords and your
         oracle's key are never written to this computer or anywhere else — they are worked
-        out fresh each time. The site remembers only your nicknames and which oracles you
-        trust.</p>
+        out fresh each time. The site remembers only which oracles you trust and which
+        account you used last.</p>
       <p class="expert-only">Deterministic derivation through a two-party oblivious PRF over
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>
@@ -131,8 +131,8 @@
 
     <ul class="what-strip">
       <li><strong>No vault to steal</strong><span>No secret is written down here — not your
-        phrase, not your passwords, not your oracle's key. This browser keeps only your
-        nicknames and which oracles you trust.</span></li>
+        phrase, not your passwords, not your oracle's key, and no list of what your accounts
+        are. This browser keeps only which oracles you trust.</span></li>
       <li><strong>Your phrase never leaves</strong><span>It is disguised before your oracle sees it,
         so the oracle answers without learning what you typed.</span></li>
       <li><strong>Always the same answer</strong><span>The same phrase and the same account number
@@ -368,17 +368,15 @@
     <!-- STEP 2 -->
     <section class="card step" id="card2">
       <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Which account is this for?</h3></div>
-      <p class="help simple-only">Every account gets its own number, so every account gets a different password.
-        Give it a nickname and we'll remember the number for you — the nickname stays on this device only.</p>
-      <p class="help expert-only">Sub-index. Included in the hash-to-group input and the HKDF salt.
-        Nicknames are a local convenience in localStorage and never affect derivation.</p>
-      <div class="chips" id="accountChips" role="group" aria-label="Saved accounts"></div>
+      <p class="help simple-only">Every account gets its own number, so every account gets a
+        different password. Which number you gave which account is yours to keep track of —
+        nothing here writes that down.</p>
+      <p class="help expert-only">Sub-index. Included in the hash-to-group input and the HKDF salt.</p>
       <div class="stepper">
         <button class="btn rnd" id="idxDown" type="button" aria-label="Previous number">−</button>
         <input type="text" id="index" value="0" inputmode="numeric" pattern="[0-9]*"
                autocomplete="off" spellcheck="false" aria-label="Account number">
         <button class="btn rnd" id="idxUp" type="button" aria-label="Next number">+</button>
-        <button class="btn small" id="addAccount" type="button">Save nickname</button>
       </div>
     </section>
 
@@ -620,8 +618,6 @@ pio run -e esp32dev -t upload</pre>
 <dialog class="ask" id="ask" aria-labelledby="askTitle">
   <h3 id="askTitle"></h3>
   <div id="askBody"></div>
-  <label class="ask-label" id="askLabel" for="askInput" hidden></label>
-  <input type="text" id="askInput" autocomplete="off" spellcheck="false" hidden>
   <div class="ask-actions">
     <button class="btn" type="button" id="askCancel">Cancel</button>
     <button class="btn primary" type="button" id="askOk">OK</button>

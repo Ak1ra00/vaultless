@@ -142,22 +142,20 @@
   .sbar i{display:block;height:100%;width:0;border-radius:999px;transition:width .45s cubic-bezier(.2,.8,.2,1),background .45s;}
   .stext{font-size:13.5px;color:var(--ink-1);margin-top:8px;display:flex;justify-content:space-between;gap:10px;}
 
-  /* accounts ---------------------------------------------------------- */
+  /* account number ----------------------------------------------------- */
+  /* .chips / .chip outlived the account nicknames they were written for: the
+     trusted-oracle list in the welcome card is built from the same pieces. */
   .chips{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;}
   .chip{
-    font:inherit;font-size:14.5px;cursor:pointer;border-radius:999px;padding:9px 16px;min-height:42px;
+    font:inherit;font-size:14.5px;border-radius:999px;padding:9px 16px;min-height:42px;
     background:var(--bg-3);border:1.5px solid var(--line-bright);color:var(--ink-1);transition:.16s;
     display:inline-flex;align-items:center;gap:8px;
   }
-  .chip:hover{border-color:var(--cyan-dim);color:var(--ink-0);}
-  .chip[aria-pressed="true"]{background:var(--cyan);color:#04100d;border-color:var(--cyan);font-weight:600;box-shadow:0 0 18px rgba(94,234,212,.35);}
   .chip .x{opacity:.55;font-size:16px;line-height:1;}
   .chip .x:hover{opacity:1;}
-  .chip.add{border-style:dashed;color:var(--ink-2);}
   .stepper{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
   /* The number must never be squeezed to nothing on a narrow screen. */
   .stepper input{flex:0 1 110px;min-width:86px;max-width:130px;text-align:center;font-family:var(--mono);font-size:20px;}
-  .stepper #addAccount{white-space:nowrap;}
   .rnd{width:52px;height:52px;flex:none;border-radius:50%;font-size:24px;padding:0;min-height:52px;}
 
   /* formats ----------------------------------------------------------- */
@@ -414,7 +412,6 @@
   dialog.ask::backdrop{background:rgba(3,5,7,.72);backdrop-filter:blur(3px);}
   dialog.ask h3{font-size:20px;font-weight:600;margin-bottom:12px;}
   dialog.ask p{color:var(--ink-1);font-size:15px;margin:0 0 12px;}
-  dialog.ask .ask-label{display:block;font-size:14px;color:var(--ink-1);margin:14px 0 8px;}
   dialog.ask input{width:100%;}
   dialog.ask .ask-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px;}
   dialog.ask .btn.danger{

@@ -831,7 +831,7 @@ document.addEventListener('resultcleared', () => {
   scrubClipboard(pw);
 });
 
-/* Start the presentation layer (backdrop, mode switch, meter, nicknames). */
+/* Start the presentation layer (backdrop, mode switch, meter, account number). */
 initChrome();
 initSheet();
 

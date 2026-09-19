@@ -1,11 +1,8 @@
 /* Presentation layer for vaultless.
  *
  * Nothing in here participates in derivation. It owns the matrix backdrop, the
- * Simple/Expert switch, the passphrase meter, locally-stored account nicknames
- * and the handshake animation. app.js owns the protocol and calls in.
- *
- * The nicknames are a convenience only: they map a name you choose to the
- * account number, live in localStorage, and never reach the oracle or the hash.
+ * Simple/Expert switch, the passphrase meter, the account-number stepper and
+ * the handshake animation. app.js owns the protocol and calls in.
  */
 
 const $ = (id) => document.getElementById(id);
@@ -34,17 +31,12 @@ export function toast(msg) {
  * No form element and no method="dialog": this page runs under form-action
  * 'none', and a plain button that calls close() cannot be caught by it. */
 function ask({ title, lines = [], confirmLabel = 'OK', cancelLabel = 'Cancel',
-               danger = false, input = null }) {
+               danger = false }) {
   const dlg = $('ask');
-  const wantsInput = !!input;
 
   // Nothing modern lacks <dialog>, but a security prompt must never simply
-  // vanish, so fall back to the platform boxes rather than to nothing.
+  // vanish, so fall back to the platform box rather than to nothing.
   if (!dlg || typeof dlg.showModal !== 'function') {
-    if (wantsInput) {
-      const v = prompt([title, ...lines].join('\n'), input.value || '');
-      return Promise.resolve(v === null ? null : v.trim());
-    }
     return Promise.resolve(confirm([title, ...lines].join('\n\n')));
   }
 
@@ -57,32 +49,22 @@ function ask({ title, lines = [], confirmLabel = 'OK', cancelLabel = 'Cancel',
     body.appendChild(p);
   }
 
-  const field = $('askInput'), label = $('askLabel');
-  field.hidden = label.hidden = !wantsInput;
-  if (wantsInput) {
-    label.textContent = input.label || '';
-    field.placeholder = input.placeholder || '';
-    field.value = input.value || '';
-  }
-
   const ok = $('askOk'), cancel = $('askCancel');
   ok.textContent = confirmLabel;
   cancel.textContent = cancelLabel;
   ok.classList.toggle('danger', danger);
 
   return new Promise((resolve) => {
-    let value = null;
+    let value = false;
     const done = (v) => { value = v; dlg.close(); };
-    ok.onclick = () => done(wantsInput ? field.value.trim() : true);
-    cancel.onclick = () => done(wantsInput ? null : false);
-    field.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ok.click(); } };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
     dlg.addEventListener('close', () => {
-      ok.onclick = cancel.onclick = field.onkeydown = null;
-      field.value = '';                       // never leave typed text sitting there
-      resolve(!wantsInput && value === null ? false : value);
+      ok.onclick = cancel.onclick = null;
+      resolve(value);                 // Escape and dismissal leave it false
     }, { once: true });
     dlg.showModal();
-    (wantsInput ? field : cancel).focus();    // the safe answer is the default
+    cancel.focus();                   // the safe answer is the default
   });
 }
 
@@ -90,10 +72,6 @@ function ask({ title, lines = [], confirmLabel = 'OK', cancelLabel = 'Cancel',
  * dialog all resolve false. */
 export function confirmDialog(opts) {
   return ask({ confirmLabel: 'Continue', ...opts });
-}
-/* Resolves the trimmed string, or null if the person backed out. */
-export function promptDialog(opts) {
-  return ask({ confirmLabel: 'Save', ...opts, input: opts.input || {} });
 }
 
 /* --------------------------------------------------- matrix rain backdrop */
@@ -202,83 +180,34 @@ function initStrength() {
   update();
 }
 
-/* -------------------------------------------------------------- accounts */
-const ACC_KEY = 'vaultless.accounts.v1';
-function loadAccounts() {
-  try { const v = JSON.parse(localStorage.getItem(ACC_KEY) || '[]'); return Array.isArray(v) ? v : []; }
-  catch { return []; }
-}
-function saveAccounts(list) {
-  try { localStorage.setItem(ACC_KEY, JSON.stringify(list)); } catch { /* private mode */ }
-}
-function initAccounts() {
-  const wrap = $('accountChips'), idx = $('index');
-  const render = () => {
-    const list = loadAccounts();
-    wrap.replaceChildren();                      // textContent only: names are user input
-    for (const acc of list) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'chip';
-      chip.setAttribute('aria-pressed', String(String(acc.index) === idx.value));
-      const name = document.createElement('span');
-      name.textContent = `${acc.name} · ${acc.index}`;
-      const x = document.createElement('span');
-      x.className = 'x';
-      x.textContent = '×';
-      x.title = `Forget ${acc.name}`;
-      x.onclick = (e) => {
-        e.stopPropagation();
-        saveAccounts(loadAccounts().filter(a => a.name !== acc.name));
-        render();
-        toast(`Forgot “${acc.name}”`);
-      };
-      chip.append(name, x);
-      chip.onclick = () => { idx.value = String(acc.index); idx.dispatchEvent(new Event('input')); render(); };
-      wrap.appendChild(chip);
-    }
-    if (!list.length) {
-      const hint = document.createElement('span');
-      hint.className = 'chip add';
-      hint.textContent = 'No nicknames yet — save one below';
-      wrap.appendChild(hint);
-    }
-  };
-  $('addAccount').onclick = async () => {
-    /* Refuse to bind a nickname to a number the field does not actually hold.
-     * `Number(idx.value) || 0` used to turn anything unparseable into account
-     * 0, so a mistyped number quietly saved a nickname pointing at the wrong
-     * account — and pressing that chip later derived the wrong password. */
-    const raw = idx.value.trim();
-    if (!/^\d+$/.test(raw)) {
-      toast('Set a whole account number first, 0 or more.');
-      idx.focus();
-      return;
-    }
-    const name = await promptDialog({
-      title: `Nickname for account number ${raw}`,
-      lines: ['Stays on this device. It never reaches the oracle and never ' +
-              'changes the password — it is only a label for the number.'],
-      input: { label: 'Nickname', placeholder: 'email, bank, work…' },
-    });
-    if (!name) return;
-    const list = loadAccounts().filter(a => a.name !== name);
-    list.push({ name: name.slice(0, 24), index: Number(raw) });
-    list.sort((a, b) => a.index - b.index);
-    saveAccounts(list);
-    render();
-    toast(`Saved “${name}” as number ${raw}`);
-  };
+/* -------------------------------------------------- account number */
+/* There were nicknames here once: a list mapping "bank" to account 2, kept in
+ * localStorage so the number did not have to be remembered.
+ *
+ * They are gone, and the reason is the claim at the top of the page. A
+ * nickname is not a secret, but the list of them is a readable inventory of
+ * where somebody banks, mails and works, sitting in a browser profile — which
+ * is the shape of the thing this project exists to not keep. The account
+ * NUMBER is still whatever you type; keeping track of which number is which is
+ * now yours to do, in whatever you already trust with that.
+ *
+ * What is left is the stepper, which holds no state beyond the field itself.
+ */
+
+/* A feature that leaves its data behind is not removed. Anyone who saved
+ * nicknames still has the list; clear it on the next load, once. */
+try { localStorage.removeItem('vaultless.accounts.v1'); } catch { /* private mode */ }
+
+function initAccountNumber() {
+  const idx = $('index');
   const bump = (d) => {
     const n = Math.max(0, (Number(idx.value) || 0) + d);
     idx.value = String(n);
     idx.dispatchEvent(new Event('input'));
-    render();
   };
   $('idxUp').onclick = () => bump(1);
   $('idxDown').onclick = () => bump(-1);
-  idx.addEventListener('input', () => { $('card2').classList.add('done'); render(); });
-  render();
+  idx.addEventListener('input', () => { $('card2').classList.add('done'); });
 }
 
 /* ------------------------------------------------------- handshake viz */
@@ -806,9 +735,8 @@ function unlock(choice = oracleChoice || 'paper') {
  *
  * Pinning an oracle was a one-way door: the only way to drop one was DevTools,
  * so a browser that had seen a few oracles kept listing them for ever with no
- * way to tidy up. Each is a chip with an x, the same shape as the account
- * nicknames, and forgetting one is confirmed because it is a security control
- * being switched off, not a preference.
+ * way to tidy up. Each is a chip with an x, and forgetting one is confirmed
+ * because it is a security control being switched off, not a preference.
  *
  * `forget` is supplied by app.js — it owns the store — and hands back whatever
  * is left so this can redraw without knowing how any of that works. */
@@ -970,7 +898,7 @@ export function initChrome() {
   initRain();
   initMode();
   initStrength();
-  initAccounts();
+  initAccountNumber();
   initReveal();
   initFormatKeys();
 }

@@ -95,7 +95,7 @@ that key onto a device with `env:esp32dev-provision`.
 index.html             the site (markup + styles)
 app.js                 protocol: derivation, WebSerial transport, DLEQ verification
 ui.js                  chrome: routing between the two oracle paths, matrix backdrop,
-                         simple/expert switch, passphrase meter, account nicknames
+                         simple/expert switch, passphrase meter, account stepper
 sheet.js               paper oracle UI: entropy pad, scanning, printing, key lifetime
 recovery.js            paper oracle codec: Crockford base32, checksum, QR draw/scan
                          (all four load as modules, so the page runs under a strict
@@ -161,7 +161,7 @@ not travel, and one of them matters:
   oracle on first use. That is exactly the case the pin exists to catch, so the first
   use now says which fingerprint it is trusting: compare it against the one on the
   device's idle screen or printed on your sheet before you rely on the password.
-  Account nicknames and the simple/expert preference are lost the same way.
+  The simple/expert preference is lost the same way.
 
 - **Sheets printed before the move name the old domain.** The key on them is fine —
   it is just 32 bytes and cares nothing for DNS — but the instruction line points
