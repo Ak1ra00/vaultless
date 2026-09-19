@@ -224,6 +224,23 @@ function initAccountNumber() {
  * one number. app.js paces the awaits between stages to match. */
 export const BEAT = 900;
 
+/* Reduced motion is not a request to skip the explanation.
+ *
+ * `prefers-reduced-motion` asks for no MOVEMENT — no churning glyphs, no text
+ * settling character by character, no rain. Every one of those goes, and they
+ * should. But this panel used to answer it by collapsing the whole handshake
+ * to nothing: measured end to end, the four stages went past in 84ms, so the
+ * one thing on the page that shows the protocol happening showed nothing at
+ * all, and the password simply appeared. That is the opposite of an
+ * accommodation — it removed the explanation for the people most likely to be
+ * reading it rather than watching it.
+ *
+ * So the effects go and the PACING stays. Each stage still holds long enough
+ * to be read, a little brisker than the full choreography because there is no
+ * animation to wait out — only text to take in. */
+const DWELL = reduceMotion ? 0.55 : 1;
+const dwell = (ms) => new Promise(r => setTimeout(r, ms * DWELL));
+
 const HEXCHARS = '0123456789abcdef';
 const HEX_LEN = 64;
 
@@ -236,7 +253,8 @@ let scrambleRaf = null;
 function settleHex(el, target, ms) {
   cancelAnimationFrame(scrambleRaf);
   const text = String(target || '').slice(0, HEX_LEN).padEnd(HEX_LEN, '·');
-  if (reduceMotion) { el.textContent = text; return Promise.resolve(); }
+  // No settle, but the value still has to stay put long enough to be read.
+  if (reduceMotion) { el.textContent = text; return dwell(ms); }
 
   return new Promise((resolve) => {
     const t0 = performance.now();
@@ -260,7 +278,10 @@ function settleHex(el, target, ms) {
  * genuinely does not know the answer yet. */
 function churnHex(el, ms) {
   cancelAnimationFrame(scrambleRaf);
-  if (reduceMotion) return Promise.resolve();
+  /* Still says "not known yet", without moving to say it. Leaving the previous
+   * stage's value on screen under a `k · B` tag would label P as something it
+   * is not. */
+  if (reduceMotion) { el.textContent = '·'.repeat(HEX_LEN); return Promise.resolve(); }
   return new Promise((resolve) => {
     const t0 = performance.now();
     const step = (now) => {
@@ -318,6 +339,18 @@ export function vizStart(label, hex) {
   // so the whole page is visibly doing the thing, not just this one panel.
   document.body.classList.add('handshaking');
   stage('local');
+  /* Put it where it can be watched.
+   *
+   * The button that starts this sits below the panel, so on a phone pressing
+   * it leaves the handshake off the top of the screen — it played to nobody,
+   * and the first thing the user saw was the finished password. Centred rather
+   * than scrolled to the top, because the caption underneath is half the
+   * explanation. Only the scroll honours reduced motion here; the stages
+   * themselves are paced either way. */
+  $('viz').scrollIntoView({
+    behavior: reduceMotion ? 'auto' : 'smooth',
+    block: 'center',
+  });
   return setReadout('P', hex, { ms: BEAT });
 }
 
@@ -332,7 +365,7 @@ export function vizBlind(label, hex) {
 export function vizSend(label) {
   $('vizLabel').textContent = label;
   stage('sending');
-  return new Promise(r => setTimeout(r, reduceMotion ? 0 : BEAT));
+  return dwell(BEAT);
 }
 
 /* The oracle is working and we genuinely do not know the answer yet. */
@@ -345,14 +378,14 @@ export function vizOracle(label) {
    * mid-scramble while the device was still thinking would be a lie. The
    * returned promise is a MINIMUM dwell, so the fast paths still read. */
   churnHex($('vizHex'), 120000);
-  return new Promise(r => setTimeout(r, reduceMotion ? 0 : BEAT * 1.4));
+  return dwell(BEAT * 1.4);
 }
 
 /* Stamped, coming back. */
 export function vizReturn(label, hex) {
   $('vizLabel').textContent = label;
   stage('returning');
-  return new Promise(r => setTimeout(r, reduceMotion ? 0 : BEAT * 0.9))
+  return dwell(BEAT * 0.9)
     .then(() => setReadout("B' = k·B", hex, { ms: BEAT }));
 }
 
@@ -367,11 +400,12 @@ export function vizDone(label) {
   $('vizLabel').textContent = label;
   stage('done');
   document.body.classList.remove('handshaking');
-  if (reduceMotion) return;
+  /* Used to return here under reduced motion, which left the panel open on its
+   * last frame for ever. It closes on both paths now. */
   setTimeout(() => {
     $('viz').classList.remove('on');
     $('vizLabel').textContent = '';   // don't leave the caption orphaned
-  }, BEAT * 3);
+  }, BEAT * 3 * DWELL);
 }
 
 /* The password lands rather than appears.
