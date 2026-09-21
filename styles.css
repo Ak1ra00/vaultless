@@ -6,42 +6,50 @@
  * `style-src-attr 'unsafe-inline'` covers on its own — an injected stylesheet
  * element is then refused outright.
  */
-  /* Cypherpunk.
+  /* Oracle.
    *
-   * Same variable names as before, different values — every rule below this
-   * block is untouched by the retheme because it never named a colour
-   * directly. What changed is the ground (near-black with a green and a
-   * magenta bloom instead of charcoal), the accent (neon green where the cyan
-   * was, magenta where the violet was), the corner radius (6px/4px instead of
-   * 16px/10px — terminal, not app), and the type.
+   * The palette is not decoration here — it is the protocol. Taken from
+   * Ak1ra00/oracle's colors.toml, where the three accents are the three
+   * things an OPRF exchange has:
    *
-   * Contrast was re-checked, not assumed: --ink-2 is 5.6:1 on --bg-1 and
-   * 5.7:1 on --bg-0, both clear of the 4.5:1 floor, which is the whole reason
-   * the old palette had a note here too. */
+   *   cyan   #2bd9c9  the point, and the device screen
+   *   violet #b98aff  the blinded pair, B = r·P and B' = k·B
+   *   amber  #e0a640  k, the scalar the oracle keeps, and printed codes
+   *
+   * The handshake animation is coloured by that mapping rather than by one
+   * house accent, so the thing on screen says which half of the exchange you
+   * are looking at. Neutrals run #000 → #05080a → #0a1014 → #121b21 on a cool
+   * blue-teal charcoal.
+   *
+   * One deliberate departure: --ink-2 is NOT the theme's dark_foreground
+   * (#5c7378). That measures 3.8:1 on this ground — fine for a terminal
+   * comment, under the 4.5:1 floor for small web text. Same hue, lifted until
+   * it passes; v1.py measures it rather than trusting this note. */
   :root{
-    --bg-0:#050508; --bg-1:#0b0714; --bg-2:#0f0b1a; --bg-3:#151021;
-    --line:#16211a; --line-bright:#2a4b34;
-    --ink-0:#eaffef; --ink-1:#c9ffe4; --ink-2:#7a8a90;
-    /* The primary accent is green now. It keeps the name --cyan because five
-       hundred lines of layout refer to it, and renaming it would turn a
-       retheme into a rewrite for no visible gain. */
-    --cyan:#00ff66; --cyan-hot:#7dffb2; --cyan-dim:#12793f;
-    /* The third accent, and the focus ring specifically: the primary is green
-       now, so a green ring around a green-accented control barely reads.
-       Cyan is distinct from both it and the magenta. */
-    --neon:#00f7ff;
-    --violet:#ff00f7; --amber:#f4ff00; --red:#ff2079; --green:#00ff66;
-    /* Ink laid ON the neon accent — near-black, since every accent here is a
-       light saturated colour. */
-    --on-accent:#00140a;
+    --bg-0:#05080a; --bg-1:#0a1014; --bg-2:#121b21; --bg-3:#18242b;
+    --line:#1f3a40; --line-bright:#3a545b;
+    --ink-0:#eafbf9; --ink-1:#cfe7e6; --ink-2:#7e9b9f;
+    --cyan:#2bd9c9; --cyan-hot:#7ff2e6; --cyan-dim:#1f5a58;
+    --violet:#b98aff; --violet-hot:#d3b3ff;
+    --amber:#e0a640; --red:#ff5468; --green:#35d488;
+    --neon:#7ff2e6;
+    --on-accent:#04100e;
     --mono:'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     --sans:'IBM Plex Sans', system-ui, -apple-system, sans-serif;
-    --display:'Chakra Petch', 'IBM Plex Sans', system-ui, sans-serif;
+    --display:'IBM Plex Sans', system-ui, -apple-system, sans-serif;
     --r:6px; --r-sm:4px;
-    --shadow:0 8px 32px rgba(0,0,0,.6);
-    --glow:0 0 0 1px rgba(0,255,102,.35), 0 0 28px rgba(0,255,102,.22);
-    /* One line, reused: the CRT scanline wash over panels. */
-    --scan:repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);
+    --shadow:0 8px 32px rgba(0,0,0,.55);
+    --glow:0 0 0 1px rgba(43,217,201,.35), 0 0 28px rgba(43,217,201,.22);
+    /* The backgrounds in that theme are all drawn on a blueprint grid. It is
+       the one motif every sheet shares, so it is the one the page borrows —
+       faint enough to be texture, not pattern. */
+    --grid:
+      linear-gradient(rgba(43,217,201,.045) 1px, transparent 1px) 0 0/64px 64px,
+      linear-gradient(90deg, rgba(43,217,201,.045) 1px, transparent 1px) 0 0/64px 64px;
+    /* The active window in Oracle is a 45° cyan-into-violet gradient with a
+       soft cyan shadow: the point and its blinding, on the thing you are
+       working in. */
+    --edge-live:linear-gradient(45deg, #2bd9c9, #b98aff);
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
@@ -50,8 +58,9 @@
     /* The blooms sit on the body rather than only on .aurora so the colour is
        there before any script runs and behind the whole scroll length. */
     background:
-      radial-gradient(ellipse 900px 520px at 12% -8%, rgba(0,255,102,.10), transparent 60%),
-      radial-gradient(ellipse 760px 520px at 100% 0%, rgba(255,0,247,.09), transparent 55%),
+      var(--grid),
+      radial-gradient(ellipse 980px 560px at 14% -8%, rgba(43,217,201,.10), transparent 60%),
+      radial-gradient(ellipse 820px 560px at 96% 2%, rgba(185,138,255,.08), transparent 58%),
       var(--bg-0);
     background-attachment:fixed;
     color:var(--ink-0); font-family:var(--sans);
@@ -67,9 +76,9 @@
   .aurora{
     position:fixed;inset:0;z-index:0;pointer-events:none;
     background:
-      radial-gradient(900px 500px at 15% -5%, rgba(0,255,102,.16), transparent 60%),
-      radial-gradient(700px 500px at 92% 8%, rgba(255,0,247,.13), transparent 60%),
-      radial-gradient(900px 600px at 50% 105%, rgba(0,255,102,.07), transparent 60%);
+      radial-gradient(900px 500px at 15% -5%, rgba(43,217,201,.16), transparent 60%),
+      radial-gradient(700px 500px at 92% 8%, rgba(185,138,255,.13), transparent 60%),
+      radial-gradient(900px 600px at 50% 105%, rgba(43,217,201,.07), transparent 60%);
     animation:drift 22s ease-in-out infinite alternate;
   }
   @keyframes drift{to{transform:translate3d(0,-18px,0) scale(1.04);}}
@@ -82,11 +91,11 @@
   .brand .mark{
     font-family:var(--mono);font-weight:700;font-size:16px;color:var(--on-accent);
     background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));
-    padding:6px 9px;border-radius:3px;box-shadow:0 0 22px rgba(0,255,102,.45);
+    padding:6px 9px;border-radius:3px;box-shadow:0 0 22px rgba(43,217,201,.45);
   }
   .brand h1{
     font-size:24px;letter-spacing:.02em;font-weight:700;color:var(--ink-0);
-    text-shadow:0 0 18px rgba(0,255,102,.38);
+    text-shadow:0 0 18px rgba(43,217,201,.38);
   }
   /* The tagline is a source comment, so it is punctuated like one. Done in CSS
      rather than in the markup: it is decoration, and a screen reader reading
@@ -100,7 +109,7 @@
     font:inherit;font-size:13.5px;font-weight:600;color:var(--ink-2);background:none;border:0;
     padding:7px 16px;border-radius:999px;cursor:pointer;transition:.18s;min-height:36px;
   }
-  .seg button[aria-pressed="true"]{background:var(--cyan);color:var(--on-accent);box-shadow:0 0 16px rgba(0,255,102,.4);}
+  .seg button[aria-pressed="true"]{background:var(--cyan);color:var(--on-accent);box-shadow:0 0 16px rgba(43,217,201,.4);}
   .seg button:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
 
   .conn{
@@ -123,19 +132,33 @@
   /* steps ------------------------------------------------------------- */
   .steps{display:grid;gap:16px;}
   .card{
-    background:linear-gradient(180deg,rgba(15,11,26,.92),rgba(11,7,20,.92));
+    background:linear-gradient(180deg,rgba(18,27,33,.92),rgba(10,16,20,.92));
     border:1px solid var(--line);border-radius:var(--r);padding:22px;
     box-shadow:var(--shadow);backdrop-filter:blur(10px);
   }
   .card.step{transition:border-color .25s, box-shadow .25s;}
-  .card.step:focus-within{border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 0 1px var(--cyan-dim);}
+  /* Oracle's active window: a 45° cyan-into-violet border with a soft cyan
+     shadow, like light coming off a screen. A gradient cannot be a
+     border-color, so it is painted into a masked ::after ring that sits over
+     the panel and takes no pointer events. */
+  .card.step:focus-within{border-color:transparent;box-shadow:var(--shadow),0 0 34px rgba(43,217,201,.16);}
+  .card.step::after{
+    content:'';position:absolute;inset:-1px;border-radius:var(--r);pointer-events:none;
+    padding:1px;background:var(--edge-live);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite:exclude;
+    opacity:0;transition:opacity .45s ease;
+  }
+  .card.step:focus-within::after{opacity:1;}
   .step-h{display:flex;align-items:center;gap:13px;margin-bottom:6px;}
   .num{
     width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:var(--r-sm);
     font-family:var(--mono);font-weight:700;font-size:15px;
     background:var(--bg-3);color:var(--cyan);border:1px solid var(--cyan-dim);
   }
-  .card.done .num{background:var(--cyan);color:var(--on-accent);border-color:var(--cyan);box-shadow:0 0 18px rgba(0,255,102,.45);}
+  .card.done .num{background:var(--cyan);color:var(--on-accent);border-color:var(--cyan);box-shadow:0 0 18px rgba(43,217,201,.45);}
   .step-h h3{font-size:20px;font-weight:600;}
   .help{color:var(--ink-1);font-size:15px;margin:0 0 16px 47px;}
   @media(max-width:560px){.help{margin-left:0;}}
@@ -148,7 +171,7 @@
     padding:15px 16px;transition:.18s;min-height:56px;
   }
   input::placeholder{color:var(--ink-2);}
-  input:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 4px rgba(0,255,102,.14);}
+  input:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 4px rgba(43,217,201,.14);}
   input[type=password]{font-family:var(--mono);letter-spacing:.14em;}
 
   button{font-family:inherit;}
@@ -164,9 +187,9 @@
   .btn:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
   .btn.primary{
     background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));color:var(--on-accent);border-color:transparent;
-    box-shadow:0 0 26px rgba(0,255,102,.32);font-size:18px;padding:18px 30px;min-height:62px;
+    box-shadow:0 0 26px rgba(43,217,201,.32);font-size:18px;padding:18px 30px;min-height:62px;
   }
-  .btn.primary:hover:not(:disabled){box-shadow:0 0 40px rgba(0,255,102,.5);}
+  .btn.primary:hover:not(:disabled){box-shadow:0 0 40px rgba(43,217,201,.5);}
   .btn.small{font-size:14px;padding:10px 15px;min-height:44px;}
   .btn.wide{width:100%;}
   .actions{display:flex;gap:12px;flex-wrap:wrap;}
@@ -207,19 +230,19 @@
   .fmt-opt:hover{border-color:var(--cyan-dim);}
   .fmt-opt .ft{font-weight:600;font-size:15.5px;}
   .fmt-opt .fs{font-family:var(--mono);font-size:12px;color:var(--ink-2);}
-  .fmt-opt.active{border-color:var(--cyan);background:rgba(0,255,102,.08);box-shadow:0 0 0 3px rgba(0,255,102,.1);}
+  .fmt-opt.active{border-color:var(--cyan);background:rgba(43,217,201,.08);box-shadow:0 0 0 3px rgba(43,217,201,.1);}
   .fmt-opt.active .fs{color:var(--cyan);}
   .fmt-opt:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
 
   /* result ------------------------------------------------------------ */
   .result{
     border:1.5px solid var(--cyan-dim);border-radius:var(--r);padding:26px;text-align:center;
-    background:linear-gradient(180deg,rgba(0,255,102,.07),rgba(11,7,20,.92));position:relative;overflow:hidden;
+    background:linear-gradient(180deg,rgba(43,217,201,.07),rgba(10,16,20,.92));position:relative;overflow:hidden;
   }
-  .result.empty{border-color:var(--line);background:linear-gradient(180deg,rgba(15,11,26,.9),rgba(11,7,20,.9));}
+  .result.empty{border-color:var(--line);background:linear-gradient(180deg,rgba(18,27,33,.9),rgba(10,16,20,.9));}
   .pw{
     font-family:var(--mono);font-size:clamp(20px,4.4vw,34px);font-weight:600;letter-spacing:.04em;
-    word-break:break-all;color:var(--cyan-hot);text-shadow:0 0 26px rgba(0,255,102,.45);margin:6px 0 4px;
+    word-break:break-all;color:var(--cyan-hot);text-shadow:0 0 26px rgba(43,217,201,.45);margin:6px 0 4px;
   }
   /* Masked: these are dots, not the password with a filter over it. Selecting
      them would yield bullets, so steer people to the Copy button instead. */
@@ -228,7 +251,7 @@
   .result-meta{display:flex;justify-content:center;gap:8px 20px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);margin-top:10px;}
   .demo-badge{
     display:none;align-items:center;gap:8px;justify-content:center;margin-bottom:14px;
-    background:rgba(244,255,0,.14);border:1px solid var(--amber);color:var(--amber);
+    background:rgba(224,166,64,.14);border:1px solid var(--amber);color:var(--amber);
     border-radius:999px;padding:9px 18px;font-size:14px;font-weight:600;
   }
   .demo-badge.on{display:inline-flex;}
@@ -237,10 +260,12 @@
   .pw.reveal{animation:popin .45s cubic-bezier(.2,.9,.3,1.2);}
 
   /* handshake stage --------------------------------------------------- */
-  /* Colour carries meaning here, and only meaning: cyan is a value in the
-     clear on your machine, violet is a value that has been disguised and is
-     safe to hand over, green is the shared secret both halves agree on. The
-     readout changes colour as the value changes hands. */
+  /* Colour carries meaning here, and only meaning — the same three the
+     Oracle theme assigns: cyan is a value in the clear on your machine,
+     violet is one that has been disguised and is safe to hand over, and
+     amber is k, the scalar the oracle keeps and never sends. The readout
+     changes colour as the value changes hands, so the stage you are looking
+     at is legible before you read a word of it. */
   .stage{
     height:0;overflow:hidden;opacity:0;
     transition:height .55s cubic-bezier(.2,.8,.2,1), opacity .45s ease;
@@ -268,9 +293,12 @@
   }
   .party.hot .party-box{
     border-color:var(--cyan);transform:translateY(-3px);
-    box-shadow:0 0 34px rgba(0,255,102,.34), inset 0 1px 0 rgba(255,255,255,.09);
+    box-shadow:0 0 34px rgba(43,217,201,.34), inset 0 1px 0 rgba(255,255,255,.09);
   }
-  .party.hot .party-glyph{color:var(--cyan-hot);text-shadow:0 0 18px rgba(0,255,102,.7);}
+  .party.hot .party-glyph{color:var(--cyan-hot);text-shadow:0 0 18px rgba(43,217,201,.7);}
+  /* The right-hand box is the oracle, and what it holds is k. */
+  #partyOracle.hot .party-glyph{color:var(--amber);text-shadow:0 0 18px rgba(224,166,64,.6);}
+  #partyOracle.hot .party-box{border-color:rgba(224,166,64,.6);box-shadow:0 0 26px rgba(224,166,64,.18);}
   .party.hot .party-name{color:var(--ink-1);}
 
   /* the oracle's seal — rings that break outward each time it stamps */
@@ -278,7 +306,7 @@
     position:absolute;inset:-5px;border-radius:23px;border:1.5px solid var(--cyan);
     opacity:0;pointer-events:none;
   }
-  #viz[data-stage="stamping"] .seal-ring{animation:sealPulse 2.1s ease-out infinite;}
+  #viz[data-stage="stamping"] .seal-ring{animation:sealPulse 2.1s ease-out infinite;border-color:rgba(224,166,64,.55);}
   #viz[data-stage="stamping"] .seal-ring.two{animation-delay:1.05s;}
   @keyframes sealPulse{
     0%{opacity:.9;transform:scale(.82);}
@@ -308,11 +336,11 @@
   }
   .packet i{
     width:7px;height:12px;border-radius:2px;background:var(--cyan);
-    box-shadow:0 0 14px rgba(0,255,102,.85);
+    box-shadow:0 0 14px rgba(43,217,201,.85);
   }
   /* Outbound is violet: by then the point is blinded, and the colour is the
      whole point — that is the thing the oracle is allowed to see. */
-  #packetOut i{background:var(--violet);box-shadow:0 0 14px rgba(255,0,247,.85);}
+  #packetOut i{background:var(--violet);box-shadow:0 0 14px rgba(185,138,255,.85);}
   #packetOut i:nth-child(2){animation-delay:.06s;}
   #packetOut i:nth-child(3){animation-delay:.12s;}
   #viz[data-stage="sending"] #packetOut{animation:flyOut 1.05s cubic-bezier(.4,0,.5,1) forwards;}
@@ -337,7 +365,7 @@
   }
   .readout-tag{
     flex:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
-    color:var(--cyan);background:rgba(0,255,102,.09);border:1px solid var(--cyan-dim);
+    color:var(--cyan);background:rgba(43,217,201,.09);border:1px solid var(--cyan-dim);
     border-radius:5px;padding:4px 9px;min-width:78px;text-align:center;white-space:nowrap;
     transition:color .5s ease, border-color .5s ease, background .5s ease;
   }
@@ -349,9 +377,12 @@
   /* disguised — safe to hand over */
   #viz[data-stage="blinding"] .readout-tag,
   #viz[data-stage="sending"] .readout-tag,
-  #viz[data-stage="stamping"] .readout-tag,
   #viz[data-stage="returning"] .readout-tag{
-    color:var(--violet);border-color:rgba(255,0,247,.45);background:rgba(255,0,247,.1);
+    color:var(--violet);border-color:rgba(185,138,255,.45);background:rgba(185,138,255,.1);
+  }
+  /* k · B — the one stage where the oracle's own scalar is doing the work. */
+  #viz[data-stage="stamping"] .readout-tag{
+    color:var(--amber);border-color:rgba(224,166,64,.45);background:rgba(224,166,64,.1);
   }
   #viz[data-stage="blinding"] .readout-hex,
   #viz[data-stage="sending"] .readout-hex,
@@ -360,7 +391,7 @@
   /* the shared secret */
   #viz[data-stage="unblinding"] .readout-tag,
   #viz[data-stage="done"] .readout-tag{
-    color:var(--green);border-color:rgba(0,255,102,.45);background:rgba(0,255,102,.1);
+    color:var(--green);border-color:rgba(43,217,201,.45);background:rgba(43,217,201,.1);
   }
   #viz[data-stage="unblinding"] .readout-hex,
   #viz[data-stage="done"] .readout-hex{color:var(--cyan-hot);}
@@ -402,7 +433,7 @@
   #trace .empty{color:var(--ink-2);font-style:italic;}
 
   /* docs -------------------------------------------------------------- */
-  details.learn{margin-top:16px;border:1px solid var(--line);border-radius:var(--r);background:rgba(11,7,20,.85);overflow:hidden;}
+  details.learn{margin-top:16px;border:1px solid var(--line);border-radius:var(--r);background:rgba(10,16,20,.85);overflow:hidden;}
   details.learn>summary{
     cursor:pointer;padding:18px 22px;font-weight:600;font-size:17px;list-style:none;
     display:flex;align-items:center;justify-content:space-between;gap:10px;
@@ -448,14 +479,14 @@
     border-radius:var(--r);background:var(--bg-2);color:var(--ink-0);
     padding:26px;box-shadow:var(--shadow);font-family:var(--sans);
   }
-  dialog.ask::backdrop{background:rgba(3,3,6,.72);backdrop-filter:blur(3px);}
+  dialog.ask::backdrop{background:rgba(3,5,6,.72);backdrop-filter:blur(3px);}
   dialog.ask h3{font-size:20px;font-weight:600;margin-bottom:12px;}
   dialog.ask p{color:var(--ink-1);font-size:15px;margin:0 0 12px;}
   dialog.ask input{width:100%;}
   dialog.ask .ask-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;margin-top:20px;}
   dialog.ask .btn.danger{
     background:linear-gradient(135deg,var(--red),#c9483e);color:#fff;
-    border-color:transparent;box-shadow:0 0 22px rgba(255,32,121,.3);
+    border-color:transparent;box-shadow:0 0 22px rgba(255,84,104,.3);
   }
   dialog.ask [hidden]{display:none;}
 
@@ -464,7 +495,7 @@
     opacity:0;visibility:hidden;pointer-events:none;
     max-width:min(560px,calc(100vw - 32px));text-align:center;
     background:var(--cyan);color:var(--on-accent);font-weight:600;padding:14px 26px;border-radius:22px;
-    box-shadow:0 8px 40px rgba(0,255,102,.45);
+    box-shadow:0 8px 40px rgba(43,217,201,.45);
     transition:transform .38s cubic-bezier(.2,.9,.3,1.3), opacity .25s, visibility .25s;
   }
   .toast.on{transform:translate(-50%,0);opacity:1;visibility:visible;}
@@ -481,16 +512,16 @@
   .choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;}
   .choice{
     font:inherit;text-align:left;cursor:pointer;color:var(--ink-0);
-    background:linear-gradient(180deg,rgba(15,11,26,.92),rgba(11,7,20,.92));
+    background:linear-gradient(180deg,rgba(18,27,33,.92),rgba(10,16,20,.92));
     border:1.5px solid var(--line-bright);border-radius:var(--r);padding:26px;
     display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;
     transition:transform .2s cubic-bezier(.2,.9,.3,1.2), border-color .2s, box-shadow .2s;
   }
   .choice::after{
     content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
-    background:radial-gradient(420px 200px at 50% 0%, rgba(0,255,102,.16), transparent 70%);
+    background:radial-gradient(420px 200px at 50% 0%, rgba(43,217,201,.16), transparent 70%);
   }
-  .choice:hover{transform:translateY(-4px);border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 34px rgba(0,255,102,.18);}
+  .choice:hover{transform:translateY(-4px);border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 34px rgba(43,217,201,.18);}
   .choice:hover::after{opacity:1;}
   .choice:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
   .ch-mark{
@@ -506,7 +537,7 @@
     text-transform:uppercase;color:var(--ink-2);border:1px solid var(--line-bright);
     border-radius:999px;padding:5px 11px;
   }
-  .ch-tag.good{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(0,255,102,.07);}
+  .ch-tag.good{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(43,217,201,.07);}
   .ch-cta{color:var(--cyan);font-weight:600;font-size:16px;margin-top:4px;}
   /* Warnings that must be read before a choice is made, not after it fails. */
   .ch-warn{
@@ -534,7 +565,7 @@
   }
   .forkbtn:hover{border-color:var(--cyan-dim);transform:translateY(-1px);}
   .forkbtn:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
-  .forkbtn[aria-pressed="true"]{border-color:var(--cyan);background:rgba(0,255,102,.08);box-shadow:0 0 0 3px rgba(0,255,102,.1);}
+  .forkbtn[aria-pressed="true"]{border-color:var(--cyan);background:rgba(43,217,201,.08);box-shadow:0 0 0 3px rgba(43,217,201,.1);}
   .fk-t{font-weight:600;font-size:16px;}
   .fk-s{color:var(--ink-1);font-size:14px;line-height:1.45;}
   .forkbtn[aria-pressed="true"] .fk-s{color:var(--ink-0);}
@@ -566,7 +597,7 @@
   .what-strip strong{font-size:16px;color:var(--cyan);}
   .what-strip span{color:var(--ink-1);font-size:14.5px;line-height:1.5;}
 
-  .choice[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,255,102,.12);}
+  .choice[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(43,217,201,.12);}
   .choice[aria-pressed="true"]::after{opacity:1;}
   .continue-row{text-align:center;margin:22px 0 6px;}
   .continue-hint{color:var(--ink-2);font-size:14px;margin:10px 0 0;}
@@ -580,12 +611,22 @@
   .scan-video{width:100%;max-width:340px;border-radius:var(--r-sm);border:1px solid var(--line-bright);background:#000;display:block;}
   #sheetManual{font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;}
   .warn-box{
-    border:1px solid var(--amber);background:rgba(244,255,0,.09);border-radius:var(--r-sm);
+    border:1px solid var(--amber);background:rgba(224,166,64,.09);border-radius:var(--r-sm);
     padding:16px 18px;margin-bottom:18px;font-size:15px;color:var(--ink-1);
   }
   .warn-box strong{color:var(--amber);display:block;margin-bottom:8px;}
   .warn-box ul{margin:0;padding-left:20px;}
   .warn-box li{margin-bottom:7px;}
+  /* Making a paper oracle is the one step that produces something physical,
+     and it used to just appear. It is now drawn on:
+     the sheet rises, the QR is swept in behind a scan line, the fingerprint
+     lands, and the VLT1 code comes up last.
+     
+     All of it is CSS on the already-rendered elements. Nothing here touches
+     the canvas the QR is drawn into, or the text of the code beneath it —
+     both hold their real values from the first frame, so anything reading
+     them (including the scanner, and the tests) sees the finished article
+     whether the animation has played or not. */
   .printable{background:#fff;color:#000;border-radius:var(--r-sm);padding:26px;text-align:center;margin-top:18px;}
   .printable h4{font-family:var(--mono);font-size:15px;letter-spacing:.1em;text-transform:uppercase;margin:0 0 16px;color:#000;}
   .printable .qr{width:220px;height:220px;image-rendering:pixelated;}
@@ -655,11 +696,10 @@
   .card::before{
     content:'';position:absolute;inset:0;border-radius:var(--r);pointer-events:none;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
-    /* The CRT wash. One pixel lit in every three, at 2.5% white — enough to
-       read as a phosphor surface up close and to vanish at arm's length. It
-       is the cheapest part of this theme and does more than anything else to
-       stop the panels looking like cards. */
-    background:var(--scan);
+    /* The blueprint grid, as on every one of the theme's drawn sheets. It
+       reads as drafting paper rather than as a card, which is the point: this
+       page is a diagram of a protocol and should look like one. */
+    background:var(--grid);
   }
   .card.step{transition:border-color .45s ease, box-shadow .45s ease;}
   .choice{transition:transform .38s cubic-bezier(.2,.9,.3,1.2), border-color .38s ease, box-shadow .38s ease;}
@@ -670,15 +710,15 @@
   .result{transition:border-color .6s ease, background .6s ease;}
   .result:not(.empty){
     border-color:var(--cyan-dim);
-    box-shadow:0 0 44px rgba(0,255,102,.1), inset 0 1px 0 rgba(255,255,255,.05);
+    box-shadow:0 0 44px rgba(43,217,201,.1), inset 0 1px 0 rgba(255,255,255,.05);
   }
   /* The password already lands character by character (see revealPassword),
      so the container only has to bloom underneath it. */
   .pw.reveal{animation:pwBloom 1.9s cubic-bezier(.2,.8,.2,1) backwards;}
   @keyframes pwBloom{
-    0%{text-shadow:0 0 0 rgba(0,255,102,0);letter-spacing:.16em;opacity:.55;}
-    45%{text-shadow:0 0 40px rgba(0,255,102,.75);}
-    100%{text-shadow:0 0 26px rgba(0,255,102,.45);letter-spacing:.04em;opacity:1;}
+    0%{text-shadow:0 0 0 rgba(43,217,201,0);letter-spacing:.16em;opacity:.55;}
+    45%{text-shadow:0 0 40px rgba(43,217,201,.75);}
+    100%{text-shadow:0 0 26px rgba(43,217,201,.45);letter-spacing:.04em;opacity:1;}
   }
   .pw{transition:letter-spacing .4s ease;}
 
@@ -699,7 +739,7 @@
      clicked through, and the thing it guards is the master phrase. */
   .insecure-gate{
     position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;
-    background:rgba(5,5,8,.94);backdrop-filter:blur(6px);overflow-y:auto;
+    background:rgba(5,8,10,.94);backdrop-filter:blur(6px);overflow-y:auto;
   }
   .insecure-gate[hidden]{display:none;}
   .insecure-card{
@@ -748,8 +788,8 @@
   .welcome{
     border-color:var(--cyan-dim);
     border-left:3px solid var(--cyan);
-    background:linear-gradient(180deg,rgba(0,255,102,.07),rgba(11,7,20,.94));
-    box-shadow:var(--shadow),0 0 44px rgba(0,255,102,.1);
+    background:linear-gradient(180deg,rgba(43,217,201,.07),rgba(10,16,20,.94));
+    box-shadow:var(--shadow),0 0 44px rgba(43,217,201,.1);
     margin-top:12px;
   }
   .welcome[hidden]{display:none;}
@@ -787,12 +827,12 @@
      rather than cyan: cyan marks the guided path, and these two are the way
      around it. */
   .quick{
-    border-color:rgba(255,0,247,.34);
+    border-color:rgba(185,138,255,.34);
     /* The reference marks every callout with a 3px rail down the left rather
        than by tinting the whole border. */
     border-left:3px solid var(--violet);
-    background:linear-gradient(180deg,rgba(255,0,247,.07),rgba(11,7,20,.92));
-    box-shadow:var(--shadow),0 0 40px rgba(255,0,247,.09);
+    background:linear-gradient(180deg,rgba(185,138,255,.07),rgba(10,16,20,.92));
+    box-shadow:var(--shadow),0 0 40px rgba(185,138,255,.09);
     margin-bottom:26px;
   }
   .quick[hidden]{display:none;}
@@ -817,8 +857,8 @@
   .q-t{font-weight:600;font-size:16px;align-self:end;}
   .q-s{color:var(--ink-1);font-size:13.5px;line-height:1.45;align-self:start;}
   .q-btn:hover{
-    border-color:rgba(255,0,247,.55);background:rgba(255,0,247,.07);
-    transform:translateY(-2px);box-shadow:0 0 28px rgba(255,0,247,.16);
+    border-color:rgba(185,138,255,.55);background:rgba(185,138,255,.07);
+    transform:translateY(-2px);box-shadow:0 0 28px rgba(185,138,255,.16);
   }
   .q-btn:hover .q-mark{color:var(--violet);transform:scale(1.07);}
   .q-btn:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
@@ -829,6 +869,51 @@
   #quickHwWarn{margin-top:15px;}
   .q-new{color:var(--ink-2);font-size:14.5px;margin:16px 0 0;}
   .q-new .linky{font-size:14.5px;}
+
+
+  /* paper oracle: the reveal ------------------------------------------- */
+  #sheetOutput{animation:sheetRise .55s cubic-bezier(.2,.8,.2,1) backwards;}
+  @keyframes sheetRise{
+    from{opacity:0;transform:translateY(14px) scale(.985);}
+    to{opacity:1;transform:none;}
+  }
+
+  /* The QR is swept in top to bottom behind a bright line — a sheet coming
+     off a printer, and the same gesture the scanner makes reading it back. */
+  .printable .qr{
+    animation:qrSweep 1.15s cubic-bezier(.3,.7,.3,1) .18s backwards;
+  }
+  @keyframes qrSweep{
+    from{clip-path:inset(0 0 100% 0);}
+    to{clip-path:inset(0 0 0 0);}
+  }
+  .qr-wrap{position:relative;display:inline-block;line-height:0;}
+  .qr-wrap canvas{display:block;}
+  .qr-wrap::after{
+    content:'';position:absolute;left:-4%;right:-4%;height:2px;pointer-events:none;
+    background:linear-gradient(90deg, transparent, var(--cyan), transparent);
+    box-shadow:0 0 12px var(--cyan);
+    animation:qrLine 1.15s cubic-bezier(.3,.7,.3,1) .18s backwards;
+  }
+  @keyframes qrLine{
+    from{top:0;opacity:1;}
+    92%{opacity:1;}
+    to{top:100%;opacity:0;}
+  }
+
+  .printable .sheet-meta{animation:sheetPart .5s ease .95s backwards;}
+  .printable .sheet-code{animation:sheetPart .5s ease 1.15s backwards;}
+  .printable .sheet-note{animation:sheetPart .5s ease 1.3s backwards;}
+  @keyframes sheetPart{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+  /* A printed sheet does not animate, and a print can fire mid-reveal. */
+  @media print{
+    #sheetOutput,.printable .qr,.qr-wrap::after,
+    .printable .sheet-meta,.printable .sheet-code,.printable .sheet-note{
+      animation:none !important;clip-path:none !important;opacity:1 !important;transform:none !important;
+    }
+    .qr-wrap::after{display:none !important;}
+  }
 
   @media print{
     body{background:#fff;}

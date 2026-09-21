@@ -306,7 +306,11 @@
       <div id="sheetOutput" style="display:none;">
         <div class="printable" id="printable">
           <h4>vaultless paper oracle</h4>
-          <canvas id="sheetQR" class="qr"></canvas>
+          <!-- Purely presentational: the wrapper is what the scan line is drawn
+               on during the reveal. The canvas keeps its id and is still
+               reached by getElementById, so nothing that draws or reads it
+               cares that it gained a parent. -->
+          <div class="qr-wrap"><canvas id="sheetQR" class="qr"></canvas></div>
           <div class="sheet-meta">
             <div><span class="k">oracle fingerprint</span><span class="v" id="sheetFp"></span></div>
             <div><span class="k">created</span><span class="v" id="sheetDate"></span></div>

@@ -108,18 +108,18 @@ function initRain() {
     last = ts;
     /* The trail colour has to be the page's own ground, or the canvas fades to
      * a rectangle of the wrong black over the bloom behind it. */
-    ctx.fillStyle = `rgba(5,5,8,${0.14 - surge * 0.035})`;
+    ctx.fillStyle = `rgba(5,8,10,${0.14 - surge * 0.035})`;
     ctx.fillRect(0, 0, w, h);
     ctx.font = `${13 * dpr}px 'JetBrains Mono', 'IBM Plex Mono', monospace`;
     const bright = 0.42 + surge * 0.3;
     cols.forEach((col, i) => {
       const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
       const x = i * col.step;
-      /* Phosphor green, with the lead glyph blown out almost to white — the
-       * same two-tone the theme's accent uses everywhere else. */
+      /* The theme's cyan-teal, with the lead glyph blown out towards its
+       * bright variant — the same two-tone the accent uses everywhere else. */
       ctx.fillStyle = Math.random() < 0.06 + surge * 0.07
-        ? `rgba(190,255,214,${0.85 + surge * 0.15})`
-        : `rgba(0,190,76,${bright})`;
+        ? `rgba(127,242,230,${0.85 + surge * 0.15})`
+        : `rgba(30,150,141,${bright})`;
       ctx.fillText(ch, x, col.y);
       col.y += col.speed * (6 + surge * 5);
       if (col.y > h && Math.random() > 0.975) col.y = Math.random() * -220 * dpr;
