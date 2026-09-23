@@ -263,6 +263,8 @@
   /* Masked: these are dots, not the password with a filter over it. Selecting
      them would yield bullets, so steer people to the Copy button instead. */
   .pw.masked{letter-spacing:.2em;user-select:none;cursor:default;}
+  /* Twenty dots on one line on a phone, rather than eighteen and two. */
+  @media(max-width:560px){.pw.masked{letter-spacing:.08em;}}
   .placeholder{color:var(--ink-2);font-size:16px;padding:14px 0;}
   .result-meta{display:flex;justify-content:center;gap:8px 20px;flex-wrap:wrap;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);margin-top:10px;}
   .demo-badge{
@@ -420,6 +422,26 @@
     text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--cyan);
     margin:12px 0 0;min-height:18px;letter-spacing:.02em;
   }
+
+  /* While the pop-up is up nothing under it needs to move. The canvases stop
+     themselves (scene.js); this pauses the page's own CSS loops, so the blur
+     behind the pop-up is not recomputed every frame on a phone. */
+  body.hs-open .aurora,
+  body.hs-open .wrap,
+  body.hs-open .wrap *{animation-play-state:paused !important;}
+
+  /* The delivery: the finale's masked characters fly into the result card.
+     Above the pop-up as it dissolves, below the toast. */
+  .hs-fly{position:fixed;inset:0;z-index:45;pointer-events:none;}
+  .hs-fly.landed{opacity:0;transition:opacity .38s ease;}
+  .hs-glyph{
+    position:absolute;left:0;top:0;line-height:1;will-change:transform;
+    font-family:var(--mono);font-weight:600;color:var(--cyan-hot);
+    text-shadow:0 0 10px rgba(127,242,230,.95), 0 0 26px rgba(43,217,201,.65);
+  }
+  /* Gone at once when the flight takes off (no fade, or the card's dots and the
+     flying ones would show as two rows), back with a fade as they land. */
+  .pw.awaiting{opacity:0;transition:none;}
 
   /* where the pop-up hands over */
   .result.landed{animation:landed 1.7s cubic-bezier(.2,.8,.3,1) 1;}
@@ -702,7 +724,7 @@
     45%{text-shadow:0 0 40px rgba(43,217,201,.75);}
     100%{text-shadow:0 0 26px rgba(43,217,201,.45);letter-spacing:.04em;opacity:1;transform:none;}
   }
-  .pw{transition:letter-spacing .4s ease;}
+  .pw{transition:letter-spacing .4s ease, opacity .3s ease;}
 
   /* the connection dot breathes rather than blinks ---------------------- */
   .dot.live{animation:pulse 2.6s ease-in-out infinite;}

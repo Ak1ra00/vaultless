@@ -14,17 +14,25 @@
  *   - This module imports nothing and is loaded by its own <script> tag, so it
  *     is a separate module graph. If it throws, app.js — and every password —
  *     is untouched.
- *   - The only application state it reads is the `handshaking` class on
- *     <body>, which says a derivation is in progress and nothing else. No
- *     phrase, point, key or password is reachable from here. The curve maths
- *     below is a toy over ℝ and 𝔽₂₁₁ and shares nothing with the ristretto255
- *     group derivation actually uses.
- *   - Reduced motion: every scene draws a still frame and never moves on its
- *     own. Dragging still works; that motion is the user's.
- *   - Nothing animates off-screen or in a hidden tab.
+ *   - The only application state it reads is two classes on <body>:
+ *     `handshaking` (a derivation is in progress) and `hs-open` (the handshake
+ *     pop-up is covering the page). No phrase, point, key or password is
+ *     reachable from here. The curve maths below is a toy over ℝ and 𝔽₂₁₁ and
+ *     shares nothing with the ristretto255 group derivation actually uses.
+ *   - Reduced motion means REDUCED, not removed. A slideshow of still frames
+ *     read as broken. So the diagrams keep drifting, at a third of the speed,
+ *     with no scroll or pointer parallax; and the one full-screen layer — the
+ *     backdrop, where large-field motion is what actually troubles people — does
+ *     not turn at all, it only twinkles in place. Dragging still works.
+ *   - Nothing animates off-screen, in a hidden tab, or under the pop-up.
  */
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* How fast the diagrams move on their own: full speed, or calm. */
+const PACE = reduceMotion ? 0.3 : 1;
+/* The pop-up covers the whole page while it is open; nothing under it needs
+ * drawing, and on a phone drawing it anyway is what made the pop-up stutter. */
+const covered = () => document.body.classList.contains('hs-open');
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2;
 
@@ -176,7 +184,7 @@ function initField() {
 
     const want = document.body.classList.contains('handshaking') ? 1 : 0;
     surge += (want - surge) * Math.min(1, dt * 3);
-    if (!reduceMotion) {
+    if (!reduceMotion) {                  // the backdrop never turns under reduced motion
       yaw += dt * (0.035 + surge * 0.3);
       mx += (tmx - mx) * Math.min(1, dt * 2.5);
       my += (tmy - my) * Math.min(1, dt * 2.5);
@@ -209,17 +217,39 @@ function initField() {
       ctx.stroke();
     });
 
-    // the points
+    // the points — batched by brightness, so 196 points cost a handful of
+    // fills rather than 392 separate ones (that, per frame, is what a phone felt)
     const head = Math.floor(cursor) % P.length;
+    const LV = 6, halo = Array.from({ length: LV }, () => []), core = Array.from({ length: LV }, () => []);
+    const hot = [];
+    const tw = reduceMotion ? now / 1000 : 0;
     for (let i = 0; i < P.length; i++) {
       const [x, y, , z] = P[i];
-      const n = near(z);
+      let n = near(z);
+      if (reduceMotion) n = Math.min(1, n + 0.28 * Math.max(0, Math.sin(tw * 0.9 + i * 2.399)) ** 3);
       const behind = (head - i + P.length) % P.length;      // 0 = the cursor itself
       const lit = !reduceMotion && behind < 14 ? (1 - behind / 14) * (0.35 + surge * 0.65) : 0;
+      if (lit > 0.02) { hot.push([x, y, n, lit]); continue; }
+      const q = Math.min(LV - 1, Math.floor(n * LV));
+      halo[q].push(x, y, (0.9 + 1.5 * n) * dpr * 3.2);
+      core[q].push(x, y, (0.9 + 1.5 * n) * dpr);
+    }
+    const batch = (pts, color, alpha) => {
+      if (!pts.length) return;
+      ctx.beginPath();
+      for (let j = 0; j < pts.length; j += 3) { ctx.moveTo(pts[j] + pts[j + 2], pts[j + 1]); ctx.arc(pts[j], pts[j + 1], pts[j + 2], 0, TAU); }
+      ctx.fillStyle = rgba(color, alpha); ctx.fill();
+    };
+    for (let q = 0; q < LV; q++) {
+      const n = (q + 0.5) / LV;
+      batch(halo[q], C.cyan, 0.1 * (0.4 + n));
+      batch(core[q], C.cyan, 0.22 + 0.5 * n);
+    }
+    for (const [x, y, n, lit] of hot) {
       const r = (0.9 + 1.5 * n + lit * 2.2) * dpr;
-      ctx.fillStyle = rgba(lit > 0.02 ? C.hot : C.cyan, 0.1 * (0.4 + n) + lit * 0.18);
+      ctx.fillStyle = rgba(C.hot, 0.1 * (0.4 + n) + lit * 0.18);
       ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, TAU); ctx.fill();
-      ctx.fillStyle = rgba(lit > 0.02 ? C.hot : C.cyan, 0.22 + 0.5 * n + lit * 0.4);
+      ctx.fillStyle = rgba(C.hot, 0.22 + 0.5 * n + lit * 0.4);
       ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
     }
 
@@ -235,16 +265,18 @@ function initField() {
 
   function loop(t) {
     raf = 0;
+    if (document.hidden || covered()) return;     // resumes on the next kick
     const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
     lastT = t;
-    // ~30fps at rest, full rate while the oracle works or the pointer moves
-    const busy = surge > 0.05 || document.body.classList.contains('handshaking') || t - lastMove < 1500;
-    if (busy || t - lastDraw > 32) draw(t, dt);
-    if (!reduceMotion && !document.hidden) raf = requestAnimationFrame(loop);
+    // ~30fps at rest, full rate while the oracle works or the pointer moves;
+    // a gentle ~12fps twinkle under reduced motion, where nothing travels
+    const busy = !reduceMotion &&
+      (surge > 0.05 || document.body.classList.contains('handshaking') || t - lastMove < 1500);
+    if (busy || t - lastDraw > (reduceMotion ? 80 : 32)) draw(t, dt);
+    raf = requestAnimationFrame(loop);
   }
   function kick() {
-    if (raf || document.hidden) return;
-    if (reduceMotion) { draw(performance.now(), 0); return; }
+    if (raf || document.hidden || covered()) return;
     lastT = performance.now();
     raf = requestAnimationFrame(loop);
   }
@@ -254,12 +286,9 @@ function initField() {
     tmy = (e.clientY / innerHeight - 0.5) * 2;
     lastMove = performance.now();
   }, { passive: true });
-  addEventListener('resize', () => { if (reduceMotion) kick(); });
   document.addEventListener('visibilitychange', kick);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (reduceMotion) kick(); });
-  // reduced motion still has to answer the handshake — with one still frame
-  new MutationObserver(() => { if (reduceMotion) { surge = document.body.classList.contains('handshaking') ? 1 : 0; kick(); } })
-    .observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // the pop-up closing (or the page otherwise changing state) restarts the loop
+  new MutationObserver(kick).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   kick();
 }
 
@@ -305,8 +334,8 @@ function groupLaw() {
 
   function draw(ctx, W, H, dpr, t) {
     setup(W, H, dpr);
-    if (!reduceMotion && !st.grab && t - st.lastUser > 3.5) {
-      st.xQ = 1.26 + 0.69 * Math.sin(t * 0.42);   // Q.x in [0.57, 1.95]
+    if (!st.grab && t - st.lastUser > 3.5) {
+      st.xQ = 1.26 + 0.69 * Math.sin(t * 0.42 * PACE);   // Q.x in [0.57, 1.95]
       st.sQ = 1;
     }
     // the unit grid and axes, as on the sheet
@@ -395,7 +424,7 @@ function groupLaw() {
     noteBody: 'the chord through P and Q meets E again at −R; reflect it to get P + Q = R. k·P is this, repeated — the oracle’s whole job.',
     badge: 'VAULTLESS · E/ℝ · SHEET 01', hint: 'drag P or Q along the curve',
     draw, readout,
-    busy: () => !reduceMotion || !!st.grab,
+    busy: () => true,
     down(x, y) {
       if (!m) return;                    // nothing drawn yet, so nothing to grab
       const [k] = nearest(x, y); st.grab = k; st.lastUser = performance.now() / 1000; moveTo(k, x, y);
@@ -428,22 +457,22 @@ function groupLaw() {
 function finiteField() {
   const STEPS = 9;
   const st = {
-    P: [17, 15], walk: walkFrom([17, 15], STEPS), grow: reduceMotion ? STEPS - 1 : 0,
+    P: [17, 15], walk: walkFrom([17, 15], STEPS), grow: 0,
     hold: 0, fade: 1, yaw: -0.42, pitch: 0.92, vyaw: 0, drag: null, lastUser: -1e9, hover: -1,
   };
   let cam = null, shown = [];
   const to3 = (x, y, h = 0) => [(x / (FP - 1)) * 2 - 1, h, (y / (FP - 1)) * 2 - 1];
 
-  function restart(P) { st.P = P; st.walk = walkFrom(P, STEPS); st.grow = reduceMotion ? STEPS - 1 : 0; st.hold = 0; st.fade = 1; }
+  function restart(P) { st.P = P; st.walk = walkFrom(P, STEPS); st.grow = 0; st.hold = 0; st.fade = 1; }
 
   function draw(ctx, W, H, dpr, t, dt) {
-    if (!reduceMotion) {
+    {
       if (!st.drag) {
         st.yaw += st.vyaw * dt;
         st.vyaw *= Math.pow(0.04, dt);
-        if (t - st.lastUser > 2.5) st.yaw += dt * 0.1;
+        if (t - st.lastUser > 2.5) st.yaw += dt * 0.1 * PACE;
       }
-      if (st.grow < STEPS - 1) st.grow = Math.min(STEPS - 1, st.grow + dt * 1.5);
+      if (st.grow < STEPS - 1) st.grow = Math.min(STEPS - 1, st.grow + dt * 1.5 * (reduceMotion ? 0.6 : 1));
       else if ((st.hold += dt) > 3.2) {
         st.fade -= dt * 1.6;
         if (st.fade <= 0) restart(FIELD[(Math.random() * FIELD.length) | 0]);
@@ -533,7 +562,7 @@ function finiteField() {
     noteBody: `#E(𝔽₂₁₁) = ${FIELD.length + 1} with the point at infinity — prime, so every point walks the whole group. No curve to see: only y ↦ −y and the walk k·P.`,
     badge: 'VAULTLESS · E/𝔽₂₁₁ · SHEET 02', hint: 'drag to turn · click any point to walk from it',
     draw, readout, data: { points: FIELD.length },
-    busy: () => !reduceMotion || !!st.drag,
+    busy: () => true,
     down(x, y) { st.drag = { x, y, yaw: st.yaw, pitch: st.pitch, moved: 0, t: performance.now() }; st.lastUser = performance.now() / 1000; },
     move(x, y, dpr) {
       if (st.drag) {
@@ -582,7 +611,7 @@ function torus() {
   const Z = [0.381966, 0.145898];      // z = αω₁ + βω₂, in lattice coordinates
   const st = {
     yaw: -0.5, pitch: 0.6, vyaw: 0, drag: null, lastUser: -1e9,
-    tp: reduceMotion ? STEPS : 0, hold: 0, fade: 1, hover: -1,
+    tp: 0, hold: 0, fade: 1, hover: -1,
   };
   let cam = null, lat = null, nodesT = [], nodesL = [];
   const pos = (u, v) => { const th = TAU * u, ph = TAU * v, q = R + r * Math.cos(ph); return [q * Math.cos(th), r * Math.sin(ph), q * Math.sin(th)]; };
@@ -590,13 +619,13 @@ function torus() {
   const at = (t) => [fract(t * Z[0]), fract(t * Z[1])];
 
   function draw(ctx, W, H, dpr, t, dt) {
-    if (!reduceMotion) {
+    {
       if (!st.drag) {
         st.yaw += st.vyaw * dt;
         st.vyaw *= Math.pow(0.04, dt);
-        if (t - st.lastUser > 2.5) st.yaw += dt * 0.16;
+        if (t - st.lastUser > 2.5) st.yaw += dt * 0.16 * PACE;
       }
-      if (st.tp < STEPS) st.tp = Math.min(STEPS, st.tp + dt * 1.25);
+      if (st.tp < STEPS) st.tp = Math.min(STEPS, st.tp + dt * 1.25 * (reduceMotion ? 0.6 : 1));
       else if ((st.hold += dt) > 2.8) {
         st.fade -= dt * 1.5;
         if (st.fade <= 0) { st.tp = 0; st.hold = 0; st.fade = 1; }
@@ -742,7 +771,7 @@ function torus() {
     noteBody: 'Weierstrass ℘ maps ℂ/Λ onto the curve, and adding in the lattice becomes the group law — so k·P is a straight line in the cell, and a winding one on the torus.',
     badge: 'VAULTLESS · E/ℂ · SHEET 05', hint: 'drag to turn the torus',
     draw, readout,
-    busy: () => !reduceMotion || !!st.drag,
+    busy: () => true,
     down(x, y) { st.drag = { x, y, yaw: st.yaw, pitch: st.pitch }; st.lastUser = performance.now() / 1000; },
     move(x, y, dpr) {
       if (st.drag) {
@@ -813,10 +842,11 @@ function initSheets() {
 
   function frame(t) {
     raf = 0;
+    if (covered()) return;                       // resumes when the pop-up closes
     const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
     lastT = t;
-    // ~40fps while it idles, full rate while someone has hold of it
-    if (interacting || t - lastDraw > 24 || dt === 0) {
+    // ~40fps while it idles (~30 when calm), full rate while someone has hold of it
+    if (interacting || t - lastDraw > (reduceMotion ? 32 : 24) || dt === 0) {
       dpr = fit(c, 2);
       ctx.clearRect(0, 0, c.width, c.height);
       cur.draw(ctx, c.width, c.height, dpr, t / 1000, dt);
@@ -827,7 +857,7 @@ function initSheets() {
     if (visible && !document.hidden && cur.busy()) raf = requestAnimationFrame(frame);
   }
   function kick(now = false) {
-    if (raf || document.hidden || !cur) return;
+    if (raf || document.hidden || !cur || covered()) return;
     if (!visible && !now) return;
     lastT = performance.now();
     raf = requestAnimationFrame(frame);
@@ -876,6 +906,7 @@ function initSheets() {
   });
 
   new IntersectionObserver(([en]) => { visible = en.isIntersecting; kick(); }).observe(fig);
+  new MutationObserver(() => kick()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   new ResizeObserver(() => kick(true)).observe(c);
   document.addEventListener('visibilitychange', () => kick());
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => kick(true));

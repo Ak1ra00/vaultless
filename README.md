@@ -30,8 +30,9 @@ new laptop, private window   Already have an oracle? → scan ─────┘
   and print it. Then type your phrase, pick an account number and a style, and press
   **Make my password**. The computation opens over the page and plays out as it
   happens — the phrase hashed onto the curve, stamped with the key from your sheet,
-  HKDF filling in the characters. **Skip** (or Escape) closes it and the password
-  arrives at once; it is the same password either way.
+  HKDF filling in the characters. Then the masked characters lift off the pop-up
+  and land, one by one, on the result card. **Skip** (or Escape) closes it and the
+  password arrives at once; it is the same password either way.
 
   ![The handshake pop-up in the demo: the oracle's k walking B across the curve, one chord at a time](docs/handshake.jpg)
 
@@ -176,15 +177,20 @@ The sheets and the ring live in `scene.js`, and the handshake drawing in
 
 - Each imports nothing and is loaded by its own `<script>` tag, so each is a
   separate module graph. If either throws, derivation carries on.
-- `scene.js` reads only whether `<body>` has the `handshaking` class.
-  `handshake.js` reads only the stage name, which oracle path is in use, the
+- `scene.js` reads only two classes on `<body>`: `handshaking`, and `hs-open`
+  while the pop-up covers the page. `handshake.js` reads only the stage name, which oracle path is in use, the
   password's length (set by the style) and the readout, which only ever holds
   `B` and `B′`. No phrase, key, `P`, `S` or password is reachable from either,
   and the curves they draw are toys over ℝ and 𝔽₂₁₁ that share nothing with
-  ristretto255.
-- With reduced motion on, every scene is a still frame that moves only when you
-  drag it, and the handshake still plays, one still frame per stage, at a shorter
-  dwell. Nothing animates off-screen or in a hidden tab.
+  ristretto255. The one thing `handshake.js` writes back is where it drew the
+  finale's character slots, so the delivery flight knows where to take off from.
+- With reduced motion on, nothing slides, spins or zooms, but nothing freezes
+  either. The diagrams drift at a third of the speed with no scroll or pointer
+  parallax, the full-screen backdrop only twinkles in place, and the handshake plays
+  as fades — lines and points appearing where they are, packets dissolving from one
+  end of the wire to the other — at a shorter dwell, ending in a cross-fade instead
+  of the flight. Nothing animates off-screen, in a hidden tab, or underneath the
+  pop-up.
 
 ## Repo layout
 

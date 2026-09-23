@@ -341,12 +341,18 @@ function openPop() {
   // to a screen reader. The toast and the pin dialog live outside .wrap, so a
   // first-use notice or a key-mismatch question still gets through.
   document.querySelector('.wrap').inert = true;
+  // Tells the backdrop and the diagrams (scene.js) to stop drawing and the
+  // page's own CSS loops to pause: nothing under the pop-up needs to move,
+  // and on a phone drawing it anyway is what made the pop-up stutter.
+  document.body.classList.add('hs-open');
   if (!popOpen) lastFocus = document.activeElement;
   popOpen = true;
   $('viz').focus({ preventScroll: true });
 }
 
-function closePop({ toResult = false } = {}) {
+/* `then`: 'result' lands on the result card, 'return' puts focus back where it
+ * was, 'none' leaves both to the caller (the delivery flight lands itself). */
+function closePop({ then = 'return' } = {}) {
   clearTimeout(doneTimer);
   if (!popOpen) return;
   popOpen = false;
@@ -355,12 +361,125 @@ function closePop({ toResult = false } = {}) {
   pop.classList.remove('on');
   pop.classList.add('leaving');
   document.querySelector('.wrap').inert = false;
+  document.body.classList.remove('hs-open');
   hideTimer = setTimeout(() => {
     pop.hidden = true;
     pop.classList.remove('leaving');
   }, reduceMotion ? 0 : 420);
-  if (toResult) landOnResult();
-  else if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+  if (then === 'result') landOnResult();
+  else if (then === 'return' && lastFocus && document.contains(lastFocus)) {
+    lastFocus.focus({ preventScroll: true });
+  }
+}
+
+/* Scroll without the page's smooth-scrolling rule, so a measurement taken
+ * straight afterwards sees where things will actually be. */
+function jumpTo(el) {
+  const root = document.documentElement, was = root.style.scrollBehavior;
+  root.style.scrollBehavior = 'auto';
+  el.scrollIntoView({ block: 'center' });
+  root.style.scrollBehavior = was;
+}
+
+/* ---------------------------------------------------- the delivery flight */
+/* The password is delivered, not revealed: the masked characters the finale
+ * filled in lift off the pop-up as it dissolves, arc across the screen and
+ * land one by one on the exact places the masked password occupies in the
+ * result card. Still dots all the way — nothing here ever holds the password,
+ * only how many characters it has. Under reduced motion it is a cross-fade. */
+let flight = null;
+
+function cancelFlight() {
+  if (!flight) return;
+  for (const a of flight.anims) a.cancel();
+  flight.layer.remove();
+  $('pwOut').classList.remove('awaiting');
+  flight = null;
+}
+
+/* Where handshake.js drew the finale's slots, in viewport coordinates. */
+function slotCentres() {
+  const raw = $('viz').dataset.slots;
+  if (!raw) return null;
+  const [x0, cw, y, n] = raw.split(',').map(Number);
+  const r = $('hsCanvas').getBoundingClientRect();
+  if (!r.width || !(n > 0)) return null;
+  return Array.from({ length: n }, (_, i) => ({ x: r.left + x0 + i * cw + cw / 2, y: r.top + y }));
+}
+
+/* The centre of every masked character in the result card. */
+function maskCentres() {
+  const dots = $('pwOut').querySelector('[aria-hidden="true"]');
+  const node = dots && dots.firstChild;
+  if (!node || node.nodeType !== Node.TEXT_NODE || !node.length) return null;
+  const range = document.createRange(), out = [];
+  for (let i = 0; i < node.length; i++) {
+    range.setStart(node, i); range.setEnd(node, i + 1);
+    const b = range.getBoundingClientRect();
+    out.push({ x: b.left + b.width / 2, y: b.top + b.height / 2 });
+  }
+  return out;
+}
+
+function deliver() {
+  cancelFlight();
+  const from = slotCentres();
+  // Bring the card to where it will be seen, behind the veil, before anything
+  // moves — so the characters fly to where the card actually is.
+  jumpTo($('resultCard'));
+  const flies = !reduceMotion && typeof document.body.animate === 'function';
+  const pw = $('pwOut');
+  /* The flight is this password's entrance, so the card's own entrance (the
+   * letter-spacing bloom, paused while the pop-up covered it) must not resume
+   * underneath and slide the dots away from where the characters land. Hide
+   * first — `awaiting` switches transitions off — and only then drop the bloom,
+   * or its removal starts a letter-spacing transition and the positions
+   * measured below are where the dots start, not where they settle. */
+  if (flies) { pw.classList.add('awaiting'); pw.classList.remove('reveal'); }
+  const to = maskCentres();
+  if (!flies || !from || !to || from.length !== to.length) {
+    pw.classList.remove('awaiting');
+    closePop({ then: 'result' });
+    return;
+  }
+  const size = parseFloat(getComputedStyle(pw).fontSize) || 28;
+  const layer = document.createElement('div');
+  layer.className = 'hs-fly';
+  layer.setAttribute('aria-hidden', 'true');
+  const n = from.length;
+  const anims = from.map((f, i) => {
+    const t = to[i];
+    const el = document.createElement('span');
+    el.className = 'hs-glyph';
+    el.textContent = '•';
+    el.style.left = `${f.x}px`;
+    el.style.top = `${f.y}px`;
+    el.style.fontSize = `${size}px`;
+    layer.appendChild(el);
+    const dx = t.x - f.x, dy = t.y - f.y;
+    // Each one arcs, fanning out a little by its place in the row, then
+    // settles; the swell in the middle is the "handing over" beat.
+    const lift = -(46 + Math.min(150, Math.abs(dy) * 0.28));
+    const fan = (i - (n - 1) / 2) * 7;
+    const s0 = 14 / size;                       // the finale draws its dots at 14px
+    return el.animate([
+      { transform: `translate(-50%,-50%) translate(0px,0px) scale(${s0})`, opacity: 0.85 },
+      { transform: `translate(-50%,-50%) translate(${dx * 0.42 + fan}px,${dy * 0.42 + lift}px) scale(${Math.max(1.35, s0 * 2)})`,
+        opacity: 1, offset: 0.45 },
+      { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) scale(1)`, opacity: 1 },
+    ], { duration: 980, delay: i * 30, easing: 'cubic-bezier(.55,0,.15,1)', fill: 'forwards' });
+  });
+  document.body.appendChild(layer);
+  flight = { layer, anims };
+  closePop({ then: 'none' });                   // dissolves beneath the characters
+  Promise.all(anims.map((a) => a.finished)).then(() => {
+    if (!flight || flight.layer !== layer) return;
+    flight = null;
+    pw.classList.remove('awaiting');
+    layer.classList.add('landed');
+    setTimeout(() => layer.remove(), 400);
+    landOnResult();
+  }).catch(() => { /* cancelled by a new derivation */ });
 }
 
 /* Hand over to the result card: it is where the password now is, and after a
@@ -382,7 +501,7 @@ function skip() {
    * and a cancelled frame is a promise that never resolves. The loops see
    * `skipped` on their next frame and finish themselves. */
   for (const done of [...waiting]) done();
-  closePop({ toResult: $('viz').dataset.stage === 'done' });
+  closePop({ then: $('viz').dataset.stage === 'done' ? 'result' : 'return' });
 }
 
 function initHandshakePop() {
@@ -406,12 +525,14 @@ function clearStage() {
 }
 
 export function vizReset() {
+  cancelFlight();
   clearStage();
   closePop();
 }
 
 /* Opens the pop-up on the point the phrase hashed to. */
 export function vizStart(label /* , hex — P, deliberately not shown */) {
+  cancelFlight();
   clearStage();
   skipped = false;
   path = readPath();
@@ -488,7 +609,7 @@ export function vizDone(label) {
   document.body.classList.remove('handshaking');
   // Skipped earlier: the pop-up is already gone, so go straight to the result.
   if (!popOpen) { landOnResult(); return; }
-  doneTimer = setTimeout(() => closePop({ toResult: true }), BEAT * 2.8 * DWELL);
+  doneTimer = setTimeout(deliver, BEAT * 2.6 * DWELL);
 }
 
 /* The password lands rather than appears.

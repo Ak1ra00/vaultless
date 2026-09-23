@@ -26,8 +26,27 @@
  *     cross the wire in the open. No phrase, P, S, key or password is reachable
  *     from here, because none of them is ever put where this could read it.
  *   - Math.random below only ever chooses what the picture looks like.
- *   - Reduced motion: one still frame per stage, nothing moving on its own.
- *     Nothing draws while the pop-up is closed or the tab is hidden.
+ *   - It writes one thing back: where the finale's character slots sit on the
+ *     canvas, so ui.js can fly the masked characters from there into the
+ *     result card. That is layout, not data.
+ *
+ * Motion, in two registers:
+ *
+ *   - Full: the curve sways in perspective, hops draw themselves, packets
+ *     travel the wire trailing their bytes, the projector turns.
+ *   - Calm, for prefers-reduced-motion: the camera holds still and nothing
+ *     travels — lines and points fade in where they are, packets dissolve from
+ *     one end of the wire to the other, glyphs settle without flicker. It
+ *     still moves; it just never slides, spins or zooms. A still frame per
+ *     stage, which is what this used to do, read as a broken slideshow.
+ *
+ * And it has to hold 60 frames a second on a phone, so the hot paths draw in
+ * batches: glows are pre-rendered sprites rather than a new gradient per
+ * point per frame, dots are a few paths rather than a hundred, colours go
+ * through globalAlpha rather than a freshly built rgba() string per call, and
+ * the canvas has a pixel budget so a 3× phone screen is not asked to fill
+ * nine times the pixels. Nothing draws while the pop-up is closed or the tab
+ * is hidden.
  */
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -170,16 +189,53 @@ function makePlan(paper) {
 const cv = $('hsCanvas');
 const ctx = cv && cv.getContext ? cv.getContext('2d') : null;
 const viz = $('viz'), pop = $('hsPop');
+const CALM = reduceMotion;
 
 let W = 0, H = 0, dpr = 1;
 let L = null;                              // layout, recomputed on resize
-let stageName = '', stageT0 = 0, beat = 900, path = 'device', plan = null;
+let stageName = '', stageT0 = 0, beat = 900, path = 'paper', plan = null;
+
+/* ---- drawing primitives that stay cheap at 60fps */
+let curFont = '';
+function setFont(f) { if (f !== curFont) { ctx.font = f; curFont = f; } }
+function paint(color, alpha) { ctx.globalAlpha = clamp01(alpha); ctx.fillStyle = color; ctx.strokeStyle = color; }
+function text(str, x, y, { color = C.ink2, size = 10, weight = 500, align = 'left', base = 'middle', alpha = 1 } = {}) {
+  if (alpha <= 0.005) return;
+  setFont(`${weight} ${size}px ${MONO}`);
+  ctx.textAlign = align; ctx.textBaseline = base;
+  paint(color, alpha);
+  ctx.fillText(str, x, y);
+  ctx.globalAlpha = 1;
+}
+
+/* A soft glow, pre-rendered once per colour and stamped with drawImage — a new
+ * radial gradient per point per frame was most of what a phone spent here. */
+const SPRITES = new Map();
+function glowSprite(color) {
+  let sp = SPRITES.get(color);
+  if (sp) return sp;
+  sp = document.createElement('canvas');
+  sp.width = sp.height = 64;
+  const g = sp.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, rgba(color, 1)); gr.addColorStop(1, rgba(color, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  SPRITES.set(color, sp);
+  return sp;
+}
+function glow(x, y, r, color, alpha) {
+  if (alpha <= 0.01 || r <= 0) return;
+  ctx.globalAlpha = clamp01(alpha);
+  ctx.drawImage(glowSprite(color), x - r, y - r, 2 * r, 2 * r);
+  ctx.globalAlpha = 1;
+}
 
 function layout() {
   const r = cv.getBoundingClientRect();
-  dpr = Math.min(2, window.devicePixelRatio || 1);
   W = Math.max(1, r.width); H = Math.max(1, r.height);
+  // Crisp on a retina screen, but never more than ~1.4M pixels to fill.
+  dpr = Math.min(2, window.devicePixelRatio || 1, Math.sqrt(1.4e6 / (W * H)));
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  curFont = '';                               // a resize resets the context's state
   const narrow = W < 520;
   const R = Math.max(14, Math.min(28, Math.min(W, H) * 0.065));
   const nodeY = H * 0.46;
@@ -207,8 +263,8 @@ let yaw = -0.2;
 function proj(x, y) {
   const X = (x - XC) * L.sx, Y = -y * L.sy;
   const Xr = X * Math.cos(yaw), Z = X * Math.sin(yaw);
-  const s = 1100 / (1100 + Z);
-  return [L.cx + Xr * s, L.cy + Y * s];
+  const sc = 1100 / (1100 + Z);
+  return [L.cx + Xr * sc, L.cy + Y * sc];
 }
 const projJ = (j) => proj(PTS[j].x, PTS[j].y);
 
@@ -224,28 +280,24 @@ function along(q) {                         // a point q ∈ [0,1] of the way al
   return L.trace[L.trace.length - 1];
 }
 
-function text(str, x, y, { color = C.ink2, size = 10, weight = 500, align = 'left', base = 'middle', alpha = 1 } = {}) {
-  ctx.font = `${weight} ${size}px ${MONO}`;
-  ctx.textAlign = align; ctx.textBaseline = base;
-  ctx.fillStyle = rgba(color, alpha);
-  ctx.fillText(str, x, y);
-}
-
 /* ---- backdrop: a floor that recedes, and the projector that shows the curve */
 function floor(t) {
   const hz = H * 0.58, vp = W / 2;
   ctx.lineWidth = 1;
-  for (let i = -14; i <= 14; i++) {
-    const a = 0.05 * (1 - Math.abs(i) / 16);
-    ctx.strokeStyle = rgba(C.cyan, a);
-    ctx.beginPath(); ctx.moveTo(vp + i * W * 0.012, hz); ctx.lineTo(vp + i * W * 0.11, H); ctx.stroke();
+  for (const band of [[0, 4, 0.05], [5, 9, 0.034], [10, 14, 0.018]]) {
+    ctx.beginPath();
+    for (let a = band[0]; a <= band[1]; a++) {
+      for (const i of a ? [-a, a] : [0]) { ctx.moveTo(vp + i * W * 0.012, hz); ctx.lineTo(vp + i * W * 0.11, H); }
+    }
+    paint(C.cyan, band[2]); ctx.stroke();
   }
-  const off = reduceMotion ? 0.3 : (t * 0.00011) % 1;
+  const off = CALM ? 0.3 : (t * 0.00011) % 1;
   for (let k = 0; k < 9; k++) {
     const z = (k + off) / 9, y = hz + (H - hz) * z * z;
-    ctx.strokeStyle = rgba(C.cyan, 0.075 * z);
+    paint(C.cyan, 0.075 * z);
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
+  ctx.globalAlpha = 1;
 }
 
 /* The order of ristretto255 — the real group, written round the base of the
@@ -262,93 +314,115 @@ function projector(t, alpha) {
   ctx.lineTo(cx + rx * 1.12, L.y0); ctx.lineTo(cx + rx * 0.78, cy); ctx.closePath(); ctx.fill();
 
   ctx.lineWidth = 1;
-  ctx.strokeStyle = rgba(C.cyan, 0.28 * alpha);
+  paint(C.cyan, 0.28 * alpha);
   ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU); ctx.stroke();
   ctx.setLineDash([3, 5]);
-  ctx.strokeStyle = rgba(C.cyan, 0.2 * alpha);
+  paint(C.cyan, 0.2 * alpha);
   ctx.beginPath(); ctx.ellipse(cx, cy, rx * 0.72, ry * 0.72, 0, 0, TAU); ctx.stroke();
   ctx.setLineDash([]);
 
   const circ = TAU * Math.sqrt((rx * rx + ry * ry) / 2) * 0.86;
   const n = Math.max(24, Math.min(ELL.length, Math.floor(circ / 6.4)));
-  const rot = reduceMotion ? 0.4 : t * 0.00006;
-  ctx.font = `500 9px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const rot = CALM ? 0.4 : t * 0.00006;
+  setFont(`500 9px ${MONO}`); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let hotNow = null;
   for (let i = 0; i < n; i++) {
     const a = rot + (i / n) * TAU;
     const front = (Math.sin(a) + 1) / 2;
-    ctx.fillStyle = rgba(front > 0.5 ? C.cyanHot : C.cyan, (0.06 + 0.42 * front * front) * alpha);
+    const hot = front > 0.5;
+    if (hot !== hotNow) { ctx.fillStyle = hot ? C.cyanHot : C.cyan; hotNow = hot; }
+    ctx.globalAlpha = (0.06 + 0.42 * front * front) * alpha;
     ctx.fillText(ELL[i], cx + Math.cos(a) * rx * 0.86, cy + Math.sin(a) * ry * 0.86);
   }
+  ctx.globalAlpha = 1;
 }
 
 /* ---- the curve and its 197 points */
 const CURVE = (() => {
   const top = [], smax = Math.sqrt(XMAX + 1.6 - E1);
-  for (let i = 0; i <= 180; i++) {
-    const s = smax * (i / 180) ** 1.15, x = E1 + s * s;
+  for (let i = 0; i <= 140; i++) {
+    const sv = smax * (i / 140) ** 1.15, x = E1 + sv * sv;
     top.push([x, Math.sqrt(Math.max(0, f(x)))]);
   }
   return top;
 })();
 
-function curve(reveal) {
+/* Projected once per frame and stroked from the cache: the glow, the line
+ * itself and the reflection all share one set of points. */
+function curvePath(reveal) {
   const n = CURVE.length - 1, upto = Math.max(1, Math.round(n * reveal));
-  const pass = (width, color) => {
-    ctx.lineWidth = width; ctx.strokeStyle = color;
-    ctx.beginPath();
-    for (let i = upto; i >= 0; i--) { const [x, y] = proj(CURVE[i][0], -CURVE[i][1]); i === upto ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
-    for (let i = 1; i <= upto; i++) { const [x, y] = proj(CURVE[i][0], CURVE[i][1]); ctx.lineTo(x, y); }
-    ctx.stroke();
-  };
+  const pts = [];
+  for (let i = upto; i >= 0; i--) pts.push(proj(CURVE[i][0], -CURVE[i][1]));
+  for (let i = 1; i <= upto; i++) pts.push(proj(CURVE[i][0], CURVE[i][1]));
+  return pts;
+}
+function strokePts(pts) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.stroke();
+}
+function curve(pts, strength = 1) {
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  pass(9, rgba(C.cyan, 0.05));
-  pass(4, rgba(C.cyan, 0.14));
-  pass(1.4, rgba(C.cyanHot, 0.85));
+  ctx.lineWidth = 6; paint(C.cyan, 0.1 * strength); strokePts(pts);
+  ctx.lineWidth = 1.5; paint(C.cyanHot, 0.88 * strength); strokePts(pts);
+  ctx.globalAlpha = 1;
 }
 
+/* The group's dots, twinkling — four paths, not a hundred and thirty. */
 function dots(alpha, t) {
+  const LV = 4, buckets = Array.from({ length: LV }, () => []);
+  const speed = CALM ? 0.0009 : 0.0023;
   for (let j = 1; j < N; j++) {
     if (!visible(j)) continue;
-    const [x, y] = projJ(j);
-    const tw = reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(t * 0.0023 + j * 2.399);
-    ctx.fillStyle = rgba(C.cyanHot, (0.35 + 0.4 * tw) * alpha);
-    ctx.beginPath(); ctx.arc(x, y, 1.3 + 0.6 * tw, 0, TAU); ctx.fill();
+    const tw = 0.5 + 0.5 * Math.sin(t * speed + j * 2.399);
+    buckets[Math.min(LV - 1, (tw * LV) | 0)].push(projJ(j));
   }
+  for (let q = 0; q < LV; q++) {
+    const tw = (q + 0.5) / LV, r = 1.3 + 0.6 * tw;
+    ctx.beginPath();
+    for (const [x, y] of buckets[q]) { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, TAU); }
+    paint(C.cyanHot, (0.35 + 0.4 * tw) * alpha); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 
 /* The hologram's reflection on the floor under it. */
-function reflection(reveal) {
+function reflection(pts) {
   const base = L.y1 + 10;
   ctx.save();
   ctx.beginPath(); ctx.rect(L.x0 - 18, base - 4, L.x1 - L.x0 + 36, H - base); ctx.clip();
   ctx.translate(0, base); ctx.scale(1, -0.2); ctx.translate(0, -L.cy);
-  ctx.globalAlpha = 0.28;
-  curve(reveal);
+  ctx.lineWidth = 1.5; paint(C.cyan, 0.24); strokePts(pts);
   ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
-/* Dust in the projector's light, rising. */
+/* Dust in the projector's light, rising — or, calm, glinting where it hangs. */
 const DUST = Array.from({ length: 38 }, () => ({ x: Math.random(), s: 0.3 + Math.random() * 0.7, o: Math.random() }));
 function dust(t) {
   const cx = W / 2, rx = L.ringRX;
+  ctx.fillStyle = C.cyanHot;
   for (const d of DUST) {
-    const k = reduceMotion ? d.o : (d.o + t * 0.00005 * d.s) % 1;
+    const k = CALM ? d.o : (d.o + t * 0.00005 * d.s) % 1;
     const y = L.ringY - k * (L.ringY - L.y0);
-    const spread = 0.78 + 0.34 * k;
-    const x = cx + (d.x * 2 - 1) * rx * spread;
-    ctx.fillStyle = rgba(C.cyanHot, 0.35 * Math.sin(k * Math.PI) * d.s);
+    const x = cx + (d.x * 2 - 1) * rx * (0.78 + 0.34 * k);
+    const glint = CALM ? 0.5 + 0.5 * Math.sin(t * 0.0012 + d.o * 40) : 1;
+    ctx.globalAlpha = 0.35 * Math.sin(k * Math.PI) * d.s * glint;
     ctx.fillRect(x, y, 1.5, 1.5);
   }
+  ctx.globalAlpha = 1;
 }
 
 /* A slow scan line down the stage, the way a display refreshes. */
 function sweep(t) {
-  if (reduceMotion) return;
+  if (CALM) return;
   const y = ((t * 0.00012) % 1.3) * H - H * 0.15;
   const g = ctx.createLinearGradient(0, y - 40, 0, y + 4);
   g.addColorStop(0, rgba(C.cyan, 0)); g.addColorStop(1, rgba(C.cyan, 0.035));
   ctx.fillStyle = g; ctx.fillRect(0, y - 40, W, 44);
-  ctx.fillStyle = rgba(C.cyanHot, 0.06); ctx.fillRect(0, y + 3, W, 1);
+  paint(C.cyanHot, 0.06); ctx.fillRect(0, y + 3, W, 1);
+  ctx.globalAlpha = 1;
 }
 
 /* ---- the two parties and the wire between them */
@@ -364,72 +438,83 @@ function hexPath(x, y, R, rot = 0) {
 
 function node(p, { color, glyph, name, sub, hot = 0, seal = 0, t = 0, flash = 0 }) {
   const R = L.R;
-  if (hot > 0.01 || flash > 0.01) {
-    const g = ctx.createRadialGradient(p.x, p.y, R * 0.3, p.x, p.y, R * 3);
-    g.addColorStop(0, rgba(color, 0.28 * Math.max(hot, flash)));
-    g.addColorStop(1, rgba(color, 0));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, R * 3, 0, TAU); ctx.fill();
-  }
+  glow(p.x, p.y, R * 3, color, 0.28 * Math.max(hot, flash));
   if (seal > 0.01) {                           // the oracle's seal, turning while k works
     ctx.lineWidth = 1.2;
+    const breathe = CALM ? 0.65 + 0.35 * Math.sin(t * 0.004) : 1;
     for (const [k, dir, dash] of [[1.55, 1, [4, 6]], [1.95, -1, [2, 9]]]) {
       ctx.setLineDash(dash);
-      ctx.strokeStyle = rgba(color, 0.55 * seal);
-      hexPath(p.x, p.y, R * k, dir * t * 0.0012);
+      paint(color, 0.55 * seal * breathe);
+      hexPath(p.x, p.y, R * k, CALM ? 0 : dir * t * 0.0012);
       ctx.stroke();
     }
     ctx.setLineDash([]);
   }
   hexPath(p.x, p.y, R);
-  ctx.fillStyle = rgba('#0a1014', 0.95); ctx.fill();
-  ctx.lineWidth = 1.6; ctx.strokeStyle = rgba(color, 0.45 + 0.55 * Math.max(hot, flash)); ctx.stroke();
+  paint('#0a1014', 0.95); ctx.fill();
+  ctx.lineWidth = 1.6; paint(color, 0.45 + 0.55 * Math.max(hot, flash)); ctx.stroke();
   hexPath(p.x, p.y, R * 0.74);
-  ctx.lineWidth = 1; ctx.strokeStyle = rgba(color, 0.18 + 0.2 * hot); ctx.stroke();
+  ctx.lineWidth = 1; paint(color, 0.18 + 0.2 * hot); ctx.stroke();
+  ctx.globalAlpha = 1;
   text(glyph, p.x, p.y + 1, { color: hot > 0.3 ? color : C.ink1, size: Math.round(R * 0.8), weight: 700, align: 'center' });
   text(name, p.x, p.y + R * 1.45, { color: C.ink1, size: L.narrow ? 8.5 : 9.5, weight: 600, align: 'center', alpha: 0.9 });
   if (sub) text(sub, p.x, p.y + R * 1.45 + 12, { color, size: L.narrow ? 8 : 9, align: 'center', alpha: 0.8 });
 }
 
-function wire(glow, alpha = 1) {
+function wire(glowAmt, alpha = 1) {
   const pts = L.trace;
   ctx.lineWidth = 1.2; ctx.lineJoin = 'round';
-  ctx.strokeStyle = rgba(C.lineBright, 0.8 * alpha);
+  paint(C.lineBright, 0.8 * alpha);
   ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
-  if (glow > 0.01) {
-    ctx.lineWidth = 5; ctx.strokeStyle = rgba(C.violet, 0.12 * glow);
+  if (glowAmt > 0.01) {
+    ctx.lineWidth = 5; paint(C.violet, 0.12 * glowAmt);
     ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
   }
-  for (const [x, y] of pts.slice(1, -1)) {       // vias at the corners
-    ctx.fillStyle = rgba(C.lineBright, alpha);
-    ctx.beginPath(); ctx.arc(x, y, 2.4, 0, TAU); ctx.fill();
-  }
+  paint(C.lineBright, alpha);
+  ctx.beginPath();
+  for (const [x, y] of pts.slice(1, -1)) { ctx.moveTo(x + 2.4, y); ctx.arc(x, y, 2.4, 0, TAU); }   // vias
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 function wireBytes() {
   const hex = ($('vizHex')?.textContent || '').match(/[0-9a-f]{2}/g);
   return hex && hex.length ? hex : null;
 }
+const byteAt = (bytes, i) => bytes ? bytes[i % bytes.length] : ((Math.random() * 256) | 0).toString(16).padStart(2, '0');
 
 function packet(q, forward, color, t, { proof = false } = {}) {
   const bytes = wireBytes();
   const at = (qq) => along(forward ? qq : 1 - qq);
+  if (CALM) {
+    /* Nothing travels: the bytes surface along the whole wire and sink again,
+     * while the light hands over from one end to the other. */
+    const a = Math.sin(Math.PI * clamp01(q));
+    for (let i = 0; i < 12; i++) {
+      const [x, y] = at((i + 0.5) / 12);
+      text(byteAt(bytes, i), x, y - 9, { color, size: 9, align: 'center', alpha: 0.75 * a });
+    }
+    const [sx, sy] = at(0), [dx, dy] = at(1);
+    glow(sx, sy, 22, color, 0.55 * (1 - q));
+    glow(dx, dy, 22, color, 0.55 * q);
+    if (proof) { const [px, py] = at(1); text('π', px + 14, py, { color: C.green, size: 11, weight: 700, align: 'center', alpha: q }); }
+    return;
+  }
   for (let i = 1; i <= 14; i++) {              // the bytes, strung out behind it
     const qq = q - i * 0.02;
     if (qq < 0) break;
     const [x, y] = at(qq);
-    const b = bytes ? bytes[i % bytes.length] : ((Math.random() * 256) | 0).toString(16).padStart(2, '0');
-    text(b, x, y - 9, { color, size: 9, align: 'center', alpha: 0.85 * (1 - i / 15) });
+    text(byteAt(bytes, i), x, y - 9, { color, size: 9, align: 'center', alpha: 0.85 * (1 - i / 15) });
   }
   const [x, y] = at(q);
-  const g = ctx.createRadialGradient(x, y, 0, x, y, 22);
-  g.addColorStop(0, rgba(color, 0.55)); g.addColorStop(1, rgba(color, 0));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 22, 0, TAU); ctx.fill();
-  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4 + (reduceMotion ? 0 : t * 0.004));
-  ctx.fillStyle = rgba(C.ink0, 0.95); ctx.fillRect(-4.5, -4.5, 9, 9);
-  ctx.strokeStyle = rgba(color, 1); ctx.lineWidth = 1.5; ctx.strokeRect(-7, -7, 14, 14);
+  glow(x, y, 22, color, 0.55);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4 + t * 0.004);
+  paint(C.ink0, 0.95); ctx.fillRect(-4.5, -4.5, 9, 9);
+  paint(color, 1); ctx.lineWidth = 1.5; ctx.strokeRect(-7, -7, 14, 14);
   ctx.restore();
+  ctx.globalAlpha = 1;
   if (proof) {                                  // π rides along with B'
-    const a = reduceMotion ? -0.6 : t * 0.006;
+    const a = t * 0.006;
     text('π', x + Math.cos(a) * 15, y + Math.sin(a) * 15, { color: C.green, size: 11, weight: 700, align: 'center' });
   }
 }
@@ -439,17 +524,17 @@ function mark(j, color, label, { alpha = 1, pulse = 0, ring = 0, big = false } =
   if (!drawable(j)) return;
   const [x, y] = projJ(j);
   if (ring > 0 && ring < 1) {
-    ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(color, 0.9 * (1 - ring));
-    ctx.beginPath(); ctx.arc(x, y, 5 + ring * 34, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 1.5; paint(color, 0.9 * (1 - ring));
+    // calm: the ring glows and fades where it is; full: it spreads outward
+    ctx.beginPath(); ctx.arc(x, y, CALM ? 11 : 5 + ring * 34, 0, TAU); ctx.stroke();
   }
-  const g = ctx.createRadialGradient(x, y, 0, x, y, 16 + pulse * 8);
-  g.addColorStop(0, rgba(color, 0.5 * alpha)); g.addColorStop(1, rgba(color, 0));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16 + pulse * 8, 0, TAU); ctx.fill();
+  glow(x, y, 16 + pulse * 8, color, 0.5 * alpha);
   const rr = big ? 6.5 : 5;
-  ctx.fillStyle = rgba(C.bg, alpha); ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
-  ctx.lineWidth = 2; ctx.strokeStyle = rgba(color, alpha);
+  paint(C.bg, alpha); ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+  ctx.lineWidth = 2; paint(color, alpha);
   ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.stroke();
-  ctx.fillStyle = rgba(color, alpha); ctx.beginPath(); ctx.arc(x, y, rr * 0.42, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, rr * 0.42, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
   if (label) {
     const right = x < L.x1 - 60;
     text(label, x + (right ? 10 : -10), y - 11, { color, size: 11, weight: 700, align: right ? 'left' : 'right', alpha });
@@ -458,42 +543,46 @@ function mark(j, color, label, { alpha = 1, pulse = 0, ring = 0, big = false } =
 
 /* One group operation, drawn as it is done: the line (a chord through two
  * points, or the tangent when doubling), the third point where it meets the
- * curve again, and the reflection across the axis that makes the sum. */
+ * curve again, and the reflection across the axis that makes the sum. Full
+ * motion draws each of those out; calm fades each one in where it lies. */
 function hop(h, q, color, alpha) {
   const A = PTS[h.a], B = PTS[h.b], R = PTS[mod(-h.r)], S = PTS[h.r];
   if (Math.abs(R.x - A.x) < 1e-9) return;
   const lam = (R.y - A.y) / (R.x - A.x);
   const lo = Math.min(A.x, B.x, R.x) - 0.45, hi = Math.min(XFAR, Math.max(A.x, B.x, R.x) + 0.45);
   if (A.x > XFAR) return;
-  const g = easeOut(seg(q, 0, 0.42));
+  const grow = easeOut(seg(q, 0, 0.42));
+  const g = CALM ? 1 : grow, fade = CALM ? grow : 1;
   const xa = A.x - (A.x - lo) * g, xb = A.x + (hi - A.x) * g;
   const p0 = proj(xa, A.y + lam * (xa - A.x)), p1 = proj(xb, A.y + lam * (xb - A.x));
   for (const [w, a] of [[6, 0.12], [1.6, 0.95]]) {
-    ctx.lineWidth = w; ctx.strokeStyle = rgba(color, a * alpha);
-    ctx.beginPath(); ctx.moveTo(...p0); ctx.lineTo(...p1); ctx.stroke();
+    ctx.lineWidth = w; paint(color, a * alpha * fade);
+    ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke();
   }
   if (h.a !== h.b && q < 0.7 && B.x <= XFAR) {  // the point being added
     const [bx, by] = proj(B.x, B.y);
-    ctx.lineWidth = 1; ctx.strokeStyle = rgba(color, 0.7 * alpha);
+    ctx.lineWidth = 1; paint(color, 0.7 * alpha * fade);
     ctx.beginPath(); ctx.arc(bx, by, 7, 0, TAU); ctx.stroke();
   }
+  ctx.globalAlpha = 1;
   if (R.x > XFAR) return;
   const [rx, ry] = proj(R.x, R.y);
   if (q > 0.36) {                               // where the line meets the curve again
     const hit = seg(q, 0.36, 0.5);
-    ctx.lineWidth = 1.4; ctx.strokeStyle = rgba(color, alpha * (q < 0.9 ? 1 : 0.5));
+    ctx.lineWidth = 1.4; paint(color, alpha * (q < 0.9 ? 1 : 0.5) * (CALM ? hit : 1));
     ctx.beginPath(); ctx.arc(rx, ry, 4.5, 0, TAU); ctx.stroke();
-    if (hit < 1 && alpha > 0.9) {
-      ctx.strokeStyle = rgba(color, 0.8 * (1 - hit));
+    if (!CALM && hit < 1 && alpha > 0.9) {
+      paint(color, 0.8 * (1 - hit));
       ctx.beginPath(); ctx.arc(rx, ry, 4.5 + hit * 16, 0, TAU); ctx.stroke();
     }
   }
   if (q > 0.48) {                               // …and its mirror image is the sum
     const m = easeOut(seg(q, 0.48, 0.8));
-    const [sx, sy] = proj(S.x, R.y + (S.y - R.y) * m);
-    ctx.setLineDash([3, 4]); ctx.lineWidth = 1.3; ctx.strokeStyle = rgba(color, 0.9 * alpha);
+    const [sx, sy] = proj(S.x, CALM ? S.y : R.y + (S.y - R.y) * m);
+    ctx.setLineDash([3, 4]); ctx.lineWidth = 1.3; paint(color, 0.9 * alpha * (CALM ? m : 1));
     ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]);
   }
+  ctx.globalAlpha = 1;
 }
 
 /* Plays a walk across [t0, t1] of the stage and returns where it has got to. */
@@ -523,41 +612,59 @@ function bitsLabel(name, w, cur, x, y, color, align) {
   for (let i = 0; i < bits.length; i++) {
     const on = i === cur, past = i < cur;
     text(bits[i], px + i * cw, y, { color: on ? C.ink0 : color, size: 11, weight: on ? 800 : 500, alpha: on ? 1 : past ? 0.85 : 0.35 });
-    if (on) { ctx.fillStyle = rgba(color, 0.9); ctx.fillRect(px + i * cw - 0.5, y + 8, cw - 1.5, 1.5); }
+    if (on) { paint(color, 0.9); ctx.fillRect(px + i * cw - 0.5, y + 8, cw - 1.5, 1.5); ctx.globalAlpha = 1; }
   }
   text('₂', px + bits.length * cw + 1, y + 3, { color, size: 9, alpha: 0.6 });
 }
 
 /* ---- the finale: S through HKDF into the password's characters, masked */
 const GLYPHS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*=+';
-function finale(e, len) {
+let slotsSent = '';
+function finale(e, len, now) {
   const n = Math.max(1, Math.min(40, len)), b = beat;
   const cw = Math.min(22, (W * 0.8) / n), total = cw * n, x0 = (W - total) / 2, y = L.ringY;
+  /* Hand ui.js the row, in canvas CSS pixels, so it can fly the characters
+   * from exactly here to the result card. Written only when it changes. */
+  const row = `${x0.toFixed(1)},${cw.toFixed(2)},${y.toFixed(1)},${n}`;
+  if (row !== slotsSent) { viz.dataset.slots = row; slotsSent = row; }
+
   const [sx, sy] = projJ(plan.S);
-  const beam = easeOut(seg(e, 0, 0.35 * b));
-  if (beam > 0) {
+  const beamIn = easeOut(seg(e, 0, 0.35 * b));
+  if (beamIn > 0) {
     const g = ctx.createLinearGradient(sx, sy, W / 2, y);
     g.addColorStop(0, rgba(C.cyanHot, 0.7)); g.addColorStop(1, rgba(C.cyan, 0.15));
     ctx.strokeStyle = g; ctx.lineWidth = 1.5;
+    ctx.globalAlpha = CALM ? beamIn : 1;
     ctx.beginPath(); ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + (W / 2 - sx) * beam, sy + (y - 14 - sy) * beam); ctx.stroke();
+    const reach = CALM ? 1 : beamIn;
+    ctx.lineTo(sx + (W / 2 - sx) * reach, sy + (y - 14 - sy) * reach); ctx.stroke();
+    ctx.globalAlpha = 1;
   }
   text(`HKDF-SHA256(S, account) → ${len} characters`, W / 2, y - 22,
        { color: C.ink2, size: L.narrow ? 8.5 : 9.5, align: 'center', alpha: seg(e, 0.1 * b, 0.4 * b) });
+  const settled = [];
+  ctx.lineWidth = 1;
   for (let i = 0; i < n; i++) {
     const t0 = 0.2 * b + (i / n) * 0.9 * b;
-    const p = seg(e, t0, t0 + 0.34 * b);
     if (e < t0) continue;
+    const p = seg(e, t0, t0 + 0.34 * b);
     const x = x0 + i * cw + cw / 2;
-    ctx.strokeStyle = rgba(C.cyan, 0.25 + 0.35 * p); ctx.lineWidth = 1;
+    paint(C.cyan, (0.25 + 0.35 * p) * (CALM ? p : 1));
     ctx.strokeRect(x - cw / 2 + 1.5, y - 10, cw - 3, 20);
-    if (p < 1) text(GLYPHS[(Math.random() * GLYPHS.length) | 0], x, y + 1, { color: C.violetHot, size: 12, align: 'center', alpha: 0.8 });
-    else text('•', x, y + 1, { color: C.cyanHot, size: 14, weight: 700, align: 'center' });
+    if (p >= 1) settled.push(x);
+    else if (CALM) text('•', x, y + 1, { color: C.cyanHot, size: 14, weight: 700, align: 'center', alpha: p });
+    else text(GLYPHS[(Math.random() * GLYPHS.length) | 0], x, y + 1, { color: C.violetHot, size: 12, align: 'center', alpha: 0.8 });
+  }
+  ctx.globalAlpha = 1;
+  for (const x of settled) {
+    glow(x, y, 10, C.cyan, 0.35);
+    text('•', x, y + 1, { color: C.cyanHot, size: 14, weight: 700, align: 'center' });
   }
   if (e > 1.3 * b) {
-    const glow = 0.5 + 0.5 * Math.sin((e - 1.3 * b) * 0.006);
-    ctx.fillStyle = rgba(C.cyan, 0.06 + 0.05 * (reduceMotion ? 0.5 : glow));
+    const pulse = 0.5 + 0.5 * Math.sin((e - 1.3 * b) * (CALM ? 0.003 : 0.006));
+    paint(C.cyan, 0.06 + 0.05 * pulse);
     ctx.fillRect(x0 - 6, y - 14, total + 12, 28);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -567,12 +674,12 @@ function proofCard(state, alpha) {
   const x = W / 2, y = L.traceY + 26;
   const ok = state === 'ok';
   const txt = ok ? '✓ proof verified · log_G(Y) = log_B(B′)' : 'π · log_G(Y) = log_B(B′) · checking…';
-  ctx.font = `600 ${L.narrow ? 9 : 10.5}px ${MONO}`;
+  setFont(`600 ${L.narrow ? 9 : 10.5}px ${MONO}`);
   const w = ctx.measureText(txt).width + 22;
-  ctx.fillStyle = rgba('#0a1014', 0.92 * alpha);
-  ctx.strokeStyle = rgba(ok ? C.green : C.violet, 0.7 * alpha);
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.rect(x - w / 2, y - 11, w, 22); ctx.fill(); ctx.stroke();
+  paint('#0a1014', 0.92 * alpha);
+  ctx.beginPath(); ctx.rect(x - w / 2, y - 11, w, 22); ctx.fill();
+  ctx.lineWidth = 1; paint(ok ? C.green : C.violet, 0.7 * alpha); ctx.stroke();
+  ctx.globalAlpha = 1;
   text(txt, x, y + 0.5, { color: ok ? C.green : C.violetHot, size: L.narrow ? 9 : 10.5, weight: 600, align: 'center', alpha });
 }
 
@@ -582,14 +689,22 @@ const SPARKS = Array.from({ length: 46 }, (_, i) => ({
 }));
 function hashing(e) {
   const b = beat, [px, py] = projJ(plan.a), { x: ux, y: uy } = L.you;
-  for (const s of SPARKS) {
-    const p = seg(e, s.delay * b, (s.delay + 0.36) * b);
-    if (p <= 0 || p >= 1) continue;
-    const q = easeIO(p);
-    const cx = (ux + px) / 2, cy = Math.min(uy, py) - H * 0.25 * s.bend;
-    const x = (1 - q) * (1 - q) * ux + 2 * (1 - q) * q * cx + q * q * px;
-    const y = (1 - q) * (1 - q) * uy + 2 * (1 - q) * q * cy + q * q * py;
-    text(s.bit, x, y, { color: q > 0.7 ? C.cyanHot : C.cyan, size: 10, weight: 600, align: 'center', alpha: Math.sin(p * Math.PI) });
+  if (CALM) {
+    // the same story without anything flying: a thread from you to P fades in
+    ctx.setLineDash([2, 5]); ctx.lineWidth = 1;
+    paint(C.cyan, 0.55 * easeOut(seg(e, 0, 0.7 * b)));
+    ctx.beginPath(); ctx.moveTo(ux, uy); ctx.lineTo(px, py); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  } else {
+    for (const sp of SPARKS) {
+      const p = seg(e, sp.delay * b, (sp.delay + 0.36) * b);
+      if (p <= 0 || p >= 1) continue;
+      const q = easeIO(p);
+      const cx = (ux + px) / 2, cy = Math.min(uy, py) - H * 0.25 * sp.bend;
+      const x = (1 - q) * (1 - q) * ux + 2 * (1 - q) * q * cx + q * q * px;
+      const y = (1 - q) * (1 - q) * uy + 2 * (1 - q) * q * cy + q * q * py;
+      text(sp.bit, x, y, { color: q > 0.7 ? C.cyanHot : C.cyan, size: 10, weight: 600, align: 'center', alpha: Math.sin(p * Math.PI) });
+    }
   }
   text('SHA-512 → ristretto255', (ux + px) / 2, Math.max(L.y0 + 8, Math.min(uy, py) - H * 0.2),
        { color: C.cyan, size: 9.5, align: 'center', alpha: 0.7 * Math.sin(seg(e, 0, 0.9 * b) * Math.PI) });
@@ -601,11 +716,12 @@ const past = (name) => ORDER.indexOf(stageName) > ORDER.indexOf(name);
 
 function draw(now) {
   if (!ctx || !L || !plan) return;
-  const b = beat, e = reduceMotion ? 1e7 : now - stageT0, st = stageName;
+  const b = beat, e = now - stageT0, st = stageName;
   const paper = path === 'paper';
-  yaw = reduceMotion ? -0.22 : -0.22 + 0.3 * Math.sin(now * 0.00021);
+  yaw = CALM ? -0.22 : -0.22 + 0.3 * Math.sin(now * 0.00021);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = 1;
   ctx.clearRect(0, 0, W, H);
   floor(now);
   const lamp = st === 'done' ? 1 - easeOut(seg(e, 0, 0.5 * b)) : 1;
@@ -615,19 +731,20 @@ function draw(now) {
   text('E(ℝ) ⊃ ⟨G⟩ ≅ ℤ/197ℤ', L.x0 + 2, L.traceY + 22, { color: C.ink2, size: 9, alpha: 0.7 });
 
   const reveal = st === 'local' ? easeOut(seg(e, 0, 0.6 * b)) : 1;
-  reflection(reveal);
+  const cpts = curvePath(CALM ? 1 : reveal);
+  reflection(cpts);
 
   // the arena: everything on the curve is clipped to it
   ctx.save();
   ctx.beginPath(); ctx.rect(L.x0 - 18, L.y0 - 14, L.x1 - L.x0 + 36, L.y1 - L.y0 + 28); ctx.clip();
-  curve(reveal);
+  curve(cpts, CALM ? reveal : 1);
   dots(st === 'local' ? seg(e, 0.2 * b, 0.8 * b) : 1, now);
 
   const P = C.cyan, V = C.violet, K = C.amber;
   let bits = null;
   if (st === 'local') {
     hashing(e);
-    if (e > 0.78 * b) mark(plan.a, P, 'P', { ring: seg(e, 0.78 * b, 1.2 * b) });
+    if (e > 0.78 * b) mark(plan.a, P, 'P', { ring: seg(e, 0.78 * b, 1.2 * b), alpha: CALM ? seg(e, 0.6 * b, 0.95 * b) : 1 });
   } else {
     const dimP = st === 'done' ? 0.35 : 0.55;
     mark(plan.a, P, 'P', { alpha: st === 'blinding' ? 0.9 : dimP });
@@ -644,7 +761,7 @@ function draw(now) {
       const w = plan.walks.stamp, s = playWalk(w, e, 0.12 * b, 1.3 * b, K);
       beam(s.acc, K, e);
       mark(s.acc, K, s.done ? "B'" : '', {
-        big: true, alpha: 1, pulse: s.done && !reduceMotion ? 0.5 + 0.5 * Math.sin(e * 0.008) : 0,
+        big: true, alpha: 1, pulse: s.done ? 0.5 + 0.5 * Math.sin(e * (CALM ? 0.004 : 0.008)) : 0,
       });
       bits = ['k', w, s.bit, K, 'right'];
     }
@@ -660,16 +777,21 @@ function draw(now) {
     mark(s.acc, K, s.done ? 'S' : '', { big: true });
     bits = ['k', w, s.bit, K, 'right'];
   } else if (st === 'unblinding') {
-    const r = reduceMotion ? 0.45 : ((e % (0.7 * b)) / (0.7 * b));
+    const r = (e % (0.7 * b)) / (0.7 * b);
     mark(plan.S, C.cyanHot, 'S = k·P', { ring: r, pulse: 0.5 });
   }
   if (st === 'done') mark(plan.S, C.cyanHot, 'S', { pulse: 0.6 });
   ctx.restore();
 
-  if (bits) {                                   // under the party that holds the scalar
-    const [name, w, cur, color, align] = bits;
-    const who = align === 'right' ? L.orc : L.you;
-    bitsLabel(name, w, cur, who.x, who.y + L.R * 1.45 + 30, color, 'center');
+  if (bits) {
+    const [name, w, cur, color] = bits;
+    if (L.narrow) {
+      // no room beside the curve on a phone: centred above the projector
+      bitsLabel(name, w, cur, W / 2, L.ringY - 24, color, 'center');
+    } else {                                    // under the party that holds the scalar
+      const who = bits[4] === 'right' ? L.orc : L.you;
+      bitsLabel(name, w, cur, who.x, who.y + L.R * 1.45 + 30, color, 'center');
+    }
   }
 
   // the wire, and what crosses it
@@ -695,18 +817,18 @@ function draw(now) {
                 flash: st === 'returning' ? arrived : 0, t: now });
   node(L.orc, {
     color: C.amber, glyph: 'k',
-    name: paper ? 'SHEET' : path === 'demo' ? 'DEMO KEY' : 'ORACLE', sub: 'holds k',
+    name: paper ? 'SHEET' : 'DEMO KEY', sub: 'holds k',
     hot: orcHot, seal: st === 'stamping' ? 1 : 0, t: now, flash: st === 'sending' ? arrived : 0,
   });
 
-  if (st === 'done') finale(e, Number(viz.dataset.len) || 16);
+  if (st === 'done') finale(e, Number(viz.dataset.len) || 16, now);
 }
 
 /* The oracle's scalar reaching in to the point it is multiplying. */
 function beam(j, color, e) {
   if (!drawable(j)) return;
   const [x, y] = projJ(j), { x: ox, y: oy } = L.orc;
-  const flick = reduceMotion ? 0.5 : 0.35 + 0.35 * Math.sin(e * 0.03) ** 2;
+  const flick = CALM ? 0.4 + 0.2 * Math.sin(e * 0.004) : 0.35 + 0.35 * Math.sin(e * 0.03) ** 2;
   const g = ctx.createLinearGradient(ox, oy, x, y);
   g.addColorStop(0, rgba(color, 0.55 * flick)); g.addColorStop(1, rgba(color, 0.05));
   ctx.strokeStyle = g; ctx.lineWidth = 1;
@@ -716,12 +838,13 @@ function beam(j, color, e) {
 }
 
 /* ============================================================ lifecycle */
-let raf = 0;
+let raf = 0, lastDraw = 0;
 function tick(now) {
   raf = 0;
   if (!pop || pop.hidden || document.hidden) return;
-  draw(now);
-  if (!reduceMotion) raf = requestAnimationFrame(tick);
+  // every frame at full motion; ~30 a second when calm, which is all fades need
+  if (!CALM || now - lastDraw > 30) { draw(now); lastDraw = now; }
+  raf = requestAnimationFrame(tick);
 }
 function kick() { if (!raf) raf = requestAnimationFrame(tick); }
 
@@ -729,8 +852,10 @@ function onStage() {
   const next = viz.dataset.stage || '';
   if (next === stageName) { kick(); return; }
   if (next === 'local' || !plan) {
-    path = viz.dataset.path || 'device';
+    path = viz.dataset.path || 'paper';
     plan = makePlan(path === 'paper');
+    slotsSent = '';
+    delete viz.dataset.slots;
   }
   beat = Number(viz.dataset.beat) || 900;
   stageName = next;
@@ -740,7 +865,7 @@ function onStage() {
 
 if (ctx && viz && pop) {
   layout();
-  new ResizeObserver(() => { layout(); kick(); }).observe(cv);
+  new ResizeObserver(() => { layout(); slotsSent = ''; kick(); }).observe(cv);
   new MutationObserver(onStage).observe(viz, { attributes: true, attributeFilter: ['data-stage', 'data-len'] });
   new MutationObserver(kick).observe(pop, { attributes: true, attributeFilter: ['hidden'] });
   document.addEventListener('visibilitychange', kick);
