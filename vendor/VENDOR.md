@@ -74,6 +74,23 @@ npx esbuild entry.js --bundle --format=esm --minify --target=es2020 \
   --outfile=vendor/qr-bundle.js
 ```
 
+## `fonts/`
+
+IBM Plex Mono, IBM Plex Sans and JetBrains Mono, as served by Google Fonts on
+the dates in `fonts/SOURCE.txt`, which also records the exact request URLs.
+All three are licensed under the SIL Open Font License 1.1. Only the `woff2`
+files and a `fonts.css` rewritten to point at them are kept, so the CSP can say
+`font-src 'self'` and the page makes no request to Google at all.
+
+They are not npm packages, so they have no integrity row above and the vendor
+audit does not check them.
+
+### Rebuilding
+
+Fetch each URL in `SOURCE.txt` with a browser user agent (so the response lists
+`woff2`), download every `src: url(...)` it names into `fonts/files/`, rewrite
+those URLs to `files/<name>.woff2`, and append the result to `fonts.css`.
+
 ## Updating
 
 Bump the version, re-run the steps above, re-record the integrity hash from

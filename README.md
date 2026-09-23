@@ -6,6 +6,8 @@ device or a printed square of paper.
 
 Live at **[vaultless.space](https://vaultless.space)**.
 
+![The home page: the headline beside the live torus sheet, E(ℂ) ≅ ℂ/Λ](docs/home.jpg)
+
 The site opens by asking which oracle you have, then walks you through setting it
 up before it asks for anything else:
 
@@ -14,6 +16,66 @@ hardware   choose → install firmware (only if new) → connect ─┐
                                                               ├→ phrase → account → style → password
 paper      choose → scan it, or: scribble → create → print ───┘
 ```
+
+That tour is for the first visit. Someone who already owns an oracle skips it:
+
+```
+this browser has used it     Welcome back → Unlock my passwords ──────────┐
+                                                                          ├→ phrase → password
+new laptop, private window   Already have an oracle? → scan / plug in ────┘
+```
+
+## Using it
+
+- **First time.** Pick hardware or paper, get it ready (flash and connect the
+  device, or scribble, create and print a sheet), then type your phrase, pick an
+  account number and a style, and press **Make my password**. The handshake plays
+  out on screen as it happens: the blinded point going out, `k·B` coming back, the
+  proof being checked.
+
+  ![Step 6 mid-handshake: the demo key stamping k·B](docs/handshake.jpg)
+
+- **Coming back on the same browser.** A *Welcome back* card lists the oracles this
+  browser trusts, by fingerprint. One button opens the camera or the connect button
+  and lands you at the phrase box, with the last account number and style already
+  filled in. The same card forgets an oracle you no longer use.
+- **Coming back on a new browser.** Nothing is stored there, so there is nothing to
+  welcome you back with — but *Already have an oracle?* opens the camera for a
+  paper square (or lets you type its code) or the connect button for a device, in
+  one press. This browser has never seen the oracle, so the first derivation trusts
+  it and names its fingerprint: check it against the device's idle screen or the
+  sheet.
+- **One phrase, many passwords.** Change the account number for each site. The
+  oracle is an input too, so the same phrase and number on a different oracle make
+  a different password — which is why, once this browser trusts an oracle, a
+  different one is stopped with a warning before any password is made.
+
+Once a password is made:
+
+- It appears **masked**. **Reveal** shows it; **Copy** puts it on the clipboard and
+  clears the clipboard again 60 seconds later, if it still holds the password.
+- The result, the phrase field and the clipboard copy are all wiped the moment the
+  oracle goes away — unplugged, forgotten, or idled out.
+- A paper key, scanned or just created, lives in one variable for the session. It is dropped after
+  5 minutes idle, on **Forget this oracle**, and on reload, and it is never written
+  anywhere.
+
+## What this site stores
+
+Nothing secret. Every entry is in `localStorage` on this origin, and clearing site
+data removes all of it.
+
+| key | holds | why |
+| --- | --- | --- |
+| `vaultless.oracle.trusted.v1` | the public keys `Y` you have accepted | the pin that catches a swapped oracle; also what the *Welcome back* card is shown for |
+| `vaultless.oracle.choice.v1` | `hardware` or `paper` | reopen the path you last took |
+| `vaultless.lastuse.v1` | last account number and password style | pick up where you left off |
+| `vaultless.mode.v1` | `simple` or `expert` | the explanation level |
+| `vaultless.oracle.pubkey.v1` | a single pinned key, from before the set existed | read once to carry it into the set; never written |
+
+Never stored: the passphrase, the paper oracle's `k`, `r`, any point on the wire,
+or any password. Account nicknames were stored once (`vaultless.accounts.v1`);
+the feature is gone, and the site deletes that key on load.
 
 ## How it works
 
@@ -89,17 +151,50 @@ that key onto a device with `env:esp32dev-provision`.
 > between a request arriving and it being answered, so pressing one can never
 > approve anything.
 
+## The look
+
+The page is drawn after the sheets in [Ak1ra00/oracle](https://github.com/Ak1ra00/oracle),
+and none of its diagrams are pictures — each one is computed from the maths it
+shows, and each one can be taken hold of:
+
+| | |
+| --- | --- |
+| ![Sheet 01: the chord-and-tangent group law on y² = x³ − 3x + 5 over ℝ](docs/sheet-group.jpg) | ![Sheet 02: the 196 points of E(𝔽₂₁₁) in 3D, with the walk k·P](docs/sheet-field.jpg) |
+| **01 ℝ** — drag `P` and `Q`; the chord, the third point and `P + Q` follow. | **02 𝔽₂₁₁** — all 196 points of `y² ≡ x³ − 3x + 5 (mod 211)`. The group has 197 elements, a prime, so every point walks the whole of it. Click one to walk from it. |
+
+**05 ℂ** (at the top of this page) is an elliptic curve over the complex numbers:
+a torus, `ℂ/Λ`, with scalar multiplication as the straight line `k·z mod Λ` wound
+round it — drag to turn it. The ring behind the whole page is `E(𝔽₂₁₁)` laid out in scalar order; it
+turns slowly, and quickly while a derivation is running.
+
+The sheets and the ring live in `scene.js`, walled off from the passwords:
+
+- It imports nothing and is loaded by its own `<script>` tag, so it is a separate
+  module graph. If it throws, derivation carries on.
+- The only application state it reads is whether `<body>` has the `handshaking`
+  class. No phrase, point, key or password is reachable from it, and the curve it
+  draws is a toy over ℝ and 𝔽₂₁₁ that shares nothing with ristretto255.
+- With reduced motion on, every scene is a still frame that moves only when you drag
+  it, and the handshake still plays, at a shorter dwell. Nothing animates off-screen
+  or in a hidden tab.
+
 ## Repo layout
 
 ```
-index.html             the site (markup + styles)
-app.js                 protocol: derivation, WebSerial transport, DLEQ verification
-ui.js                  chrome: routing between the two oracle paths, matrix backdrop,
-                         simple/expert switch, passphrase meter, account stepper
+index.html             the page: markup only
+styles.css             the stylesheet — the CSP allows no inline <style> element
+app.js                 protocol: derivation, WebSerial transport, DLEQ verification,
+                         trusted-key pinning, clipboard scrub
+ui.js                  chrome: routing between the two oracle paths, the welcome-back
+                         and quick-entry cards, simple/expert switch, passphrase meter,
+                         account number, the handshake view, masking and reveal
 sheet.js               paper oracle UI: entropy pad, scanning, printing, key lifetime
 recovery.js            paper oracle codec: Crockford base32, checksum, QR draw/scan
-                         (all four load as modules, so the page runs under a strict
-                         CSP with script-src 'self' and no inline script)
+scene.js               the live sheets and the backdrop — isolated, see "The look"
+                         (every script loads as a module, so the page runs under a
+                          strict CSP with script-src 'self' and no inline script)
+sw.js                  offline shell: the app is served cache-first, so the code you
+                         reviewed is the code that runs; the firmware is never cached
 vendor/                vendored dependencies — see vendor/VENDOR.md. Nothing in the
   noble-bundle.js        runtime is fetched from a CDN: a third party able to serve
   qr-bundle.js           script here could read the passphrase and every password.
@@ -108,6 +203,7 @@ vendor/                vendored dependencies — see vendor/VENDOR.md. Nothing i
 manifest.json          PWA manifest for the site itself
 esp-manifest.json      ESP Web Tools flashing manifest (points at firmware_merged.bin)
 icons/, favicon.svg    site icons
+docs/                  the screenshots in this README
 firmware/              ESP32 firmware (PlatformIO)
   src/main.cpp           oracle firmware — OPRF eval, DLEQ proof, NVS key storage, TFT UI
                          (the idle screen shows the oracle's fingerprint, the same
@@ -115,8 +211,9 @@ firmware/              ESP32 firmware (PlatformIO)
   platformio.ini         env:esp32dev (what the site flashes) plus the encrypted
                          env:esp32dev-secure / env:esp32dev-provision
   SECURE_PROVISIONING.md how to move to encrypted flash without losing your key
-.github/workflows/     CI: builds firmware, merges partitions into firmware_merged.bin,
-                         commits it back so the site can flash it via WebSerial
+.github/workflows/     CI: builds firmware, merges partitions into firmware_merged.bin
+                         and commits it back so the site can flash it via WebSerial;
+                         audits vendor/ against the npm registry
 ```
 
 ## Upgrading an existing oracle
@@ -161,7 +258,9 @@ not travel, and one of them matters:
   oracle on first use. That is exactly the case the pin exists to catch, so the first
   use now says which fingerprint it is trusting: compare it against the one on the
   device's idle screen or printed on your sheet before you rely on the password.
-  The simple/expert preference is lost the same way.
+  The last account number and style, the oracle kind and the simple/expert
+  preference are lost the same way — none of them secret, all of them one visit
+  to set again.
 
 - **Sheets printed before the move name the old domain.** The key on them is fine —
   it is just 32 bytes and cares nothing for DNS — but the instruction line points

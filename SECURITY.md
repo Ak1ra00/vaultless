@@ -19,8 +19,10 @@ component (browser derivation, firmware oracle, or CI/build pipeline).
 In scope:
 
 - The in-browser derivation and protocol code (`app.js`), the paper-oracle codec
-  (`recovery.js`), its UI (`sheet.js`), the presentation layer (`ui.js`) and the
-  page itself (`index.html`)
+  (`recovery.js`), its UI (`sheet.js`), the presentation layer (`ui.js`), the
+  page itself (`index.html`, `styles.css`) and the live diagrams (`scene.js`) —
+  the last is isolated from derivation by design, so anything that lets it reach
+  a phrase, key or password is a vulnerability
 - The offline shell (`sw.js`)
 - The vendored dependencies in `vendor/` (see `vendor/VENDOR.md`)
 - The oracle firmware (`firmware/`)
