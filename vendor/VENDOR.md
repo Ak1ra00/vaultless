@@ -30,27 +30,6 @@ npx esbuild entry.js --bundle --format=esm --minify --target=es2020 \
   --outfile=vendor/noble-bundle.js
 ```
 
-## `esp-web-tools/`
-
-Verbatim copy of `esp-web-tools@10.4.0` `dist/web/`, used by the "Flash
-firmware" button. The directory is copied whole because the entry point
-(`install-button.js`) dynamically imports its sibling chunks by relative path.
-
-| package | version | npm integrity |
-| --- | --- | --- |
-| `esp-web-tools` | 10.4.0 | `sha512-3pwkeFFm5Fj7UQo8SJNYK5RXrtNCpq6X9QoI6bMT4GBZWgrJqjn0YvM9ihG74BtMoSFYXfmDtkehuxe50PTMPQ==` |
-
-It previously loaded from `unpkg.com/esp-web-tools@10`, a mutable major-version
-range. It is not in the crypto path, but it shares an origin with the
-derivation UI and can read the passphrase field, so it is pinned too.
-
-### Rebuilding
-
-```bash
-npm install esp-web-tools@10.4.0
-cp -r node_modules/esp-web-tools/dist/web/. vendor/esp-web-tools/
-```
-
 ## `qr-bundle.js`
 
 QR encode and decode for the printable recovery sheet (`recovery.js`).

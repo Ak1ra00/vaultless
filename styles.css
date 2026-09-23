@@ -482,9 +482,6 @@
     font-family:var(--mono);font-size:13px;background:var(--bg-0);border:1px solid var(--line);
     border-radius:var(--r-sm);padding:14px;overflow-x:auto;color:var(--ink-1);
   }
-  .pin-table{width:100%;border-collapse:collapse;font-size:14px;color:var(--ink-1);}
-  .pin-table td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:top;}
-  .pin-table td:first-child{color:var(--ink-0);width:38%;}
   code,em{font-family:var(--mono);font-style:normal;color:var(--cyan);}
 
   .foot{
@@ -492,8 +489,6 @@
     padding-top:20px;border-top:1px solid var(--line);
     font-family:var(--mono);font-size:12px;color:var(--ink-2);
   }
-  .badge{color:var(--cyan);}
-  .badge.warn{color:var(--amber);}
 
   /* Visually hidden, still announced. */
   .sr-only{
@@ -534,46 +529,7 @@
      one value on all of them turns block containers into inline rows. When the
      element should be visible no rule applies at all and it keeps its own. */
   body:not(.in-app) .app-only{display:none;}
-  body:not(.oracle-hw) .hw-only{display:none;}
-  body:not(.oracle-paper) .paper-only{display:none;}
 
-  .choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;}
-  .choice{
-    font:inherit;text-align:left;cursor:pointer;color:var(--ink-0);
-    background:linear-gradient(180deg,rgba(18,27,33,.92),rgba(10,16,20,.92));
-    border:1.5px solid var(--line-bright);border-radius:var(--r);padding:26px;
-    display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden;
-    transition:transform .2s cubic-bezier(.2,.9,.3,1.2), border-color .2s, box-shadow .2s;
-  }
-  .choice::after{
-    content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;
-    background:radial-gradient(420px 200px at 50% 0%, rgba(43,217,201,.16), transparent 70%);
-  }
-  .choice:hover{transform:translateY(-4px);border-color:var(--cyan-dim);box-shadow:var(--shadow),0 0 34px rgba(43,217,201,.18);}
-  .choice:hover::after{opacity:1;}
-  .choice:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
-  .ch-mark{
-    width:46px;height:46px;display:block;color:var(--cyan);
-    transition:color .4s ease, transform .5s cubic-bezier(.2,.9,.3,1.2);
-  }
-  .choice:hover .ch-mark{color:var(--cyan-hot);transform:translateY(-2px) scale(1.04);}
-  .choice[aria-pressed="true"] .ch-mark{color:var(--cyan-hot);}
-  .ch-title{font-size:21px;font-weight:600;letter-spacing:-.01em;}
-  .ch-body{color:var(--ink-1);font-size:15px;line-height:1.55;flex:1;}
-  .ch-tag{
-    align-self:flex-start;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
-    text-transform:uppercase;color:var(--ink-2);border:1px solid var(--line-bright);
-    border-radius:999px;padding:5px 11px;
-  }
-  .ch-tag.good{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(43,217,201,.07);}
-  .ch-cta{color:var(--cyan);font-weight:600;font-size:16px;margin-top:4px;}
-  /* Warnings that must be read before a choice is made, not after it fails. */
-  .ch-warn{
-    color:var(--amber);font-size:14px;line-height:1.5;
-    border-left:2px solid var(--amber);padding-left:11px;
-  }
-  .ch-warn.block{display:block;margin:0;max-width:62ch;}
-  .ch-warn[hidden]{display:none;}
 
   .just-looking{text-align:center;color:var(--ink-2);margin:30px auto 0;font-size:15px;max-width:600px;}
   .linky{
@@ -581,7 +537,6 @@
     cursor:pointer;text-decoration:underline;text-underline-offset:3px;
   }
   .linky:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
-  @media(max-width:560px){.choice{padding:22px;}}
 
   /* setup forks ------------------------------------------------------- */
   .fork{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:6px;}
@@ -625,8 +580,6 @@
   .what-strip strong{font-size:16px;color:var(--cyan);}
   .what-strip span{color:var(--ink-1);font-size:14.5px;line-height:1.5;}
 
-  .choice[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(43,217,201,.12);}
-  .choice[aria-pressed="true"]::after{opacity:1;}
   .continue-row{text-align:center;margin:22px 0 6px;}
   .continue-hint{color:var(--ink-2);font-size:14px;margin:10px 0 0;}
 
@@ -732,8 +685,6 @@
     background:var(--grid);
   }
   .card.step{transition:border-color .45s ease, box-shadow .45s ease;}
-  .choice{transition:transform .38s cubic-bezier(.2,.9,.3,1.2), border-color .38s ease, box-shadow .38s ease;}
-  .choice::after{transition:opacity .5s ease;}
   .forkbtn{transition:border-color .32s ease, transform .32s cubic-bezier(.2,.9,.3,1.2), background .32s ease;}
 
   /* the result ---------------------------------------------------------- */
@@ -814,7 +765,6 @@
   body.returning #haveOracle,
   body.returning .sheets,
   body.returning #homeStep1,
-  body.returning #homeStep2,
   body.returning #continueRow{display:none;}
 
   .welcome{
@@ -898,7 +848,6 @@
     border-color:var(--line);background:var(--bg-0);}
   .q-btn[disabled] .q-mark{color:var(--ink-2);transform:none;}
 
-  #quickHwWarn{margin-top:15px;}
   .q-new{color:var(--ink-2);font-size:14.5px;margin:16px 0 0;}
   .q-new .linky{font-size:14.5px;}
 
@@ -1088,21 +1037,14 @@
     border:1px solid var(--cyan-dim);border-radius:2px;padding:4px 8px;background:rgba(5,8,10,.55);
   }
   #homeStep1 .step-h::after{content:'VAULTLESS · ORACLE · 01' / '';}
-  #homeStep2 .step-h::after{content:'VAULTLESS · READY · 02' / '';}
-  #card1 .step-h::after{content:'VAULTLESS · PHRASE · 03' / '';}
-  #card2 .step-h::after{content:'VAULTLESS · INDEX · 04' / '';}
-  #card3 .step-h::after{content:'VAULTLESS · HKDF · 05' / '';}
-  #card4 .step-h::after{content:'VAULTLESS · OPRF · 06' / '';}
+  #card1 .step-h::after{content:'VAULTLESS · PHRASE · 02' / '';}
+  #card2 .step-h::after{content:'VAULTLESS · INDEX · 03' / '';}
+  #card3 .step-h::after{content:'VAULTLESS · HKDF · 04' / '';}
+  #card4 .step-h::after{content:'VAULTLESS · k·P · 05' / '';}
   @media (max-width:560px){.card.step .step-h::after{font-size:8px;letter-spacing:.14em;right:10px;bottom:10px;}}
 
-  /* 3D tilt: the two big choices and the shortcut buttons lean towards the
-     pointer, and a highlight follows it across the face. */
-  .choice.tilt-on{
-    transform:perspective(900px) translateY(-4px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg));
-    transition:transform .12s ease-out, border-color .3s ease, box-shadow .3s ease;
-  }
-  .choice::after{background:radial-gradient(420px 220px at var(--gx,50%) var(--gy,0%), rgba(43,217,201,.18), transparent 70%);}
-  .choice.tilt-on .ch-mark{transform:translate(calc(var(--mx,0) * 12px), calc(var(--my,0) * 12px)) scale(1.06);}
+  /* 3D tilt: the shortcut button leans towards the pointer, and a highlight
+     follows it across the face. */
   .q-btn{position:relative;overflow:hidden;}
   .q-btn::after{
     content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;

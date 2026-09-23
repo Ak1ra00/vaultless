@@ -11,7 +11,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; style-src-elem 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>vaultless · passwords from thin air</title>
-<meta name="description" content="A vaultless deterministic password manager backed by a two-party OPRF and a physical hardware oracle.">
+<meta name="description" content="A vaultless deterministic password manager: your passphrase and a printed paper key make every password, and nothing is stored.">
 <meta name="theme-color" content="#07090b">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -58,7 +58,7 @@
       </div>
       <div class="conn app-only">
         <span class="dot" id="connDot" aria-hidden="true"></span>
-        <span id="connLabel">oracle disconnected</span>
+        <span id="connLabel">no paper oracle</span>
       </div>
     </div>
   </header>
@@ -97,10 +97,9 @@
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>
 
-    <!-- Steps 1 and 2 exist to explain what an oracle is and to get one made.
-         Someone who already owns one needs neither — they need the camera, or
-         the connect button. The welcome card above covers the case where this
-         browser remembers them; this covers the case where it does not, which
+    <!-- Step 1 exists to explain what an oracle is and to get one made.
+         Someone who already owns one needs neither — they need the camera.
+         The welcome card above covers the case where this browser remembers them; this covers the case where it does not, which
          is every new laptop, cleared profile and private window. It presses the
          very same controls a person would, so there is no second path through
          setup to keep in step with the first. -->
@@ -121,20 +120,7 @@
           <span class="q-t">Scan my paper square</span>
           <span class="q-s">Opens the camera. Typing the code printed under it works too.</span>
         </button>
-        <button type="button" class="q-btn" id="quickHw">
-          <svg class="q-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-            <rect x="6.2" y="2.6" width="11.6" height="18.8" rx="2.4" stroke="currentColor" stroke-width="1.8"/>
-            <rect x="8.6" y="5.4" width="6.8" height="4.6" rx="1" stroke="currentColor" stroke-width="1.4" opacity=".75"/>
-            <circle cx="12" cy="15.8" r="2.7" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M12 14.2v1.7l1.2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          </svg>
-          <span class="q-t">Plug in my device</span>
-          <span class="q-s">Opens the connect button for a LilyGO oracle on USB.</span>
-        </button>
       </div>
-      <p class="ch-warn block" id="quickHwWarn" hidden>This browser cannot talk to USB devices, so
-        “Plug in my device” is switched off here. Open the site in Chrome or Edge to use a
-        hardware oracle — a paper one works in any browser.</p>
       <p class="q-new">First time here? <button type="button" class="linky" id="quickNew">Start from
         the beginning</button> — it takes a couple of minutes, once.</p>
     </section>
@@ -181,106 +167,18 @@
       <li><strong>No vault to steal</strong><span>No secret is written down here — not your
         phrase, not your passwords, not your oracle's key, and no list of what your accounts
         are. This browser keeps only which oracles you trust.</span></li>
-      <li><strong>Your phrase never leaves</strong><span>It is disguised before your oracle sees it,
-        so the oracle answers without learning what you typed.</span></li>
+      <li><strong>Nothing leaves this page</strong><span>Your phrase and your paper key are
+        combined right here in the browser. Nothing is sent anywhere, to anyone.</span></li>
       <li><strong>Always the same answer</strong><span>The same phrase and the same account number
         give the same password, on any computer, forever.</span></li>
     </ul>
 
     <section class="card step" id="homeStep1">
-      <div class="step-h"><span class="num" aria-hidden="true">1</span><h3>Choose your oracle</h3></div>
-      <p class="help">Your oracle is the half of the secret that lives outside your head. It can be
-        a small device, or a square of paper. Both do exactly the same job.</p>
-    <div class="choices">
-      <button type="button" class="choice" id="chooseHardware">
-        <svg class="ch-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-          <rect x="9.5" y="4.5" width="29" height="39" rx="4" stroke="currentColor" stroke-width="2"/>
-          <rect x="14" y="10" width="20" height="13" rx="2" fill="currentColor" opacity=".16"/>
-          <rect x="14" y="10" width="20" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/>
-          <path d="M17.5 14.5h3.5M17.5 18.5h9M24.5 14.5h3" stroke="currentColor" stroke-width="1.6"
-                stroke-linecap="round" opacity=".8"/>
-          <circle cx="24" cy="33.5" r="5.5" stroke="currentColor" stroke-width="2"/>
-          <path d="M24 30.5v3.2l2.1 1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-          <path d="M9.5 13h-4M9.5 21h-4M9.5 29h-4M38.5 13h4M38.5 21h4M38.5 29h4"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".5"/>
-        </svg>
-        <span class="ch-title">A hardware oracle</span>
-        <span class="ch-body">A small LilyGO device on USB. It does the handshake itself and never
-          hands its half of the secret to your computer — the safest option.</span>
-        <span class="ch-tag good">strongest</span>
-        <span class="ch-warn" id="hwUnsupported" hidden>This browser can't talk to USB
-          devices. Use Chrome or Edge for a hardware oracle — or pick paper below.</span>
-        <span class="ch-cta">Use a hardware oracle →</span>
-      </button>
-
-      <button type="button" class="choice" id="choosePaper">
-        <svg class="ch-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
-          <path d="M11 4.5h26a2 2 0 0 1 2 2v35a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2v-35a2 2 0 0 1 2-2z"
-                stroke="currentColor" stroke-width="2"/>
-          <rect x="14" y="10" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/>
-          <rect x="26" y="10" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/>
-          <rect x="14" y="22" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="2"/>
-          <rect x="26.5" y="22.5" width="3" height="3" fill="currentColor"/>
-          <rect x="31" y="22.5" width="3" height="3" fill="currentColor"/>
-          <rect x="26.5" y="27" width="3" height="3" fill="currentColor"/>
-          <path d="M14 35.5h20M14 39.5h13" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" opacity=".45"/>
-        </svg>
-        <span class="ch-title">A paper oracle</span>
-        <span class="ch-body">One printed square that does the very same handshake. Nothing to buy,
-          nothing to charge, nothing to keep charged. Scan it when you need a password.</span>
-        <span class="ch-tag">no hardware needed</span>
-        <span class="ch-cta">Use a paper oracle →</span>
-      </button>
-    </div>
-    </section>
-
-    <section class="card step" id="homeStep2" hidden>
-      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Get it ready</h3></div>
-      <!-- ---------- hardware ---------- -->
-      <div class="hw-only">
-        <p class="help">Is this oracle brand new, or have you used it before?</p>
-        <div class="fork" role="group" aria-label="Hardware oracle state">
-          <button type="button" class="forkbtn" id="forkFlash" aria-pressed="false">
-            <span class="fk-t">It's brand new</span>
-            <span class="fk-s">Needs its firmware installed first — once, then never again</span>
-          </button>
-          <button type="button" class="forkbtn" id="forkReady" aria-pressed="false">
-            <span class="fk-t">I've used it before</span>
-            <span class="fk-s">Just plug it in and connect</span>
-          </button>
-        </div>
-
-        <div class="fork-panel" id="panelFlash" hidden>
-          <p class="help">Plug the board into a USB port, then install the firmware. Your computer
-            will ask which device to talk to — pick the one that appears when you plug it in.</p>
-          <div class="actions">
-            <esp-web-install-button manifest="esp-manifest.json">
-              <button class="btn" slot="activate">Install firmware</button>
-            </esp-web-install-button>
-          </div>
-          <p class="ch-warn block" style="margin-top:14px;"><strong>Never tick “erase device”
-            when reflashing one you have used.</strong> Erasing wipes the oracle's key, and every
-            password it has ever made is gone for good. Installing firmware on its own leaves the
-            key untouched.</p>
-          <p class="help" style="margin:14px 0 0;">Done? Then carry on and connect it below.</p>
-        </div>
-
-        <div class="fork-panel" id="panelConnect" hidden>
-          <p class="help">Plug the oracle in and press connect. Your browser will ask permission to
-            talk to it — that permission is what keeps other pages away from it.</p>
-          <p class="ch-warn block" id="hwUnsupportedPanel" hidden>This browser has no WebSerial,
-            so it cannot connect to a hardware oracle at all. Open the site in Chrome or Edge,
-            or go back and choose a paper oracle.</p>
-          <div class="actions">
-            <button class="btn" id="connectBtn">Connect my oracle</button>
-            <button class="btn small" id="disconnectBtn" disabled>Disconnect</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ---------- paper ---------- -->
-      <div class="paper-only">
+      <div class="step-h"><span class="num" aria-hidden="true">1</span><h3>Your paper oracle</h3></div>
+      <p class="help">Your oracle is the half of the secret that lives outside your head: a key
+        printed as a square of paper. Your phrase and the paper together make every password;
+        either one alone makes nothing.</p>
+      <div>
         <p class="help">Do you already have a printed square, or do you need to make one?</p>
         <div class="fork" role="group" aria-label="Paper oracle state">
           <button type="button" class="forkbtn" id="forkHave" aria-pressed="false">
@@ -316,8 +214,7 @@
         </div>
 
         <div class="fork-panel" id="panelCreate" hidden>
-<p class="help">A hardware oracle does a secret handshake to make your passwords. This prints a
-        square of paper that does that same handshake instead — so you need no device at all.
+<p class="help">This prints your oracle: a square of paper holding a random key.
         Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
         password. <strong>No password is printed on it.</strong></p>
       <div class="warn-box">
@@ -327,8 +224,8 @@
             your passwords. Treat it like a bank card, not a shopping list.</li>
           <li>Lose the paper with no copy and every password it makes is gone for good.
             Print two and store them apart.</li>
-          <li>A hardware oracle is safer: it never hands its half of the secret to your computer.
-            Paper does, every time you scan it.</li>
+          <li>Your computer reads the key every time you scan it, so scan it only on a computer
+            you trust — malware there could copy the key along with your phrase.</li>
           <li>Print it on a printer you own, onto paper. Not to PDF — that leaves the key in a
             file, and probably in a sync folder. Not to a shared or office printer either: the
             job passes through the queue and many printers keep it on an internal disk.</li>
@@ -379,16 +276,16 @@
 
       <div class="ready-row">
         <div class="ready-line" id="oracleReady" aria-live="polite"></div>
-        <button class="btn small paper-only" id="sheetForget" style="display:none;">Forget this oracle</button>
+        <button class="btn small" id="sheetForget" style="display:none;">Forget this oracle</button>
       </div>
     </section>
 
-    <div class="continue-row" id="continueRow" hidden>
+    <div class="continue-row" id="continueRow">
       <button class="btn primary" id="continueBtn" disabled>Continue to my password →</button>
-      <p class="continue-hint" id="continueHint">Finish step 2 and this opens up.</p>
+      <p class="continue-hint" id="continueHint">Finish step 1 and this opens up.</p>
     </div>
 
-    <p class="just-looking">Neither yet? <button type="button" class="linky" id="chooseDemo">Take a
+    <p class="just-looking">No paper oracle yet? <button type="button" class="linky" id="chooseDemo">Take a
       look around</button> — the demo runs the whole handshake with a pretend key, so nothing you
       see is a real password.</p>
   </section>
@@ -400,7 +297,7 @@
     <!-- STEP 1 -->
     <!-- STEP 1 : get an oracle ready -->
     <section class="card step" id="card1">
-      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Your secret phrase</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">2</span><h3>Your secret phrase</h3></div>
       <p class="help simple-only">Pick something only you know and can always remember. It never leaves this device.</p>
       <p class="help expert-only">Master passphrase. Hashed with the index to a ristretto255 point; never transmitted.</p>
       <label class="sr-only" for="passphrase">Your secret phrase</label>
@@ -419,7 +316,7 @@
 
     <!-- STEP 2 -->
     <section class="card step" id="card2">
-      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Which account is this for?</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">3</span><h3>Which account is this for?</h3></div>
       <p class="help simple-only">Every account gets its own number, so every account gets a
         different password. Which number you gave which account is yours to keep track of —
         nothing here writes that down.</p>
@@ -434,7 +331,7 @@
 
     <!-- STEP 3 -->
     <section class="card step" id="card3">
-      <div class="step-h"><span class="num" aria-hidden="true">5</span><h3>Choose a password style</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">4</span><h3>Choose a password style</h3></div>
       <p class="help simple-only">Not sure? The first one is a good default. Some websites don't allow symbols —
         then pick letters &amp; numbers.</p>
       <p class="help expert-only">Second-stage HKDF keyed by format name, rejection-sampled into the charset.</p>
@@ -452,12 +349,13 @@
 
     <!-- STEP 4 : action -->
     <section class="card step" id="card4">
-      <div class="step-h"><span class="num" aria-hidden="true">6</span><h3>Make my password</h3></div>
+      <div class="step-h"><span class="num" aria-hidden="true">5</span><h3>Make my password</h3></div>
       <p class="help simple-only" id="actionHelp">That's everything — press the big button.
         You can come back and change the account number any time; the same phrase and number
         always give the same password.</p>
-      <p class="help expert-only">Derive against the hardware oracle over WebSerial, or the in-browser
-        simulator (ephemeral session key, not pinned).</p>
+      <p class="help expert-only">Derive with your paper oracle (<em>S = k·P</em>, computed here),
+        or run the demo: the full blinded exchange against an in-browser simulated oracle with an
+        ephemeral key that is never pinned.</p>
 
       <div class="actions">
         <button class="btn primary" id="deriveBtn">Make my password</button>
@@ -497,57 +395,52 @@
     <summary>How does this work?</summary>
     <div class="learn-body">
       <div class="simple-only">
-        <p class="doc-p">Think of your oracle as a keyholder that never tells anyone its key.</p>
+        <p class="doc-p">Think of your paper oracle as a key that only works together with your phrase.</p>
         <ol class="doc-steps">
           <li>You type your phrase. It stays in this browser — it is never sent anywhere.</li>
-          <li>Your browser scrambles the phrase into a puzzle piece and <strong>disguises</strong> it,
-            so even the oracle can't tell what you typed.</li>
-          <li>The oracle stamps the disguised piece with its secret key and hands it back, playing a
-            little animation while it works.</li>
-          <li>Your browser removes the disguise and turns the result into your password.</li>
+          <li>Your browser scrambles the phrase and the account number into a point on a curve.</li>
+          <li>It stamps that point with the key from your paper, playing a little animation while
+            it works.</li>
+          <li>The stamped result is turned into your password.</li>
         </ol>
         <p class="doc-p">Because the answer depends on <em>both</em> your phrase <em>and</em> your oracle,
           someone who steals only one of them gets nothing. And because the same two things always
           produce the same answer, there's no vault to lose, back up, or have stolen.</p>
-        <p class="doc-p"><strong>Worth knowing:</strong> if you lose your oracle, you lose the passwords it
-          makes. And anything plugged into it while it's connected can ask it to stamp things, so unplug it
-          when you're done.</p>
+        <p class="doc-p"><strong>Worth knowing:</strong> if you lose your paper with no copy, you lose
+          the passwords it makes — print two and keep them apart. And anyone who photographs it and
+          learns your phrase can make them all, so store it like cash.</p>
       </div>
       <div class="expert-only">
         <div class="docs-grid">
           <div>
             <p class="doc-p">vaultless is a <strong>deterministic</strong> password manager: every password is
-              re-derived on demand from your master passphrase and a sub-index. Same two inputs, same password,
-              every time. Nothing to sync, back up, or leak.</p>
+              re-derived on demand from your master passphrase, an account number and a key printed on paper.
+              Same inputs, same password, every time. Nothing to sync, back up, or leak.</p>
             <p class="doc-p">Pure deterministic derivation lets anyone who steals the passphrase recompute every
-              password offline. vaultless closes that with a second factor that never leaves a physical device:
-              a <strong>two-party oblivious PRF</strong> over ristretto255.</p>
+              password offline. vaultless closes that with a second factor: a 256-bit scalar <em>k</em>,
+              printed as a QR square and a typable code.</p>
             <ol class="doc-steps">
-              <li>The browser hashes <code>passphrase‖index</code> to a curve point <em>P</em> and blinds it with
-                a random scalar <em>r</em> to get <em>B = r·P</em> — indistinguishable from random.</li>
-              <li><em>B</em> goes to the oracle (hardware over WebSerial, or the simulator).</li>
-              <li>The oracle returns <em>B′ = k·B</em>, its public key <em>Y = k·G</em>, and a Chaum-Pedersen
-                DLEQ proof that <code>log_G(Y) == log_B(B′)</code>.</li>
-              <li>The browser verifies the proof, checks <em>Y</em> against the key pinned on first use, unblinds
-                <em>S = r⁻¹·B′ = k·P</em>, and expands it through HKDF-SHA256.</li>
+              <li>The browser hashes <code>passphrase‖index</code> to a ristretto255 point <em>P</em>.</li>
+              <li>It computes <em>S = k·P</em> with the key from your sheet, and checks the key's public half
+                <em>Y = k·G</em> against the one this browser pinned on first use.</li>
+              <li><em>S</em> is expanded through HKDF-SHA256 into the password.</li>
             </ol>
+            <p class="doc-p"><em>S</em> is exactly the output of a two-party oblivious PRF with key <em>k</em>,
+              and the demo plays it that way against a simulated oracle: blind <em>B = r·P</em>, receive
+              <em>B′ = k·B</em> with a DLEQ proof, unblind <em>r⁻¹·B′ = k·P</em>. The blinding cancels, so both
+              roads reach the same point.</p>
           </div>
           <div>
             <div class="lbl" style="margin-bottom:10px;">why this resists theft</div>
             <ul class="doc-list">
-              <li>The oracle only ever sees a blinded point — never the passphrase, and since
-                protocol v3 not the account number either. A device on v2 firmware still requires
-                the account number, so the browser retries once and says so in the trace; reflash
-                to stop disclosing which account you are opening.</li>
               <li>Without <em>k</em>, a stolen passphrase alone regenerates nothing.</li>
-              <li>Without the passphrase, a stolen or cloned oracle regenerates nothing either.</li>
-              <li>A swapped or tampered oracle is rejected: the DLEQ proof and the pinned public key
-                have to agree.</li>
-              <li>The oracle auto-approves every request, so anything reaching its serial port can use it
-                while it is plugged in.</li>
-              <li>The default firmware stores <em>k</em> in unencrypted flash — see
-                <code>firmware/SECURE_PROVISIONING.md</code>.</li>
-              <li>Nothing is persisted: not the passphrase, not intermediate points, not the password.</li>
+              <li>Without the passphrase, a stolen or photographed sheet regenerates nothing either.</li>
+              <li>A different sheet is caught: its public key must match the one pinned on first use.</li>
+              <li>The sheet is not encrypted under the passphrase — that would let the phrase alone
+                rebuild <em>k</em>, collapsing two factors into one.</li>
+              <li><em>k</em> is in this browser's memory while the sheet is loaded, so only scan it on a
+                computer you trust. It is dropped after 5 minutes idle, on Forget, and on reload.</li>
+              <li>Nothing is persisted: not the passphrase, not <em>k</em>, not the password.</li>
             </ul>
             <div class="lbl" style="margin:16px 0 10px;">source</div>
             <p class="doc-p" style="margin:0;">
@@ -559,49 +452,8 @@
     </div>
   </details>
 
-  <details class="learn" id="learnBuild">
-    <summary>Build your own hardware oracle</summary>
-    <div class="learn-body">
-      <div class="docs-grid">
-        <div>
-          <div class="lbl" style="margin-bottom:10px;">parts list</div>
-          <ul class="doc-list">
-            <li><a href="https://www.lilygo.cc/products/lilygo%C2%AE-ttgo-t-display-1-14-inch-lcd-esp32-control-board"
-                   target="_blank" rel="noopener">LilyGO T-Display</a> — ESP32 + 1.14" ST7789 LCD (135×240), 4MB flash</li>
-            <li>USB-C or micro-USB data cable (check your board revision)</li>
-            <li>No extra wiring — the display is on-board</li>
-          </ul>
-          <div class="lbl" style="margin:16px 0 10px;">on-board pinout</div>
-          <table class="pin-table">
-            <tr><td>Display (ST7789)</td><td>SPI: MOSI 19 · SCLK 18 · CS 5 · DC 16 · RST 23 · BL 4</td></tr>
-            <tr><td>Buttons</td><td>GPIO 35 / GPIO 0 — cycle the info pages and wake the
-              screen. Requests are still auto-approved; a button never approves one.</td></tr>
-            <tr><td>Backlight</td><td>GPIO 4 — sleeps after 5 minutes idle, wakes on a
-              button or an incoming request</td></tr>
-          </table>
-        </div>
-        <div>
-          <div class="lbl" style="margin-bottom:10px;">flashing</div>
-          <p class="doc-p">Easiest: plug the board in over USB and press <strong>Install firmware</strong> above.
-            It uses <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
-            over WebSerial — no local toolchain needed.</p>
-          <p class="doc-p">To build from source instead:</p>
-          <pre class="doc-code">git clone https://github.com/Ak1ra00/vaultless
-cd SK/firmware
-pio run -e esp32dev -t upload</pre>
-          <p class="doc-p" style="margin-top:12px;">
-            The oracle scalar <em>k</em> is generated on first boot from the hardware RNG and stored in NVS —
-            it never touches the serial line, the browser, or this repo. Source:
-            <a href="https://github.com/Ak1ra00/vaultless/blob/main/firmware/src/main.cpp" target="_blank" rel="noopener">firmware/src/main.cpp</a>.
-          </p>
-        </div>
-      </div>
-    </div>
-  </details>
-
   <div class="foot">
-    <span>WebSerial: <span class="badge" id="wsBadge">checking…</span></span>
-    <span class="expert-only">protocol: OPRF-RISTRETTO255-HKDFSHA256 · v2 (DLEQ)</span>
+    <span class="expert-only">derivation: ristretto255 · S = k·H(phrase ‖ account) · HKDF-SHA256</span>
   </div>
 </div>
 
@@ -620,9 +472,9 @@ pio run -e esp32dev -t upload</pre>
       <p>This site is refusing to make passwords here. That is deliberate: its whole
         premise is that the code you audited is the code that runs, and over HTTP
         nobody can promise that.</p>
-      <p class="insecure-also">Two things are already broken and are not your device's
-        fault: the camera and the USB hardware oracle both require HTTPS, so both
-        report as missing on every machine you try.</p>
+      <p class="insecure-also">One thing is already broken and is not your device's
+        fault: the camera requires HTTPS, so it reports as missing on every machine
+        you try.</p>
       <p><strong>If this is your site:</strong> serve it over HTTPS and turn on
         "Enforce HTTPS". <strong>If you are a visitor:</strong> try the
         <code>https://</code> address, and do not type your phrase until it loads.</p>

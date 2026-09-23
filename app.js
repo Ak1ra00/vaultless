@@ -7,9 +7,9 @@ import {
   utf8ToBytes, concatBytes, invert, hkdf, sha256, sha512,
 } from './vendor/noble-bundle.js';
 import {
-  initChrome, toast, setDemo, markResultFilled, confirmDialog, clearResult,
+  initChrome, toast, setDemo, markResultFilled, confirmDialog,
   vizStart, vizBlind, vizSend, vizOracle, vizReturn, vizUnblind, vizDone, vizReset,
-  showPassword, getResultPassword, getOracleChoice, setReady,
+  showPassword, getResultPassword,
   initReturning, rememberLastUse,
 } from './ui.js';
 import { initSheet, getSheetKey } from './sheet.js';
@@ -34,11 +34,11 @@ if (self !== top) {
 /* ---------------------------------------------------------------------
  * Secure-context guard.
  *
- * On plain HTTP the browser withholds navigator.mediaDevices and
- * navigator.serial, so the camera and the hardware oracle both vanish — and the
- * old code reported that as "No camera available", which sends people hunting
- * for a hardware fault that is not there. The camera is the symptom; the cause
- * is that the page itself arrived over a channel anyone could rewrite.
+ * On plain HTTP the browser withholds navigator.mediaDevices, so the camera
+ * vanishes — and the old code reported that as "No camera available", which
+ * sends people hunting for a camera fault that is not there. The camera is
+ * the symptom; the cause is that the page itself arrived over a channel anyone
+ * could rewrite.
  *
  * crypto.getRandomValues is NOT secure-context gated, so derivation keeps
  * working on HTTP. That is the dangerous part: the page will cheerfully make
@@ -71,8 +71,8 @@ function invMod(a, m) {
   return invert(((a % m) + m) % m, m);
 }
 
-/* Uniform scalar in [1, L). Draws 64 bytes and wide-reduces, matching the
- * firmware's crypto_core_ristretto255_scalar_reduce. Reducing only 32 bytes
+/* Uniform scalar in [1, L). Draws 64 bytes and wide-reduces, the same way
+ * libsodium's crypto_core_ristretto255_scalar_reduce does. Reducing only 32 bytes
  * mod L is biased: 2^256 / L is about 16, so residues below 2^256 mod L come
  * up roughly 6% more often. */
 function randomScalar() {
@@ -91,24 +91,24 @@ function scalarToBytes(s) {
 /* ---------------------------------------------------------------------
  * Oracle authentication.
  *
- * The bare OPRF gives the browser no way to tell k*B from junk: a swapped or
- * tampered device can return any point and the only symptom is a password
- * that silently differs from the one that was stored. Two things fix that.
+ * An oracle that answers over the protocol (today, only the demo's simulated
+ * one) could return any point: the bare OPRF gives the browser no way to tell
+ * k*B from junk, and the only symptom would be a password that silently
+ * differs from the one that was stored. A Chaum-Pedersen DLEQ proof fixes that,
+ * proving log_G(Y) == log_B(B') without revealing k — "the same k that made my
+ * public key Y made this answer". That turns the OPRF into a VOPRF.
  *
- *  1. A Chaum-Pedersen DLEQ proof, proving log_G(Y) == log_B(B') without
- *     revealing k — i.e. "the same k that made my public key Y made this
- *     answer". That turns the OPRF into a VOPRF.
- *  2. Trust-on-first-use pinning of Y. The proof alone is not enough: a
- *     hostile device can present its own Y' and prove consistency with it.
- *     Pinning is what makes a substituted device detectable.
+ * The paper oracle needs no proof — the browser does the multiplication
+ * itself — but it does need the other half: trust-on-first-use pinning of
+ * Y = k*G, which is what makes a substituted sheet detectable.
  * ------------------------------------------------------------------- */
 const DLEQ_DST = utf8ToBytes('oprf-vaultless-dleq-v1');
 const PIN_KEY = 'vaultless.oracle.pubkey.v1';      // legacy: one key, replaced on accept
 const TRUST_KEY = 'vaultless.oracle.trusted.v1';   // current: the set of keys you trust
 
 /* The same short identifier the paper oracle prints on its sheet — SHA-256 of
- * the public key, truncated — so a device and a sheet holding one key show one
- * fingerprint, and the mismatch dialog can name keys instead of showing 24
+ * the public key, truncated — so the fingerprint on screen is the one on the
+ * paper, and the mismatch dialog can name keys instead of showing 24
  * characters of hex nobody can compare. */
 function keyFingerprint(pubkeyHex) {
   const h = bytesToHex(sha256(hexToBytes(pubkeyHex))).slice(0, 8);
@@ -148,8 +148,7 @@ function dleqVerify(Y, B, Bp, c, s) {
   return dleqChallenge(Y, B, Bp, T1, T2) === c;
 }
 
-/* Prover — used only by the in-browser simulator. The hardware oracle runs
- * the equivalent in firmware (see firmware/src/main.cpp, dleqProve). */
+/* Prover — used only by the demo's in-browser simulated oracle. */
 function dleqProve(k, B, Bp, Y) {
   const t = randomScalar();
   const T1 = RistrettoPoint.BASE.multiply(t);
@@ -158,12 +157,9 @@ function dleqProve(k, B, Bp, Y) {
   return { c, s: (t + c * k) % L };
 }
 
-/* Verify a hardware response and enforce the pin. Throws on any failure —
- * a derivation must never proceed against an unverified oracle. */
-/* Trust-on-first-use over the oracle's public key, shared by the hardware
- * hardware oracle and the paper oracle. It is what catches a substituted
- * device, and equally a sheet that is not the one this browser has been using —
- * scanning last year's sheet would otherwise derive different passwords with no
+/* Trust-on-first-use over the paper oracle's public key. It is what catches a
+ * sheet that is not the one this browser has been using — scanning last year's
+ * sheet, or someone else's, would otherwise derive different passwords with no
  * error anywhere. */
 async function enforcePin(pubkeyHex, whatItIs) {
   const trusted = loadTrusted();
@@ -178,10 +174,10 @@ async function enforcePin(pubkeyHex, whatItIs) {
      * It matters more than it looks: the trusted set lives in localStorage,
      * which is per-origin, so it does not survive a move to a new domain. Every
      * returning user is a first use again, and this is their one chance to
-     * notice that the key being trusted is not the key they expect. The device
-     * prints the same fingerprint on its idle screen and a paper oracle prints
-     * it on the sheet, so there is something to compare it against. */
-    toast(`Trusting ${whatItIs} ${fp} — check it matches your device or sheet.`);
+     * notice that the key being trusted is not the key they expect. The paper
+     * oracle prints the same fingerprint on the sheet, so there is something to
+     * compare it against. */
+    toast(`Trusting ${whatItIs} ${fp} — check it matches the one printed on your sheet.`);
     return;
   }
   if (trusted.includes(pubkeyHex)) return;
@@ -203,18 +199,20 @@ async function enforcePin(pubkeyHex, whatItIs) {
   if (!ok) throw new Error(`${whatItIs} public key is not one this browser trusts`);
 
   /* Added, never substituted. Replacing the pinned key meant that owning two
-   * legitimate oracles — a device and a work device, or a device and a sheet
-   * carrying a different k — silently disarmed the protection for whichever one
+   * legitimate oracles — say a personal sheet and a work sheet, each carrying
+   * its own k — silently disarmed the protection for whichever one
    * you had used a minute ago, and trained you to click through the single
    * prompt that matters. */
   saveTrusted([...trusted, pubkeyHex]);
   trace('pin', `now also trusting ${whatItIs} ${fp}`, true);
 }
 
-async function verifyOracleResponse(response, B, pin = true) {
+/* Verify an oracle's answer. Throws on any failure — a derivation must never
+ * proceed against an unverified oracle. The demo's simulated oracle is never
+ * pinned: its key is thrown away with the tab. */
+async function verifyOracleResponse(response, B) {
   if (!response.pubkey || !response.proof) {
-    throw new Error('oracle did not supply a DLEQ proof — firmware predates ' +
-                    'protocol v2, reflash it before deriving');
+    throw new Error('oracle did not supply a DLEQ proof — refusing to derive');
   }
   let Y, Bp, c, sScalar;
   try {
@@ -236,28 +234,19 @@ async function verifyOracleResponse(response, B, pin = true) {
    * The consequence is total: unblinding gives S = identity for EVERY
    * passphrase and EVERY index, so the passphrase stops contributing at all and
    * the derived password becomes a fixed constant anyone can compute offline.
-   * That is precisely the substituted-device attack the proof and the pin exist
-   * to stop, and it lands hardest on first use, when there is no pin yet.
+   * That is precisely the substituted-oracle attack the proof exists to stop.
    *
    * ristretto255 has prime order, so Y != identity already rules out every
-   * degenerate k; B' is checked too because it costs nothing. The firmware
-   * refuses the same cases (libsodium returns -1 on an identity result) and
-   * decodeRecovery refuses k = 0, so this is the browser catching up with the
-   * two places that already got it right. */
+   * degenerate k; B' is checked too because it costs nothing. decodeRecovery
+   * refuses k = 0 on a sheet for the same reason. */
   if (Y.equals(RistrettoPoint.ZERO) || Bp.equals(RistrettoPoint.ZERO)) {
     throw new Error('oracle presented a zero key — every password it produced ' +
                     'would be a public constant; refusing to derive');
   }
   if (!dleqVerify(Y, B, Bp, c, sScalar)) {
-    throw new Error('DLEQ proof failed — this device did not compute k*B with ' +
+    throw new Error('DLEQ proof failed — this oracle did not compute k*B with ' +
                     'the key it claims; refusing to derive');
   }
-  if (!pin) return Bp;
-  /* Y as re-encoded from the parsed point, never response.pubkey as it arrived.
-   * The comparison is string equality, so an oracle answering in uppercase hex
-   * would trip the "not one you have used here" dialog with nothing actually
-   * wrong — and that is the one dialog users must not be taught to dismiss. */
-  await enforcePin(bytesToHex(Y.toRawBytes()), 'oracle');
   return Bp;
 }
 
@@ -269,9 +258,9 @@ function trace(step, msg, isErr = false) {
   if (traceEl.querySelector('.empty')) traceEl.replaceChildren();
   const row = document.createElement('div');
   row.className = 'row';
-  // Built with textContent, never innerHTML: `msg` carries device output and
-  // oracle error strings, so anything able to write to the serial port would
-  // otherwise get script execution on a page holding the master passphrase.
+  // Built with textContent, never innerHTML: `msg` carries error strings from
+  // outside this file (a decoded sheet, a browser API), and an innerHTML sink
+  // on a page holding the master passphrase would hand them script execution.
   const mk = (cls, text) => {
     const el = document.createElement('span');
     el.className = cls;
@@ -315,184 +304,10 @@ document.getElementById('clearTrace').onclick = () => {
 };
 
 /* ---------------------------------------------------------------------
- * WebSerial transport
- * ------------------------------------------------------------------- */
-const wsBadge = document.getElementById('wsBadge');
-/* Chrome and Edge DO have WebSerial; on an insecure origin the browser simply
- * does not expose it. Saying "this browser can't" would be a lie that costs
- * someone an afternoon. */
-const serialSupported = 'serial' in navigator;
-const serialBlockedByHttp = !serialSupported && !SECURE;
-wsBadge.textContent = serialSupported ? 'supported' : 'unsupported';
-wsBadge.classList.add(serialSupported ? 'on' : 'warn');
-/* Say so where the choice is made. Without this a Firefox or Safari user picks
- * the option the home page labels "strongest", walks three screens into it, and
- * presses a Connect button that cannot ever work. */
-if (!serialSupported) {
-  for (const id of ['hwUnsupported', 'hwUnsupportedPanel', 'quickHwWarn']) {
-    const el = document.getElementById(id);
-    if (el) el.hidden = false;
-  }
-  /* The quick entry is one press straight into the connect panel. With no
-   * WebSerial there is nothing behind it, so it goes dead next to its reason
-   * rather than opening a panel whose only button cannot work. */
-  const quickHw = document.getElementById('quickHw');
-  if (quickHw) quickHw.disabled = true;
-}
-
-let port = null, writer = null, reader = null, readableClosed = null;
-const connDot = document.getElementById('connDot');
-const connLabel = document.getElementById('connLabel');
-const connectBtn = document.getElementById('connectBtn');
-const disconnectBtn = document.getElementById('disconnectBtn');
-
-function setConnected(state, label) {
-  /* The two buttons belong to the hardware panel and describe the port, so they
-   * are updated whatever the page is currently showing. Only the shared header
-   * pill and the step-1 readiness line are conditional — those are surfaces the
-   * paper oracle borrows, and in paper mode they are its to report.
-   *
-   * Returning before this left them frozen at whatever the port last did while
-   * hardware was selected: Connect enabled on a live port, or Disconnect greyed
-   * out on one that was still open. */
-  connectBtn.disabled = state || !serialSupported;
-  disconnectBtn.disabled = !state;
-
-  if (getOracleChoice() === 'paper') return;   // the pill is showing the paper oracle
-  connDot.className = 'dot' + (state ? ' live' : '');
-  connLabel.textContent = label;
-  document.getElementById('homeStep2').classList.toggle('done', state);
-  setReady(state ? 'Oracle connected and ready' : 'Oracle not connected yet', state);
-}
-
-let lineBuffer = '';
-/* In-flight oracle requests, oldest first. Each entry owns its own timeout
- * timer and is removed from the queue by whichever of the two fires first, so
- * a timed-out request can never leave a stale slot behind for a later reply to
- * satisfy — that desynchronises the queue and pairs every subsequent response
- * with the wrong request. */
-let pending = [];
-
-async function readLoop() {
-  const decoder = new TextDecoderStream();
-  /* Unplugging the device rejects this pipe, and an uncaught rejection here is
-   * an "Uncaught (in promise)" in the console of a page whose users are told to
-   * watch it for exactly this kind of signal. Losing the port is ordinary, so
-   * it is absorbed rather than reported; the read loop below notices and says so
-   * in the trace. */
-  readableClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
-  reader = decoder.readable.getReader();
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (value) {
-        lineBuffer += value;
-        let idx;
-        while ((idx = lineBuffer.indexOf('\n')) >= 0) {
-          const line = lineBuffer.slice(0, idx).trim();
-          lineBuffer = lineBuffer.slice(idx + 1);
-          if (!line) continue;
-          // The device shares this line with its ESP-IDF boot log and panic
-          // handler, so only actual protocol replies may satisfy a pending
-          // request — anything else is surfaced as device output instead of
-          // being parsed as a response.
-          if (line.startsWith('{') && pending.length) {
-            const entry = pending.shift();
-            clearTimeout(entry.timer);
-            entry.resolve(line);
-          } else {
-            trace('device', line, /error|panic|abort|assert/i.test(line));
-          }
-        }
-      }
-    }
-  } catch (e) {
-    trace('serial', `read loop ended: ${e.message}`, true);
-  }
-}
-
-async function connectSerial() {
-  if (!serialSupported) {
-    fail('serial',
-         serialBlockedByHttp
-           ? 'WebSerial is hidden because this page is not on HTTPS'
-           : 'WebSerial is not supported in this browser',
-         serialBlockedByHttp
-           ? 'This page is not on HTTPS, so the browser hides USB devices. Open the https:// address.'
-           : "This browser can't talk to USB devices — try Chrome or Edge, or use a paper oracle.");
-    return;
-  }
-  try {
-    port = await navigator.serial.requestPort();
-    await port.open({ baudRate: 115200 });
-    const encoder = new TextEncoderStream();
-    // Same as the read side: this pipe rejects when the port goes away, and an
-    // unhandled rejection is noise in the one console users are asked to trust.
-    encoder.readable.pipeTo(port.writable).catch(() => {});
-    writer = encoder.writable.getWriter();
-    readLoop();
-    setConnected(true, 'oracle connected');
-    trace('serial', 'WebSerial port opened @ 115200 baud');
-  } catch (e) {
-    // Dismissing the browser's own port picker is a choice, not a fault: it
-    // throws NotFoundError, and toasting an error over it would be nagging.
-    if (e.name === 'NotFoundError') trace('serial', 'no port chosen');
-    else fail('serial', `connection failed: ${e.message}`, 'Could not open the oracle — is it plugged in?');
-  }
-}
-
-async function disconnectSerial() {
-  try {
-    if (reader) await reader.cancel();
-    if (writer) await writer.close();
-    if (port) await port.close();
-  } catch (e) { /* best-effort teardown */ }
-  for (const entry of pending.splice(0)) {
-    clearTimeout(entry.timer);
-    entry.reject(new Error('serial port closed'));
-  }
-  port = null; writer = null; reader = null;
-  setConnected(false, 'oracle disconnected');
-  clearResult();          // the oracle is gone; its password should not linger
-  trace('serial', 'port closed');
-}
-
-async function sendToOracle(payloadObj, timeoutMs = 30000) {
-  if (!writer) throw new Error('serial port not open');
-  const line = JSON.stringify(payloadObj) + '\n';
-  const entry = {};
-  const responsePromise = new Promise((resolve, reject) => {
-    entry.resolve = resolve;
-    entry.reject = reject;
-    entry.timer = setTimeout(() => {
-      const i = pending.indexOf(entry);
-      if (i >= 0) pending.splice(i, 1);
-      reject(new Error('oracle response timed out'));
-    }, timeoutMs);
-  });
-  pending.push(entry);
-  await writer.write(line);
-  const raw = await responsePromise;
-  return JSON.parse(raw);
-}
-
-connectBtn.onclick = connectSerial;
-disconnectBtn.onclick = disconnectSerial;
-connectBtn.disabled = !serialSupported;
-
-// Reclaim the header pill whenever the route leaves paper mode.
-document.addEventListener('oraclechange', (e) => {
-  if (e.detail.choice !== 'hardware') return;
-  connDot.className = 'dot' + (writer ? ' live' : '');
-  connLabel.textContent = writer ? 'oracle connected' : 'oracle disconnected';
-  document.getElementById('homeStep2').classList.toggle('done', !!writer);
-  setReady(writer ? 'Oracle connected and ready' : 'Oracle not connected yet', !!writer);
-});
-
-/* ---------------------------------------------------------------------
- * Simulated oracle (in-browser, ephemeral session key — for testing
- * without hardware). The scalar lives only in memory for this tab.
+ * Simulated oracle, for the demo (in-browser, ephemeral session key). It
+ * plays the full two-party exchange — blind, stamp, prove, unblind — that the
+ * paper path collapses into one local k·P. The scalar lives only in memory
+ * for this tab and is never pinned.
  * ------------------------------------------------------------------- */
 let simKey = null;
 function simulateOracle(blindedHex) {
@@ -513,9 +328,7 @@ function simulateOracle(blindedHex) {
 }
 
 document.getElementById('simBtn').onclick = () => runDerivation('simulator');
-/* The oracle chosen on the home page decides which path this runs. */
-document.getElementById('deriveBtn').onclick = () =>
-  runDerivation(getOracleChoice() === 'paper' ? 'sheet' : 'hardware');
+document.getElementById('deriveBtn').onclick = () => runDerivation('sheet');
 
 /* ---------------------------------------------------------------------
  * Format selector
@@ -590,7 +403,7 @@ function formatPassword(oprfOutput, format) {
 /* ---------------------------------------------------------------------
  * Main derivation flow
  * ------------------------------------------------------------------- */
-/* mode: 'hardware' | 'simulator' | 'sheet' */
+/* mode: 'sheet' (your paper oracle) | 'simulator' (the demo) */
 async function runDerivation(mode) {
   const useSimulator = mode === 'simulator';
   const useSheet = mode === 'sheet';
@@ -615,7 +428,8 @@ async function runDerivation(mode) {
    * exactly what the user meant. parseInt was too forgiving: "12x" silently
    * became 12, and anything non-numeric became NaN, which stringifies to
    * "NaN" and derives a password from it. Require a plain non-negative
-   * integer, and keep it inside the range the firmware's `long` can hold.
+   * integer, and keep it inside the range it has always had (a signed
+   * 32-bit integer), so every account number ever used still works.
    *
    * The field is type="text" inputmode="numeric" for this to work at all. As a
    * number input it returned "" for anything the browser judged invalid — "-5",
@@ -634,11 +448,6 @@ async function runDerivation(mode) {
          'That account number is too large — the most is 2147483647.');
     return;
   }
-  if (mode === 'hardware' && !writer) {
-    fail('input', 'no oracle connected — connect your hardware oracle, load your paper oracle, or try the demo',
-         'No oracle connected — set one up on the home page, or try the demo.');
-    return;
-  }
   if (useSheet && !getSheetKey()) {
     fail('input', 'no paper oracle loaded — scan its square or type its code first',
          'No paper oracle loaded — scan its square or type its code first.');
@@ -648,7 +457,7 @@ async function runDerivation(mode) {
   deriveBtn.disabled = true; simBtn.disabled = true;
   setDemo(useSimulator);
   document.getElementById('resSource').textContent =
-    `source: ${useSimulator ? 'demo simulator' : useSheet ? 'your paper oracle' : 'your hardware oracle'}`;
+    `source: ${useSimulator ? 'demo simulator' : 'your paper oracle'}`;
 
   try {
     trace('1/7', `hashing "${index}" to a ristretto255 point`);
@@ -660,7 +469,8 @@ async function runDerivation(mode) {
       /* With k in hand there is no second party, so no blinding and no proof:
        * the browser computes k·P itself. The blinding in the oracle path
        * cancels — r⁻¹·(k·(r·P)) = k·P — so this lands on exactly the same
-       * point, and therefore exactly the same password, as the hardware. */
+       * point, and therefore exactly the same password, as the demo's
+       * two-party road would with the same k. */
       const k = getSheetKey();
       trace('2/4', 'using your paper oracle (its key is here, so no round trip)');
       await enforcePin(bytesToHex(RistrettoPoint.BASE.multiply(k).toRawBytes()), 'paper oracle');
@@ -685,41 +495,19 @@ async function runDerivation(mode) {
     trace('2/7', `B = ${blindedHex.slice(0, 16)}…`);
     await vizBlind('disguising it — this is all the oracle ever sees…', blindedHex);
 
-    trace('3/7', `sending {point} to ${useSimulator ? 'simulator' : 'oracle'} over ${useSimulator ? 'memory' : 'WebSerial'}`);
+    trace('3/7', 'sending {point} to the simulated oracle, in memory');
     await vizSend('handing it over…');
-    let response;
-    if (useSimulator) {
-      const stamping = vizOracle('the demo key is stamping it…');
-      response = simulateOracle(blindedHex);
-      await stamping;                                // let the animation read
-    } else {
-      const stamping = vizOracle('your oracle is stamping it…');
-      /* Protocol v3 drops `index` from the request. The oracle never used it —
-       * it multiplies the blinded point and nothing else — so carrying it only
-       * told the device, its display, and anyone reading the serial line which
-       * account was being unlocked. The index still reaches the derivation
-       * through the hash-to-group input and the HKDF salt, where the blinding
-       * already covers it.
-       *
-       * A device still on v2 firmware requires the field and answers
-       * bad_request without it, so fall back once rather than breaking every
-       * oracle in the field — and say plainly what reflashing would buy. */
-      response = await sendToOracle({ point: blindedHex });
-      if (response.error === 'bad_request') {
-        trace('3/7', 'oracle runs v2 firmware — retrying with the account number in ' +
-                     'the clear; reflash it to stop disclosing which account you open', true);
-        response = await sendToOracle({ index, point: blindedHex });
-      }
-      await stamping;
-    }
+    const stamping = vizOracle('the demo key is stamping it…');
+    const response = simulateOracle(blindedHex);
+    await stamping;                                  // let the animation read
     if (response.error) throw new Error(`oracle rejected: ${response.error}`);
     if (!response.point) throw new Error('oracle response missing point');
     trace('4/7', `received B' = ${response.point.slice(0, 16)}…`);
     await vizReturn('stamped, and on its way back…', response.point);
 
-    trace('5/7', 'verifying DLEQ proof that B\' = k·B under the pinned key');
-    const Bp = await verifyOracleResponse(response, B, !useSimulator);
-    trace('5/7', useSimulator ? 'proof ok (simulator, not pinned)' : 'proof ok · oracle key matches pin');
+    trace('5/7', 'verifying the DLEQ proof that B\' = k·B');
+    const Bp = await verifyOracleResponse(response, B);
+    trace('5/7', 'proof ok (simulator, not pinned)');
 
     trace('6/7', 'unblinding: S = r⁻¹·B\'');
     const rInv = invMod(r, L);
@@ -728,8 +516,8 @@ async function runDerivation(mode) {
                      bytesToHex(S.toRawBytes()));
     }
 
-    /* One more guard covering all three paths at once — hardware, simulator and
-     * paper. Anything that lands on the identity here means the shared secret
+    /* One more guard covering both paths at once — the demo and paper.
+     * Anything that lands on the identity here means the shared secret
      * carries no key at all, and HKDF would happily expand it into a real-looking
      * password regardless. */
     if (S.equals(RistrettoPoint.ZERO)) {

@@ -1,7 +1,7 @@
 {
   "name": "vaultless — 2P-OPRF password oracle",
   "short_name": "vaultless",
-  "description": "A vaultless deterministic password manager backed by a two-party OPRF and a physical hardware oracle.",
+  "description": "A vaultless deterministic password manager: your passphrase and a printed paper key make every password, and nothing is stored.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -885,7 +885,7 @@ function initSheets() {
 
 /* ===================================================== 3D card tilt */
 
-/* The two big choices and the shortcut buttons lean towards the pointer, with
+/* The shortcut button leans towards the pointer, with
  * a highlight that follows it. Mouse and pen only: on touch the card is under
  * the finger anyway, and a tilt that fires on every tap reads as a glitch.
  *
@@ -896,7 +896,7 @@ function initSheets() {
  * kept until the pointer is really gone. */
 function initTilt() {
   if (reduceMotion) return;
-  const SEL = '.choice, .q-btn';
+  const SEL = '.q-btn';
   let active = null, rect = null;
   const inside = (r, e) => e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
   const clear = () => { if (active) active.classList.remove('tilt-on'); active = null; rect = null; };

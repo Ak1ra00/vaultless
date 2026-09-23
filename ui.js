@@ -276,14 +276,15 @@ function churnHex(el, ms) {
 const HIDDEN_P = 'kept off screen · P alone would let anyone test guesses at your phrase';
 const HIDDEN_S = 'kept off screen · S is one hash away from your password';
 
-/* Which oracle this run is using. app.js writes the result card's source line
- * before the first stage, so it is read from there rather than passed in —
- * app.js stays exactly as it was. The paper path has no second party: no
- * blinding, no wire, no proof, and the pop-up must not pretend otherwise. */
-let path = 'device';
+/* Which road this run takes. app.js writes the result card's source line before
+ * the first stage, so it is read from there rather than passed in. The paper
+ * path has no second party: no blinding, no wire, no proof, and the pop-up must
+ * not pretend otherwise. The demo plays the full two-party exchange against a
+ * simulated oracle. */
+let path = 'paper';
 function readPath() {
   const src = ($('resSource')?.textContent || '').toLowerCase();
-  return src.includes('paper') ? 'paper' : src.includes('demo') ? 'demo' : 'device';
+  return src.includes('demo') ? 'demo' : 'paper';
 }
 const relay = () => path !== 'paper';
 
@@ -417,8 +418,7 @@ export function vizStart(label /* , hex — P, deliberately not shown */) {
   const v = $('viz');
   v.dataset.path = path;
   v.dataset.beat = String(BEAT * DWELL);
-  $('hsWho').textContent =
-    path === 'paper' ? 'paper oracle' : path === 'demo' ? 'demo key' : 'your oracle';
+  $('hsWho').textContent = path === 'paper' ? 'paper oracle' : 'demo key';
   $('hsTitle').textContent = path === 'demo' ? 'Making a demo password' : 'Making your password';
   $('hsSkip').textContent = 'Skip';
   buildSteps();
@@ -451,9 +451,8 @@ export function vizOracle(label) {
   stage('stamping');
   /* On paper there is no B: k is here, and it multiplies P directly. */
   $('vizTag').textContent = relay() ? "B' = k·B" : 'S = k·P';
-  /* Churns until the next stage cancels it, rather than for a fixed time: a
-   * hardware oracle takes as long as it takes, and a readout that froze
-   * mid-scramble while the device was still thinking would be a lie. The
+  /* Churns until the next stage cancels it, rather than for a fixed time, so
+   * the readout never freezes mid-scramble while work is still going on. The
    * returned promise is a MINIMUM dwell, so the fast paths still read. */
   churnHex($('vizHex'), 120000);
   return dwell(BEAT * 1.4);
@@ -695,38 +694,21 @@ export function pickFork(panels, chosen) {
 }
 
 /* ------------------------------------------------------------------- nav */
-/* Two front doors. The choice decides which oracle's controls exist at all,
- * so neither path is ever shown the other one's buttons to guess at. Kept in
- * the URL so a route can be bookmarked, and remembered so a returning user
- * lands where they left off — Home is always one click away in the header. */
-const ORACLE_KEY = 'vaultless.oracle.choice.v1';
-let oracleChoice = null;
+/* One front door: the paper oracle is the only kind there is. The app view is
+ * kept in the URL (#paper) so it can be bookmarked, and the retired #hardware
+ * route still opens it, so an old bookmark lands somewhere useful instead of on
+ * the home page's first step. Home is always one click away in the header. */
 
-export function getOracleChoice() { return oracleChoice; }
-
-/* Choosing an oracle no longer jumps into the app — it opens step 2 on the home
- * page, because setting the oracle up IS the next step. The app view is where
- * you go once it is actually ready. */
-function setOracle(choice, { remember = true } = {}) {
-  oracleChoice = choice;
-  document.body.classList.toggle('oracle-hw', choice === 'hardware');
-  document.body.classList.toggle('oracle-paper', choice === 'paper');
-  $('chooseHardware').setAttribute('aria-pressed', String(choice === 'hardware'));
-  $('choosePaper').setAttribute('aria-pressed', String(choice === 'paper'));
-  $('homeStep1').classList.toggle('done', !!choice);
-  $('homeStep2').hidden = !choice;
-  $('continueRow').hidden = !choice;
-  if (remember && choice) {
-    try { localStorage.setItem(ORACLE_KEY, choice); } catch { /* private mode */ }
-  }
-  document.dispatchEvent(new CustomEvent('oraclechange', { detail: { choice } }));
-}
+/* Which oracle was chosen used to be remembered here. There is no choice left
+ * to remember, so the old value is removed rather than left behind — the page
+ * says it keeps nothing it does not need. */
+try { localStorage.removeItem('vaultless.oracle.choice.v1'); } catch { /* private mode */ }
 
 function setView(inApp, { push = true } = {}) {
   document.body.classList.toggle('in-app', inApp);
   $('viewHome').hidden = inApp;
   $('viewApp').hidden = !inApp;
-  const hash = inApp && oracleChoice ? `#${oracleChoice}` : '';
+  const hash = inApp ? '#paper' : '';
   if (push && location.hash !== hash) {
     history.pushState({ inApp }, '', hash || location.pathname);
   }
@@ -772,7 +754,7 @@ export function setReady(text, ready) {
     btn.disabled = !ready;
     $('continueHint').textContent = ready
       ? 'Your oracle is ready.'
-      : 'Finish step 2 and this opens up.';
+      : 'Finish step 1 and this opens up.';
   }
 }
 
@@ -782,9 +764,9 @@ export function setReady(text, ready) {
  * an oracle has actually answered — so it is the signal this keys off.
  *
  * The one thing that genuinely cannot be skipped is presenting the oracle: it
- * is the second factor, the paper key is deliberately wiped on reload, and a
- * device has to be plugged in. Everything AROUND that can go: which kind of
- * oracle, which branch of the fork, and the press of "Continue".
+ * is the second factor, and the paper key is deliberately wiped on reload.
+ * Everything AROUND that can go: which branch of the fork, and the press of
+ * "Continue".
  *
  * This drives the existing controls rather than reimplementing them — it clicks
  * the same fork buttons a person would — so the setup and derivation paths stay
@@ -829,24 +811,18 @@ function showSetup() {
   $('haveOracle').hidden = false;
 }
 
-/* One press: take the named oracle (or the remembered one), open the branch
- * that presents it, and start the camera or offer the connect button. */
-function unlock(choice = oracleChoice || 'paper') {
+/* One press: open the scan branch and start the camera, with the typed-code
+ * box focused for anyone who would rather type. */
+function unlock() {
   showSetup();
   /* The shortcut has done its job. Leaving it sitting above a running camera
    * only invites a second press, which would tear the scan down and restart
    * it. */
   $('haveOracle').hidden = true;
-  setOracle(choice);
   fastLaneArmed = true;                 // setReady() takes it from here
-  if (choice === 'paper') {
-    $('forkHave').click();              // opens the scan panel and starts the camera
-    $('sheetManual').focus({ preventScroll: true });
-  } else {
-    $('forkReady').click();             // opens the connect panel
-    $('connectBtn').focus({ preventScroll: true });
-  }
-  $('homeStep2').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+  $('forkHave').click();                // opens the scan panel and starts the camera
+  $('sheetManual').focus({ preventScroll: true });
+  $('homeStep1').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
 }
 
 /* Trust has to be revocable from the page.
@@ -945,8 +921,7 @@ export function initReturning(fingerprints, forget) {
  * buttons, the scanner and the derivation path are all exactly the ones the
  * long way round uses. */
 function initQuickEntry() {
-  $('quickPaper').onclick = () => unlock('paper');
-  $('quickHw').onclick = () => unlock('hardware');
+  $('quickPaper').onclick = () => unlock();
   $('quickNew').onclick = () =>
     $('homeStep1').scrollIntoView({
       behavior: reduceMotion ? 'auto' : 'smooth',
@@ -956,64 +931,25 @@ function initQuickEntry() {
 
 function routeFromHash() {
   const h = location.hash.replace('#', '');
-  return (h === 'hardware' || h === 'paper') ? h : null;
-}
-
-/* esp-web-tools is a large module graph and only the "brand new device" branch
- * ever opens it, yet it used to load on every page view — including the entire
- * paper-oracle path, where nobody will ever flash anything. Fetched when that
- * branch opens instead, which is several seconds before the button can be
- * pressed. Loading it is also what upgrades <esp-web-install-button>, so the
- * button does nothing until this resolves; saying so beats a dead control. */
-let flasherLoading = null;
-function loadFlasher() {
-  if (!flasherLoading) {
-    flasherLoading = import('./vendor/esp-web-tools/install-button.js')
-      .catch((e) => {
-        flasherLoading = null;   // let a later attempt retry
-        toast('Could not load the firmware installer — reload and try again.');
-        throw e;
-      });
-  }
-  return flasherLoading;
-}
-
-function initHardwareFork() {
-  const panels = { forkFlash: 'panelFlash', forkReady: 'panelConnect' };
-  $('forkFlash').onclick = () => { pickFork(panels, 'forkFlash'); loadFlasher(); };
-  $('forkReady').onclick = () => pickFork(panels, 'forkReady');
+  return h === 'paper' || h === 'hardware';
 }
 
 function initNav() {
-  const routed = routeFromHash();
-  let stored = null;
-  try { stored = localStorage.getItem(ORACLE_KEY); } catch { /* private mode */ }
-  if (stored !== 'hardware' && stored !== 'paper') stored = null;
+  setView(routeFromHash(), { push: false });
 
-  setOracle(routed || stored, { remember: false });
-  setView(!!routed, { push: false });
-
-  $('chooseHardware').onclick = () => setOracle('hardware');
-  $('choosePaper').onclick = () => setOracle('paper');
   $('continueBtn').onclick = () => setView(true);
   $('homeBtn').onclick = () => setView(false);
   $('chooseDemo').onclick = () => {
-    setOracle(oracleChoice || 'paper');
     setView(true);
-    toast('Type a phrase, then press “Try the demo” at step 6');
+    toast('Type a phrase, then press “Try the demo” at step 5');
   };
-  addEventListener('popstate', () => {
-    const h = routeFromHash();
-    if (h) setOracle(h, { remember: false });
-    setView(!!h, { push: false });
-  });
+  addEventListener('popstate', () => setView(routeFromHash(), { push: false }));
 }
 
 export function initChrome() {
   initHandshakePop();
   initNav();
   initQuickEntry();
-  initHardwareFork();
   initMode();
   initStrength();
   initAccountNumber();

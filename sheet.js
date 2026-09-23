@@ -1,8 +1,8 @@
-/* UI for the paper oracle — the printed square that stands in for a device.
+/* UI for the paper oracle — the printed square that holds the key.
  *
- * It plays the same role the hardware does: it holds k and performs the
- * handshake half of the derivation. It is not a password and no password is
- * printed on it; without the master phrase it produces nothing.
+ * It holds k, the half of the derivation that lives outside your head. It is
+ * not a password and no password is printed on it; without the master phrase
+ * it produces nothing.
  *
  * Holds the scanned key for the session and nothing longer. k is kept in one
  * module-scoped variable and is never written to localStorage, sessionStorage,
@@ -10,8 +10,8 @@
  * displayed. An idle timer drops it, as does the Forget button and a reload.
  *
  * (JavaScript cannot reliably scrub a BigInt from memory; dropping the last
- * reference is the most that can be done here. On a machine you do not trust,
- * the hardware oracle is the answer, not this.)
+ * reference is the most that can be done here. Which is why the sheet should
+ * only ever be scanned on a machine you trust.)
  */
 
 import {
@@ -88,15 +88,12 @@ function renderStatus() {
   $('sheetForget').style.display = loaded ? '' : 'none';
   // The source is reported on the result card; keep the button one plain verb.
   $('deriveBtn').textContent = 'Make my password';
-  $('homeStep2').classList.toggle('done', loaded);
-  // In paper mode the header pill and the step-1 readiness line both track the
-  // paper oracle rather than the (irrelevant) WebSerial connection.
-  if (document.body.classList.contains('oracle-paper')) {
-    $('connDot').className = 'dot' + (loaded ? ' live' : '');
-    $('connLabel').textContent = loaded ? 'paper oracle ready' : 'no paper oracle';
-    setReady(loaded ? `Paper oracle ready · ${fingerprint(sheetKey)}` : 'No paper oracle loaded yet',
-             loaded);
-  }
+  $('homeStep1').classList.toggle('done', loaded);
+  // The header pill and the step-1 readiness line both track the paper oracle.
+  $('connDot').className = 'dot' + (loaded ? ' live' : '');
+  $('connLabel').textContent = loaded ? 'paper oracle ready' : 'no paper oracle';
+  setReady(loaded ? `Paper oracle ready · ${fingerprint(sheetKey)}` : 'No paper oracle loaded yet',
+           loaded);
 }
 
 /* ------------------------------------------------------------- accepting */
@@ -326,7 +323,6 @@ export function initSheet() {
   addEventListener('afterprint', restoreAfterPrint);
   initEntropyPad();
   renderStatus();
-  document.addEventListener('oraclechange', renderStatus);
 
   /* Nothing above stopped the camera when the scan screen went away: hiding the
    * <video> leaves the MediaStream live, the tracks open and the machine's
@@ -334,9 +330,6 @@ export function initSheet() {
    * is that nothing leaves the device. Tear it down whenever the screen it
    * belongs to is no longer the one being shown. */
   document.addEventListener('viewchange', stopScan);
-  document.addEventListener('oraclechange', (e) => {
-    if (e.detail.choice !== 'paper') stopScan();
-  });
 
   $('forkHave').onclick = () => {
     pickFork(PAPER_PANELS, 'forkHave');

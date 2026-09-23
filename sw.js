@@ -14,10 +14,6 @@
  * Rules, in order of importance:
  *
  *  - Only same-origin GETs are touched. Everything else falls straight through.
- *  - The firmware image and its manifest are NEVER cached. They are versioned
- *    by CI and flashed onto hardware; serving a stale one silently reflashes the
- *    previous build, which is exactly what the cache-busting in the workflow
- *    exists to prevent.
  *  - The shell is cache-first, because pinning is the point. Everything else is
  *    network-first with the cache as a fallback.
  *  - No skipWaiting. A new worker takes over on the next visit rather than
@@ -27,11 +23,9 @@
 /* Bump on every shell change. The shell is served cache-first, so a stale
  * VERSION means returning visitors keep the previous index.html and styles.css
  * indefinitely — the activate handler drops old caches only once this differs. */
-const VERSION = 'vaultless-v17';
+const VERSION = 'vaultless-v18';
 
-/* The app shell: markup, the modules, the vendored crypto, fonts, icons.
- * esp-web-tools is deliberately absent — it is a large graph that only the
- * flashing branch loads, and it is useless without a device plugged in anyway. */
+/* The app shell: markup, the modules, the vendored crypto, fonts, icons. */
 const SHELL = [
   './',
   './index.html',
@@ -51,10 +45,6 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
 ];
-
-/* Never served from cache: a stale manifest or image would reflash a device
- * with the previous firmware build. */
-const NEVER_CACHE = [/\/firmware_merged\.bin/, /\/esp-manifest\.json/];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -83,7 +73,6 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;      // nothing cross-origin, ever
-  if (NEVER_CACHE.some(re => re.test(url.pathname))) return;
 
   const isShell = SHELL.some(p => new URL(p, self.location).pathname === url.pathname);
 

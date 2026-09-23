@@ -1,16 +1,15 @@
-/* Printable recovery sheet: the oracle key on paper instead of in hardware.
+/* The paper oracle: the key k, printed as a QR square and a typable code.
  *
  * The sheet carries k itself. With k in hand the browser computes S = k*P
  * directly — there is no second party left to hide the input from, so no
- * blinding is needed, and the result is identical to what the hardware oracle
- * returns (the blinding cancels: r⁻¹·(k·(r·P)) = k·P). A sheet is therefore a
- * true backup of a device, not a separate mode with separate passwords.
+ * blinding is needed, and the result is identical to what an OPRF oracle
+ * holding the same k would return (the blinding cancels: r⁻¹·(k·(r·P)) = k·P).
  *
  * What it costs, stated plainly because the UI must not imply otherwise:
  * k enters this machine on every scan, and a photograph of the sheet is a
- * perfect clone. The hardware oracle exists precisely to prevent both. This is
- * the paper-key model (password + high-entropy key file), which is sound, but
- * it is weaker than the device against a compromised computer or a camera.
+ * perfect clone. This is the paper-key model (password + high-entropy key
+ * file), which is sound, but it is only as safe as the computer the sheet is
+ * scanned on and the drawer the sheet is kept in.
  *
  * k is NEVER written to storage — not localStorage, not sessionStorage, not a
  * cookie. It lives in one module-scoped variable, is wiped by an idle timer,
@@ -69,8 +68,8 @@ function checksum(k32) {
 }
 
 /* Short public identifier for a key: SHA-256(k*G) truncated. Printed on the
- * sheet in the clear so a sheet can be matched to a device — or to another
- * sheet — without scanning it, and so the app can refuse a sheet that is not
+ * sheet in the clear so one sheet can be matched to another without scanning
+ * it, and so the app can refuse a sheet that is not
  * the oracle this browser has pinned. Derived from the PUBLIC key only. */
 export function fingerprint(kScalar) {
   const Y = RistrettoPoint.BASE.multiply(kScalar).toRawBytes();
@@ -155,8 +154,8 @@ export function decodeRecovery(text) {
  * biased and partly observable; treated as a supplement it is a free
  * improvement, treated as a source it would be a downgrade.
  *
- * Reduction is over a full 64-byte digest, matching the firmware, never a
- * 32-byte reduce (biased by roughly 6%).
+ * Reduction is over a full 64-byte digest, never a 32-byte reduce (biased by
+ * roughly 6%).
  */
 const KEY_MIX_DST = 'vaultless-key-mix-v1';
 
