@@ -239,6 +239,7 @@ async function createSheet() {
    * If the previous one had been created but not yet printed, it was gone for
    * good — and there is no way to get it back, because nothing anywhere stores
    * it. Ask, and make keeping it the default answer. */
+  const replacing = sheetKey ? fingerprint(sheetKey) : null;
   if (sheetKey) {
     const ok = await confirmDialog({
       title: 'Replace the paper oracle you have loaded?',
@@ -264,12 +265,26 @@ async function createSheet() {
   $('sheetCode').textContent = code.slice(0, 5) + body;
   $('sheetFp').textContent = fp;
   $('sheetDate').textContent = new Date().toISOString().slice(0, 10);
-  $('sheetOutput').style.display = '';
+  /* A replacement used to land exactly where the old sheet was — same size,
+   * same place, no motion — so "Make a new one anyway" looked as if it had
+   * done nothing: the only difference on screen was eight characters of
+   * fingerprint. Hide the sheet for one frame so its whole reveal plays again
+   * (the new one visibly arrives), and mark the fingerprint that changed, which
+   * is the cue that still works with reduced motion. */
+  const out = $('sheetOutput');
+  out.style.display = 'none';
+  void out.offsetWidth;              // commit the hide, so showing it restarts the reveal
+  out.style.display = '';
+  const meta = out.querySelector('.sheet-meta');
+  meta.classList.toggle('fresh', !!replacing);
+  if (replacing) setTimeout(() => meta.classList.remove('fresh'), 4000);
   $('createSheetBtn').textContent = 'Create a different one';
 
   // Load it straight away so "print, then use it" works without rescanning.
   setKey(k);
-  toast(`Paper oracle created · ${fp} — print it now`);
+  toast(replacing
+    ? `Replaced ${replacing} with ${fp} — print the new one`
+    : `Paper oracle created · ${fp} — print it now`);
 }
 
 /* -------------------------------------------------------------- printing */

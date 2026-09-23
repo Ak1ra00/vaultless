@@ -931,6 +931,13 @@
   .printable .sheet-code{animation:sheetPart .5s ease 1.15s backwards;}
   .printable .sheet-note{animation:sheetPart .5s ease 1.3s backwards;}
   @keyframes sheetPart{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+  /* A replaced sheet marks the fingerprint that changed. Colour and a ring,
+     not motion — so it still says "this is a different one" with reduced
+     motion on, where the reveal above collapses to nothing. */
+  .sheet-meta.fresh #sheetFp{
+    color:#9a6410;box-shadow:0 0 0 2px rgba(224,166,64,.55);border-radius:3px;padding:0 4px;
+    transition:color .4s ease, box-shadow .4s ease;
+  }
 
   /* A printed sheet does not animate, and a print can fire mid-reveal. */
   @media print{
@@ -939,6 +946,7 @@
       animation:none !important;clip-path:none !important;opacity:1 !important;transform:none !important;
     }
     .qr-wrap::after{display:none !important;}
+    .sheet-meta.fresh #sheetFp{color:#000 !important;box-shadow:none !important;}
   }
 
 
@@ -959,6 +967,22 @@
     #viewHome > .hero p{margin:0;}
     #viewHome > .sheets{grid-column:2;grid-row:1;margin:0 0 28px;}
     .hero h2{font-size:clamp(32px,3.1vw,42px);}
+  }
+  /* Wide screens: the headline row is allowed out of the 1080px column and
+     into the side margins, and the sheet takes most of that room — it is the
+     thing worth looking at up here. --spill is how far the row reaches past
+     the column on each side: nothing at 1080, up to 220px on a big monitor,
+     and always 24px short of the viewport edge, so no scrollbar width can
+     push it into a horizontal scroll. */
+  @media (min-width:1200px){
+    #viewHome{
+      --spill:clamp(0px, calc((100vw - 1080px) / 2 - 24px), 220px);
+      grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);column-gap:44px;
+    }
+    #viewHome > .hero{margin-left:calc(var(--spill) * -.55);}
+    #viewHome > .sheets{margin-right:calc(var(--spill) * -1);}
+    .sheets-title{font-size:clamp(18px,1.5vw,23px);}
+    .sheets-note{font-size:11px;padding:15px 22px 17px;}
   }
 
   .sheets{
@@ -986,8 +1010,8 @@
   .sheets:hover,.sheets:focus-within{box-shadow:var(--shadow),0 0 44px rgba(43,217,201,.14);}
 
   .sheets-stage{position:relative;aspect-ratio:16/10.6;min-height:320px;overflow:hidden;border-radius:var(--r) var(--r) 0 0;}
-  #sheetCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;outline:none;}
-  #sheetCanvas:focus-visible{box-shadow:inset 0 0 0 2px var(--neon);}
+  #sceneCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;outline:none;}
+  #sceneCanvas:focus-visible{box-shadow:inset 0 0 0 2px var(--neon);}
 
   .sheets-head{position:absolute;left:20px;top:16px;max-width:calc(100% - 230px);pointer-events:none;}
   .sheets-title{

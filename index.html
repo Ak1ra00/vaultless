@@ -145,7 +145,10 @@
          loaded on its own and touches nothing the passwords depend on. -->
     <figure class="sheets" id="sheets" data-start="torus" aria-labelledby="sheetTitle">
       <div class="sheets-stage">
-        <canvas id="sheetCanvas" tabindex="0" aria-describedby="sheetNoteBody"
+        <!-- NOT "sheetCanvas": that id belongs to the scanner's hidden decode
+             canvas further down, and getElementById returns the first match —
+             so sharing it had the scanner painting camera frames into this. -->
+        <canvas id="sceneCanvas" tabindex="0" aria-describedby="sheetNoteBody"
                 aria-label="Interactive diagram. Drag, or use the arrow keys, to explore it."></canvas>
         <div class="sheets-head">
           <h3 class="sheets-title" id="sheetTitle">E(ℂ) ≅ ℂ/Λ</h3>

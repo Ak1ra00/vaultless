@@ -778,7 +778,7 @@ function torus() {
 /* ======================================================= the viewer */
 
 function initSheets() {
-  const fig = $('sheets'), c = $('sheetCanvas');
+  const fig = $('sheets'), c = $('sceneCanvas');
   if (!fig || !c || !c.getContext) return;
   const ctx = c.getContext('2d');
   const scenes = { group: groupLaw(), field: finiteField(), torus: torus() };
