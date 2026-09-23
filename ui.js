@@ -424,9 +424,6 @@ function maskCentres() {
 function deliver() {
   cancelFlight();
   const from = slotCentres();
-  // Bring the card to where it will be seen, behind the veil, before anything
-  // moves — so the characters fly to where the card actually is.
-  jumpTo($('resultCard'));
   const flies = !reduceMotion && typeof document.body.animate === 'function';
   const pw = $('pwOut');
   /* The flight is this password's entrance, so the card's own entrance (the
@@ -434,8 +431,14 @@ function deliver() {
    * underneath and slide the dots away from where the characters land. Hide
    * first — `awaiting` switches transitions off — and only then drop the bloom,
    * or its removal starts a letter-spacing transition and the positions
-   * measured below are where the dots start, not where they settle. */
+   * measured below are where the dots start, not where they settle. Both happen
+   * before the card is centred: mid-bloom the dots can wrap to a second line on
+   * a phone, and centring a card that is about to lose a line lands half a line
+   * off. */
   if (flies) { pw.classList.add('awaiting'); pw.classList.remove('reveal'); }
+  // Bring the card to where it will be seen, behind the veil, before anything
+  // moves — so the characters fly to where the card actually is.
+  jumpTo($('resultCard'));
   const to = maskCentres();
   if (!flies || !from || !to || from.length !== to.length) {
     pw.classList.remove('awaiting');
