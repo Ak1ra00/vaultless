@@ -459,39 +459,6 @@
       <p class="help expert-only">Derive against the hardware oracle over WebSerial, or the in-browser
         simulator (ephemeral session key, not pinned).</p>
 
-      <!-- The handshake, shown with the actual bytes. Decorative to assistive
-           tech: #vizLabel carries the same story as live text. -->
-      <div class="stage" id="viz">
-        <div class="stage-rail" aria-hidden="true">
-          <div class="party" id="partyYou">
-            <span class="party-box"><span class="party-glyph">r</span></span>
-            <span class="party-name">you hold r</span>
-          </div>
-
-          <div class="channel" id="channel">
-            <span class="channel-line"></span>
-            <span class="channel-pulse"></span>
-            <span class="packet" id="packetOut"><i></i><i></i><i></i></span>
-            <span class="packet" id="packetIn"><i></i><i></i><i></i></span>
-          </div>
-
-          <div class="party" id="partyOracle">
-            <span class="party-box seal">
-              <span class="seal-ring"></span>
-              <span class="seal-ring two"></span>
-              <span class="party-glyph">k</span>
-            </span>
-            <span class="party-name">it holds k</span>
-          </div>
-        </div>
-
-        <div class="readout" id="readout" aria-hidden="true">
-          <span class="readout-tag" id="vizTag">P</span>
-          <span class="readout-hex" id="vizHex"></span>
-        </div>
-        <p class="viz-label" id="vizLabel" aria-live="polite"></p>
-      </div>
-
       <div class="actions">
         <button class="btn primary" id="deriveBtn">Make my password</button>
         <button class="btn" id="simBtn">Try the demo</button>
@@ -663,6 +630,40 @@ pio run -e esp32dev -t upload</pre>
   </div>
 </div>
 
+<!-- The handshake, as a pop-up over the page.
+     Opened by ui.js for the length of one derivation. Everything here is a
+     picture of what app.js is doing, driven by the stage it reports — the
+     values in the readout are the real ones, but only the two that are SAFE to
+     show: B and B', the blinded pair that crosses the wire. P and S never reach
+     the screen (see ui.js). The canvas is drawn by handshake.js, a separate
+     module that reads the stage, the oracle path, the password's length and
+     this readout — nothing secret is ever put where it could read it. -->
+<div class="hs-pop" id="hsPop" hidden>
+  <div class="hs-veil" aria-hidden="true"></div>
+  <div class="hs-panel" id="viz" role="dialog" aria-modal="true"
+       aria-labelledby="hsTitle" aria-describedby="vizLabel" tabindex="-1">
+    <span class="hs-corner tl" aria-hidden="true"></span><span class="hs-corner tr" aria-hidden="true"></span>
+    <span class="hs-corner bl" aria-hidden="true"></span><span class="hs-corner br" aria-hidden="true"></span>
+    <div class="hs-head">
+      <div class="hs-titles">
+        <span class="hs-eyebrow">OPRF · ristretto255 · <b id="hsWho">oracle</b></span>
+        <h2 class="hs-title" id="hsTitle">Making your password</h2>
+      </div>
+      <button type="button" class="hs-skip" id="hsSkip">Skip</button>
+    </div>
+    <ol class="hs-steps" id="hsSteps" aria-hidden="true"></ol>
+    <div class="hs-stage">
+      <canvas id="hsCanvas" aria-hidden="true"></canvas>
+      <span class="hs-note" aria-hidden="true">illustration · a 197-point group on y² = x³ − 3x + 5 over ℝ</span>
+    </div>
+    <div class="readout" id="readout" aria-hidden="true">
+      <span class="readout-tag" id="vizTag"></span>
+      <span class="readout-hex" id="vizHex"></span>
+    </div>
+    <p class="viz-label" id="vizLabel" aria-live="polite"></p>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- One dialog, reused for asking and confirming. No <form method="dialog">:
@@ -680,5 +681,7 @@ pio run -e esp32dev -t upload</pre>
 <!-- Separate on purpose: a separate module graph, so nothing the scenes do —
      including failing — can reach the code that makes passwords. -->
 <script type="module" src="scene.js"></script>
+<!-- The handshake pop-up's drawing, walled off the same way. -->
+<script type="module" src="handshake.js"></script>
 </body>
 </html>

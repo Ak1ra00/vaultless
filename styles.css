@@ -275,109 +275,108 @@
   @keyframes popin{from{opacity:0;transform:translateY(10px) scale(.96);}to{opacity:1;transform:none;}}
   .pw.reveal{animation:popin .45s cubic-bezier(.2,.9,.3,1.2);}
 
-  /* handshake stage --------------------------------------------------- */
-  /* Colour carries meaning here, and only meaning — the same three the
-     Oracle theme assigns: cyan is a value in the clear on your machine,
-     violet is one that has been disguised and is safe to hand over, and
-     amber is k, the scalar the oracle keeps and never sends. The readout
-     changes colour as the value changes hands, so the stage you are looking
-     at is legible before you read a word of it. */
-  .stage{
-    height:0;overflow:hidden;opacity:0;
-    transition:height .55s cubic-bezier(.2,.8,.2,1), opacity .45s ease;
-  }
-  .stage.on{height:228px;opacity:1;}
+  /* handshake pop-up --------------------------------------------------- */
+  /* One derivation, played out over the page. Colour carries meaning here, and
+     only meaning — the three the Oracle theme assigns: cyan is a value in the
+     clear on your machine, violet is one that has been disguised and is safe to
+     hand over, and amber is k, the scalar the oracle keeps and never sends. The
+     canvas (handshake.js) and the readout below it use the same mapping.
 
-  .stage-rail{display:flex;align-items:center;justify-content:center;height:104px;}
-  .party{display:flex;flex-direction:column;align-items:center;gap:10px;flex:none;width:112px;}
-  .party-box{
-    width:64px;height:64px;border-radius:var(--r-sm);display:grid;place-items:center;position:relative;
-    background:linear-gradient(158deg,var(--bg-3),var(--bg-1));
-    border:1.5px solid var(--line-bright);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
-    transition:border-color .55s ease, box-shadow .55s ease, transform .55s cubic-bezier(.2,.9,.3,1.2);
+     z-index 40: over the page, under the toast (50), so a first-use notice is
+     still read; the pin dialog is a modal <dialog> and sits above both. */
+  .hs-pop{
+    position:fixed;inset:0;z-index:40;display:grid;place-items:center;
+    padding:max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+    overscroll-behavior:contain;
   }
-  .party-glyph{
-    font-family:var(--mono);font-size:25px;font-weight:600;color:var(--ink-2);
-    transition:color .55s ease, text-shadow .55s ease;
+  .hs-pop[hidden]{display:none;}
+  .hs-veil{
+    position:absolute;inset:0;opacity:0;transition:opacity .45s ease;
+    background:radial-gradient(ellipse 70% 60% at 50% 45%, rgba(10,16,20,.72), rgba(0,0,0,.9));
+    -webkit-backdrop-filter:blur(8px) saturate(1.15);backdrop-filter:blur(8px) saturate(1.15);
   }
-  /* Deliberately NOT uppercased: these name the actual scalars, and "YOU HOLD R"
-     severs the tie to the lowercase r sitting in the box above it. */
-  .party-name{
-    font-family:var(--mono);font-size:11px;letter-spacing:.09em;
-    color:var(--ink-2);transition:color .55s ease;white-space:nowrap;
-  }
-  .party{perspective:560px;}
-  .party.hot .party-box{
-    border-color:var(--cyan);transform:translateY(-4px) translateZ(30px) rotateX(12deg);
-    box-shadow:0 0 34px rgba(43,217,201,.34), inset 0 1px 0 rgba(255,255,255,.09);
-  }
-  .party.hot .party-glyph{color:var(--cyan-hot);text-shadow:0 0 18px rgba(43,217,201,.7);}
-  /* The right-hand box is the oracle, and what it holds is k. */
-  #partyOracle.hot .party-glyph{color:var(--amber);text-shadow:0 0 18px rgba(224,166,64,.6);}
-  #partyOracle.hot .party-box{border-color:rgba(224,166,64,.6);box-shadow:0 0 26px rgba(224,166,64,.18);}
-  .party.hot .party-name{color:var(--ink-1);}
+  .hs-pop.on .hs-veil{opacity:1;}
+  .hs-pop.leaving .hs-veil{opacity:0;transition-duration:.38s;}
 
-  /* the oracle's seal — rings that break outward each time it stamps */
-  .seal-ring{
-    position:absolute;inset:-5px;border-radius:23px;border:1.5px solid var(--cyan);
-    opacity:0;pointer-events:none;
+  .hs-panel{
+    position:relative;width:min(900px,100%);overflow:auto;
+    max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);
+    padding:18px 20px 16px;border-radius:10px;
+    background:
+      var(--grid),
+      linear-gradient(180deg, rgba(18,27,33,.97), rgba(5,8,10,.98));
+    border:1px solid rgba(43,217,201,.32);
+    box-shadow:0 40px 140px rgba(0,0,0,.75), 0 0 0 1px rgba(185,138,255,.1),
+               0 0 70px rgba(43,217,201,.14), inset 0 1px 0 rgba(255,255,255,.05);
+    opacity:0;transform:translateY(22px) scale(.93);
+    transition:opacity .38s ease, transform .6s cubic-bezier(.2,.9,.25,1.12);
   }
-  #viz[data-stage="stamping"] .seal-ring{animation:sealPulse 2.1s ease-out infinite;border-color:rgba(224,166,64,.55);}
-  #viz[data-stage="stamping"] .seal-ring.two{animation-delay:1.05s;}
-  @keyframes sealPulse{
-    0%{opacity:.9;transform:scale(.82);}
-    70%{opacity:.18;}
-    100%{opacity:0;transform:scale(1.45);}
-  }
+  .hs-pop.on .hs-panel{opacity:1;transform:none;}
+  .hs-pop.leaving .hs-panel{opacity:0;transform:translateY(-10px) scale(.97);
+    transition:opacity .34s ease, transform .4s ease;}
+  .hs-panel:focus{outline:none;}
+  .hs-panel:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;}
 
-  /* the channel between the two parties */
-  .channel{flex:1;max-width:232px;min-width:70px;height:64px;position:relative;}
-  .channel-line,.channel-pulse{
-    position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;border-radius:2px;
+  /* It powers on: a scan line sweeps the panel once as it arrives. */
+  .hs-panel::before{
+    content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:2;
+    background:linear-gradient(180deg,transparent,rgba(127,242,230,.13) 50%,transparent) no-repeat;
+    background-size:100% 26%;background-position:0 -40%;
   }
-  .channel-line{
-    background:linear-gradient(90deg,transparent,var(--line-bright) 14%,
-               var(--line-bright) 86%,transparent);
-  }
-  .channel-pulse{
-    background:linear-gradient(90deg,transparent,var(--cyan),transparent);
-    opacity:0;transition:opacity .45s ease;
-  }
-  #viz[data-stage="sending"] .channel-pulse,
-  #viz[data-stage="returning"] .channel-pulse{opacity:.55;animation:channelGlow 2.2s ease-in-out infinite;}
-  @keyframes channelGlow{0%,100%{opacity:.2;}50%{opacity:.7;}}
+  .hs-pop.on .hs-panel::before{animation:hsScan 1.15s cubic-bezier(.35,.55,.3,1) .12s both;}
+  @keyframes hsScan{from{background-position:0 -40%;}to{background-position:0 150%;}}
 
-  .packet{
-    position:absolute;top:50%;margin-top:-6px;display:flex;gap:3px;opacity:0;pointer-events:none;
-  }
-  .packet i{
-    width:7px;height:12px;border-radius:2px;background:var(--cyan);
-    box-shadow:0 0 14px rgba(43,217,201,.85);
-  }
-  /* Outbound is violet: by then the point is blinded, and the colour is the
-     whole point — that is the thing the oracle is allowed to see. */
-  #packetOut i{background:var(--violet);box-shadow:0 0 14px rgba(185,138,255,.85);}
-  #packetOut i:nth-child(2){animation-delay:.06s;}
-  #packetOut i:nth-child(3){animation-delay:.12s;}
-  #viz[data-stage="sending"] #packetOut{animation:flyOut 1.05s cubic-bezier(.4,0,.5,1) forwards;}
-  #viz[data-stage="returning"] #packetIn{animation:flyIn 1.05s cubic-bezier(.4,0,.5,1) forwards;}
-  @keyframes flyOut{
-    0%{left:0;opacity:0;transform:scale(.6);}
-    14%{opacity:1;transform:scale(1);}
-    50%{transform:translateY(-15px) scale(1.18);}
-    86%{opacity:1;transform:scale(1);}
-    100%{left:calc(100% - 29px);opacity:0;transform:scale(.6);}
-  }
-  @keyframes flyIn{
-    0%{left:calc(100% - 29px);opacity:0;transform:scale(.6);}
-    14%{opacity:1;transform:scale(1);}
-    50%{transform:translateY(15px) scale(1.18);}
-    86%{opacity:1;transform:scale(1);}
-    100%{left:0;opacity:0;transform:scale(.6);}
-  }
+  /* HUD corners, which lock on as it opens. */
+  .hs-corner{position:absolute;width:20px;height:20px;border:0 solid var(--cyan-hot);pointer-events:none;
+    filter:drop-shadow(0 0 6px rgba(43,217,201,.7));}
+  .hs-corner.tl{top:-1px;left:-1px;border-top-width:2px;border-left-width:2px;border-top-left-radius:10px;}
+  .hs-corner.tr{top:-1px;right:-1px;border-top-width:2px;border-right-width:2px;border-top-right-radius:10px;}
+  .hs-corner.bl{bottom:-1px;left:-1px;border-bottom-width:2px;border-left-width:2px;border-bottom-left-radius:10px;}
+  .hs-corner.br{bottom:-1px;right:-1px;border-bottom-width:2px;border-right-width:2px;border-bottom-right-radius:10px;}
+  .hs-pop.on .hs-corner{animation:hsLock .7s cubic-bezier(.2,.9,.3,1.25) .08s both;}
+  @keyframes hsLock{from{opacity:0;transform:scale(2.2);}to{opacity:1;transform:none;}}
 
-  /* the actual bytes */
+  .hs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+  .hs-eyebrow{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--ink-2);}
+  .hs-eyebrow b{color:var(--amber);font-weight:600;}
+  .hs-title{font-size:22px;margin-top:5px;color:var(--ink-0);transition:color .5s ease, text-shadow .5s ease;}
+  #viz[data-stage="done"] .hs-title{color:var(--cyan-hot);text-shadow:0 0 24px rgba(43,217,201,.5);}
+  .hs-skip{
+    flex:none;font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-1);background:rgba(10,16,20,.6);border:1px solid var(--line-bright);
+    border-radius:5px;padding:8px 13px;cursor:pointer;
+    transition:border-color .25s ease, color .25s ease, box-shadow .25s ease;
+  }
+  .hs-skip:hover{border-color:var(--cyan);color:var(--cyan-hot);box-shadow:0 0 18px rgba(43,217,201,.25);}
+  .hs-skip:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+
+  /* The protocol as a progress rail. */
+  .hs-steps{
+    list-style:none;margin:14px 0 12px;padding:0;counter-reset:hs;
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px;
+  }
+  .hs-steps li{
+    counter-increment:hs;font-family:var(--mono);font-size:10px;letter-spacing:.04em;
+    color:var(--ink-2);padding:7px 4px 0;border-top:2px solid var(--line);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    transition:color .45s ease, border-color .45s ease, text-shadow .45s ease;
+  }
+  .hs-steps li::before{content:counter(hs, decimal-leading-zero) ' ';opacity:.55;}
+  .hs-steps li.done{color:var(--ink-1);border-top-color:var(--cyan-dim);}
+  .hs-steps li.now{color:var(--cyan-hot);border-top-color:var(--cyan);text-shadow:0 0 12px rgba(43,217,201,.55);}
+  #viz[data-stage="stamping"] .hs-steps li.now{color:var(--amber);border-top-color:var(--amber);
+    text-shadow:0 0 12px rgba(224,166,64,.5);}
+
+  .hs-stage{
+    position:relative;height:clamp(250px, 46vh, 420px);border:1px solid var(--line);border-radius:6px;
+    overflow:hidden;
+    background:radial-gradient(ellipse 60% 55% at 50% 42%, rgba(43,217,201,.07), transparent 70%), var(--bg-0);
+  }
+  #hsCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .hs-note{position:absolute;right:10px;bottom:6px;font-family:var(--mono);font-size:9px;
+    color:var(--ink-2);opacity:.7;letter-spacing:.03em;pointer-events:none;}
+
   .readout{
     display:flex;align-items:flex-start;gap:12px;margin-top:12px;padding:12px 14px;
     background:var(--bg-0);border:1px solid var(--line);border-radius:var(--r-sm);
@@ -399,7 +398,7 @@
   #viz[data-stage="returning"] .readout-tag{
     color:var(--violet);border-color:rgba(185,138,255,.45);background:rgba(185,138,255,.1);
   }
-  /* k · B — the one stage where the oracle's own scalar is doing the work. */
+  /* k at work — the one stage where the oracle's own scalar is doing anything */
   #viz[data-stage="stamping"] .readout-tag{
     color:var(--amber);border-color:rgba(224,166,64,.45);background:rgba(224,166,64,.1);
   }
@@ -407,29 +406,39 @@
   #viz[data-stage="sending"] .readout-hex,
   #viz[data-stage="returning"] .readout-hex{color:var(--violet);}
   #viz[data-stage="stamping"] .readout-hex{color:var(--ink-2);}
-  /* the shared secret */
+  /* the values kept off screen read as a note, not as a value */
+  #viz[data-stage="local"] .readout-hex,
+  #viz[data-stage="unblinding"] .readout-hex{color:var(--ink-2);word-break:normal;letter-spacing:.02em;}
+  /* the shared secret, and what it becomes */
   #viz[data-stage="unblinding"] .readout-tag,
   #viz[data-stage="done"] .readout-tag{
     color:var(--green);border-color:rgba(43,217,201,.45);background:rgba(43,217,201,.1);
   }
-  #viz[data-stage="unblinding"] .readout-hex,
-  #viz[data-stage="done"] .readout-hex{color:var(--cyan-hot);}
+  #viz[data-stage="done"] .readout-hex{color:var(--cyan-hot);word-break:normal;letter-spacing:.02em;}
 
   .viz-label{
     text-align:center;font-family:var(--mono);font-size:12.5px;color:var(--cyan);
     margin:12px 0 0;min-height:18px;letter-spacing:.02em;
   }
-  /* Only the stage is animated open; the caption is a live region and must stay
-     in the accessibility tree, so it is never display:none. */
-  .stage:not(.on) .viz-label{opacity:0;}
-  .viz-label{transition:opacity .4s ease;}
+
+  /* where the pop-up hands over */
+  .result.landed{animation:landed 1.7s cubic-bezier(.2,.8,.3,1) 1;}
+  @keyframes landed{
+    0%{box-shadow:0 0 0 0 rgba(43,217,201,.6), 0 0 60px rgba(43,217,201,.35);}
+    100%{box-shadow:0 0 0 26px rgba(43,217,201,0), 0 0 44px rgba(43,217,201,.1);}
+  }
 
   @media(max-width:560px){
-    .stage.on{height:268px;}
-    .party{width:84px;}
-    .party-box{width:54px;height:54px;border-radius:var(--r-sm);}
-    .readout{flex-direction:column;gap:8px;}
+    .hs-panel{padding:14px 12px 12px;}
+    .hs-title{font-size:18px;}
+    .hs-eyebrow{font-size:9.5px;letter-spacing:.12em;}
+    .hs-steps{grid-template-columns:repeat(4,1fr);gap:3px;margin:12px 0 10px;}
+    .hs-steps li{font-size:9px;padding-top:5px;}
+    .hs-stage{height:clamp(230px, 42vh, 330px);}
+    .hs-note{display:none;}
+    .readout{flex-direction:column;gap:8px;padding:10px 12px;}
     .readout-tag{min-width:0;align-self:flex-start;}
+    .readout-hex{font-size:11px;}
   }
 
   /* trace / expert ---------------------------------------------------- */
@@ -1105,19 +1114,14 @@
   }
   .q-btn.tilt-on::after{opacity:1;}
 
-  /* k turns over while it works — the one stage where the oracle's scalar is
-     doing anything. */
-  #viz[data-stage="stamping"] #partyOracle .party-glyph{display:inline-block;animation:kTurn 1.5s cubic-bezier(.5,0,.3,1) infinite;}
-  @keyframes kTurn{0%{transform:rotateY(0);}55%,100%{transform:rotateY(360deg);}}
 
   @media print{
     body{background:#fff;}
     #field,.aurora,.toast,.sheets{display:none !important;}
     /* A password on paper is the one thing this project exists to avoid, so an
        accidental Ctrl+P never carries one — with or without the class below. */
-    /* #viz carries the live derivation values, S included — an OPRF output on
-       paper is the same mistake as a password on paper. */
-    #resultCard,#passphrase,#sheetManual,#trace,#viz{display:none !important;}
+    /* The handshake pop-up is live derivation state, and never belongs on paper. */
+    #resultCard,#passphrase,#sheetManual,#trace,.hs-pop{display:none !important;}
     /* sheet.js lifts #printable to the top of <body> and sets this class, so
        there is no app left in the flow to paginate into blank pages. */
     body.printing-sheet > *{display:none;}

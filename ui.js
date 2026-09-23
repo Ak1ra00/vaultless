@@ -162,14 +162,28 @@ function initAccountNumber() {
 }
 
 /* ------------------------------------------------------- handshake viz */
-/* The signature element: the OPRF round trip, played out with the real bytes.
+/* The signature element: the OPRF round trip, played out as it happens.
  *
- * The old version was two emoji and a dot sliding along a wire — which said
- * "something is happening" and nothing else. The whole claim of this project is
- * that your phrase is DISGUISED before the oracle sees it and undisguised
- * afterwards, and that is a thing you can actually watch happen if the values
- * are on screen: P settles, churns into B, travels, comes back changed, and
- * resolves to S. Same bytes the trace logs, same bytes the maths uses.
+ * It opens as a pop-up over the page for the length of one derivation, because
+ * the button that starts it sits at the bottom of a long form and anything drawn
+ * inline played to nobody on a phone. The drawing itself — the curve, the walks
+ * across the group, the packets on the wire — is handshake.js, a separate
+ * module that reads the stage set here and nothing else. This file owns the
+ * pop-up, its words, and the pacing.
+ *
+ * What it shows, and what it deliberately does not:
+ *
+ *   B and B' are shown in full. They are the blinded pair — the only values that
+ *   ever leave this machine, and exactly what the oracle and anyone on the wire
+ *   see anyway. Showing them is the point: this is all there is to see.
+ *
+ *   P and S are NOT shown. The previous panel put both on screen in full, and
+ *   neither is harmless. P = H(phrase ‖ account) is a check value for the
+ *   phrase: anyone holding a screenshot of it can test guesses at the phrase
+ *   offline, without the oracle — the one attack the oracle exists to stop. S is
+ *   one public hash away from the password, which is masked until you ask for
+ *   it; printing S next to the mask undid the mask. The trace never logged
+ *   either; the animation should not have either.
  *
  * Every duration is a multiple of BEAT, so the whole choreography retimes from
  * one number. app.js paces the awaits between stages to match. */
@@ -178,19 +192,27 @@ export const BEAT = 900;
 /* Reduced motion is not a request to skip the explanation.
  *
  * `prefers-reduced-motion` asks for no MOVEMENT — no churning glyphs, no text
- * settling character by character, no rain. Every one of those goes, and they
- * should. But this panel used to answer it by collapsing the whole handshake
- * to nothing: measured end to end, the four stages went past in 84ms, so the
- * one thing on the page that shows the protocol happening showed nothing at
- * all, and the password simply appeared. That is the opposite of an
- * accommodation — it removed the explanation for the people most likely to be
- * reading it rather than watching it.
+ * settling character by character. Every one of those goes, and they should.
+ * But this panel once answered it by collapsing the whole handshake to 84ms, so
+ * the one thing on the page that shows the protocol happening showed nothing.
+ * So the effects go and the PACING stays: each stage still holds long enough to
+ * be read, a little brisker because there is no animation to wait out.
  *
- * So the effects go and the PACING stays. Each stage still holds long enough
- * to be read, a little brisker than the full choreography because there is no
- * animation to wait out — only text to take in. */
+ * Skip is the other way out, and it is total: pending waits resolve at once and
+ * later ones do not wait at all, so the password arrives as fast as the maths
+ * allows. The waits are presentation only — nothing in the derivation depends
+ * on them. */
 const DWELL = reduceMotion ? 0.55 : 1;
-const dwell = (ms) => new Promise(r => setTimeout(r, ms * DWELL));
+let skipped = false;
+const waiting = new Set();
+function dwell(ms) {
+  if (skipped) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); waiting.delete(done); resolve(); };
+    const timer = setTimeout(done, ms * DWELL);
+    waiting.add(done);
+  });
+}
 
 const HEXCHARS = '0123456789abcdef';
 const HEX_LEN = 64;
@@ -200,22 +222,26 @@ let scrambleRaf = null;
 /* Settle text left-to-right out of churning hex.
  *
  * Unsettled characters keep rolling, so the readout reads as a value being
- * computed rather than a string being typed. Resolves when it has landed. */
-function settleHex(el, target, ms) {
+ * computed rather than a string being typed. Resolves when it has landed. Hex
+ * is padded to its full 64 so the line does not jump; prose is left as it is. */
+function settleText(el, target, ms, { hex = true } = {}) {
   cancelAnimationFrame(scrambleRaf);
-  const text = String(target || '').slice(0, HEX_LEN).padEnd(HEX_LEN, '·');
+  const text = hex ? String(target || '').slice(0, HEX_LEN).padEnd(HEX_LEN, '·') : String(target);
   // No settle, but the value still has to stay put long enough to be read.
-  if (reduceMotion) { el.textContent = text; return dwell(ms); }
+  if (reduceMotion || skipped) { el.textContent = text; return dwell(ms); }
 
   return new Promise((resolve) => {
     const t0 = performance.now();
     const step = (now) => {
-      const p = Math.min(1, (now - t0) / ms);
+      /* Clamped below as well as above: the first frame's timestamp can come
+       * before t0, and a negative p made `landed` negative — slice(0, -8) plus
+       * a churn loop from -8 wrote a string nearly twice the value's length. */
+      const p = skipped ? 1 : Math.max(0, Math.min(1, (now - t0) / ms));
       // Ease the settle front so the last characters land unhurriedly.
       const landed = Math.floor(text.length * (1 - Math.pow(1 - p, 2.2)));
       let out = text.slice(0, landed);
       for (let i = landed; i < text.length; i++) {
-        out += HEXCHARS[(Math.random() * 16) | 0];
+        out += text[i] === ' ' ? ' ' : HEXCHARS[(Math.random() * 16) | 0];
       }
       el.textContent = out;
       if (p < 1) { scrambleRaf = requestAnimationFrame(step); }
@@ -230,79 +256,179 @@ function settleHex(el, target, ms) {
 function churnHex(el, ms) {
   cancelAnimationFrame(scrambleRaf);
   /* Still says "not known yet", without moving to say it. Leaving the previous
-   * stage's value on screen under a `k · B` tag would label P as something it
+   * stage's value on screen under a `k · B` tag would label B as something it
    * is not. */
-  if (reduceMotion) { el.textContent = '·'.repeat(HEX_LEN); return Promise.resolve(); }
+  if (reduceMotion || skipped) { el.textContent = '·'.repeat(HEX_LEN); return Promise.resolve(); }
   return new Promise((resolve) => {
     const t0 = performance.now();
     const step = (now) => {
       let out = '';
       for (let i = 0; i < HEX_LEN; i++) out += HEXCHARS[(Math.random() * 16) | 0];
       el.textContent = out;
-      if (now - t0 < ms) scrambleRaf = requestAnimationFrame(step);
+      if (now - t0 < ms && !skipped) scrambleRaf = requestAnimationFrame(step);
       else resolve();
     };
     scrambleRaf = requestAnimationFrame(step);
   });
 }
 
-/* Which party is doing the work at each stage. Drives the lift-and-glow, so
- * attention follows the value rather than sitting on both boxes at once. */
-const HOT_AT = {
-  local: ['partyYou'], blinding: ['partyYou'], sending: [],
-  stamping: ['partyOracle'], returning: ['partyOracle'],
-  unblinding: ['partyYou'], done: ['partyYou'],
+/* What stands in for the two values that are never put on screen. */
+const HIDDEN_P = 'kept off screen · P alone would let anyone test guesses at your phrase';
+const HIDDEN_S = 'kept off screen · S is one hash away from your password';
+
+/* Which oracle this run is using. app.js writes the result card's source line
+ * before the first stage, so it is read from there rather than passed in —
+ * app.js stays exactly as it was. The paper path has no second party: no
+ * blinding, no wire, no proof, and the pop-up must not pretend otherwise. */
+let path = 'device';
+function readPath() {
+  const src = ($('resSource')?.textContent || '').toLowerCase();
+  return src.includes('paper') ? 'paper' : src.includes('demo') ? 'demo' : 'device';
+}
+const relay = () => path !== 'paper';
+
+const STEPS = {
+  relay: ['hash', 'blind r', 'send B', 'stamp k', "return B'", 'verify π', 'unblind', 'HKDF'],
+  paper: ['hash', 'k·P, here', 'S = k·P', 'HKDF'],
 };
+const STEP_AT = {
+  relay: { local: 0, blinding: 1, sending: 2, stamping: 3, returning: 4, unblinding: 6, done: 7 },
+  paper: { local: 0, stamping: 1, unblinding: 2, done: 3 },
+};
+
+function buildSteps() {
+  const list = $('hsSteps');
+  list.replaceChildren();
+  for (const text of STEPS[relay() ? 'relay' : 'paper']) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    list.appendChild(li);
+  }
+}
 
 function stage(name) {
   const v = $('viz');
   v.dataset.stage = name || '';
-  const hot = HOT_AT[name] || [];
-  for (const id of ['partyYou', 'partyOracle']) {
-    $(id).classList.toggle('hot', hot.includes(id));
-  }
+  const at = STEP_AT[relay() ? 'relay' : 'paper'][name];
+  [...$('hsSteps').children].forEach((li, i) => {
+    li.classList.toggle('done', at !== undefined && (i < at || name === 'done'));
+    li.classList.toggle('now', i === at && name !== 'done');
+  });
 }
 
-function setReadout(tag, hex, { churn = false, ms = BEAT * 0.8 } = {}) {
+function setReadout(tag, value, { churn = false, hex = true, ms = BEAT * 0.8 } = {}) {
   $('vizTag').textContent = tag;
   const el = $('vizHex');
-  return churn ? churnHex(el, ms) : settleHex(el, hex, ms);
+  return churn ? churnHex(el, ms) : settleText(el, value, ms, { hex });
 }
 
-export function vizReset() {
+/* ------------------------------------------------------- the pop-up */
+let popOpen = false;
+let lastFocus = null;
+let hideTimer = null;
+let doneTimer = null;
+
+function openPop() {
+  const pop = $('hsPop');
+  clearTimeout(hideTimer);
+  pop.hidden = false;
+  pop.classList.remove('leaving');
+  void pop.offsetWidth;               // commit the closed state, so opening animates
+  pop.classList.add('on');
+  $('viz').classList.add('on');
+  // Everything behind it is out of reach while it is up — including to Tab and
+  // to a screen reader. The toast and the pin dialog live outside .wrap, so a
+  // first-use notice or a key-mismatch question still gets through.
+  document.querySelector('.wrap').inert = true;
+  if (!popOpen) lastFocus = document.activeElement;
+  popOpen = true;
+  $('viz').focus({ preventScroll: true });
+}
+
+function closePop({ toResult = false } = {}) {
+  clearTimeout(doneTimer);
+  if (!popOpen) return;
+  popOpen = false;
+  const pop = $('hsPop');
+  $('viz').classList.remove('on');
+  pop.classList.remove('on');
+  pop.classList.add('leaving');
+  document.querySelector('.wrap').inert = false;
+  hideTimer = setTimeout(() => {
+    pop.hidden = true;
+    pop.classList.remove('leaving');
+  }, reduceMotion ? 0 : 420);
+  if (toResult) landOnResult();
+  else if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
+}
+
+/* Hand over to the result card: it is where the password now is, and after a
+ * pop-up the page underneath may be anywhere. */
+function landOnResult() {
+  const card = $('resultCard');
+  card.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+  card.classList.remove('landed');
+  void card.offsetWidth;
+  card.classList.add('landed');
+  const btn = $('revealBtn');
+  if (!btn.disabled) btn.focus({ preventScroll: true });
+}
+
+function skip() {
+  if (!popOpen) return;
+  skipped = true;
+  /* Not cancelAnimationFrame: app.js is awaiting whichever readout is settling,
+   * and a cancelled frame is a promise that never resolves. The loops see
+   * `skipped` on their next frame and finish themselves. */
+  for (const done of [...waiting]) done();
+  closePop({ toResult: $('viz').dataset.stage === 'done' });
+}
+
+function initHandshakePop() {
+  $('hsSkip').onclick = skip;
+  $('viz').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); skip(); }
+  });
+}
+
+/* Empties the stage without touching whether the pop-up is open. */
+function clearStage() {
   cancelAnimationFrame(scrambleRaf);
+  clearTimeout(doneTimer);
   const v = $('viz');
-  v.classList.remove('on');
   delete v.dataset.stage;
+  delete v.dataset.len;
   $('vizLabel').textContent = '';
   $('vizHex').textContent = '';
   $('vizTag').textContent = '';
-  for (const id of ['partyYou', 'partyOracle']) $(id).classList.remove('hot');
   document.body.classList.remove('handshaking');
 }
 
-/* Opens the stage and shows the point the phrase hashed to. */
-export function vizStart(label, hex) {
-  vizReset();
-  $('viz').classList.add('on');
+export function vizReset() {
+  clearStage();
+  closePop();
+}
+
+/* Opens the pop-up on the point the phrase hashed to. */
+export function vizStart(label /* , hex — P, deliberately not shown */) {
+  clearStage();
+  skipped = false;
+  path = readPath();
+  const v = $('viz');
+  v.dataset.path = path;
+  v.dataset.beat = String(BEAT * DWELL);
+  $('hsWho').textContent =
+    path === 'paper' ? 'paper oracle' : path === 'demo' ? 'demo key' : 'your oracle';
+  $('hsTitle').textContent = path === 'demo' ? 'Making a demo password' : 'Making your password';
+  $('hsSkip').textContent = 'Skip';
+  buildSteps();
+  openPop();
   $('vizLabel').textContent = label;
   // The backdrop answers the handshake: the group ring behind the page speeds
   // up while the oracle works, so the whole page is visibly doing the thing.
   document.body.classList.add('handshaking');
   stage('local');
-  /* Put it where it can be watched.
-   *
-   * The button that starts this sits below the panel, so on a phone pressing
-   * it leaves the handshake off the top of the screen — it played to nobody,
-   * and the first thing the user saw was the finished password. Centred rather
-   * than scrolled to the top, because the caption underneath is half the
-   * explanation. Only the scroll honours reduced motion here; the stages
-   * themselves are paced either way. */
-  $('viz').scrollIntoView({
-    behavior: reduceMotion ? 'auto' : 'smooth',
-    block: 'center',
-  });
-  return setReadout('P', hex, { ms: BEAT });
+  return setReadout('P = H(phrase ‖ account)', HIDDEN_P, { hex: false, ms: BEAT });
 }
 
 /* The blinding step — the reason the oracle learns nothing. */
@@ -323,7 +449,8 @@ export function vizSend(label) {
 export function vizOracle(label) {
   $('vizLabel').textContent = label;
   stage('stamping');
-  $('vizTag').textContent = 'k · B';
+  /* On paper there is no B: k is here, and it multiplies P directly. */
+  $('vizTag').textContent = relay() ? "B' = k·B" : 'S = k·P';
   /* Churns until the next stage cancels it, rather than for a fixed time: a
    * hardware oracle takes as long as it takes, and a readout that froze
    * mid-scramble while the device was still thinking would be a lie. The
@@ -341,22 +468,28 @@ export function vizReturn(label, hex) {
 }
 
 /* Take the disguise off. */
-export function vizUnblind(label, hex) {
+export function vizUnblind(label /* , hex — S, deliberately not shown */) {
   $('vizLabel').textContent = label;
   stage('unblinding');
-  return setReadout('S = r⁻¹·B\'', hex, { ms: BEAT * 1.2 });
+  return setReadout(relay() ? "S = r⁻¹·B' = k·P" : 'S = k·P', HIDDEN_S,
+                    { hex: false, ms: BEAT * 1.2 });
 }
 
 export function vizDone(label) {
   $('vizLabel').textContent = label;
+  // How many characters the finale fills in. The length is set by the style
+  // you chose, not by the secret, so it tells the drawing nothing.
+  $('viz').dataset.len = String(currentPassword.length || 16);
   stage('done');
+  $('hsTitle').textContent = path === 'demo' ? 'Demo password ready' : 'Your password is ready';
+  $('hsSkip').textContent = 'Close';
+  setReadout('HKDF-SHA256(S, account)',
+             `${currentPassword.length} characters · masked until you press Reveal`,
+             { hex: false, ms: BEAT * 0.9 });
   document.body.classList.remove('handshaking');
-  /* Used to return here under reduced motion, which left the panel open on its
-   * last frame for ever. It closes on both paths now. */
-  setTimeout(() => {
-    $('viz').classList.remove('on');
-    $('vizLabel').textContent = '';   // don't leave the caption orphaned
-  }, BEAT * 3 * DWELL);
+  // Skipped earlier: the pop-up is already gone, so go straight to the result.
+  if (!popOpen) { landOnResult(); return; }
+  doneTimer = setTimeout(() => closePop({ toResult: true }), BEAT * 2.8 * DWELL);
 }
 
 /* The password lands rather than appears.
@@ -374,7 +507,7 @@ function revealPassword(el, pw) {
   const ms = BEAT * 1.8;
   const t0 = performance.now();
   const step = (now) => {
-    const p = Math.min(1, (now - t0) / ms);
+    const p = Math.max(0, Math.min(1, (now - t0) / ms));   // see settleText
     const landed = Math.floor(pw.length * (1 - Math.pow(1 - p, 2.4)));
     let out = pw.slice(0, landed);
     for (let i = landed; i < pw.length; i++) {
@@ -877,6 +1010,7 @@ function initNav() {
 }
 
 export function initChrome() {
+  initHandshakePop();
   initNav();
   initQuickEntry();
   initHardwareFork();

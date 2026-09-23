@@ -29,11 +29,13 @@ new laptop, private window   Already have an oracle? → scan / plug in ──�
 
 - **First time.** Pick hardware or paper, get it ready (flash and connect the
   device, or scribble, create and print a sheet), then type your phrase, pick an
-  account number and a style, and press **Make my password**. The handshake plays
-  out on screen as it happens: the blinded point going out, `k·B` coming back, the
-  proof being checked.
+  account number and a style, and press **Make my password**. The handshake opens
+  over the page and plays out as it happens: the blinded point going out, `k·B`
+  coming back, the proof being checked, HKDF filling in the characters. **Skip**
+  (or Escape) closes it and the password arrives at once; it is the same password
+  either way.
 
-  ![Step 6 mid-handshake: the demo key stamping k·B](docs/handshake.jpg)
+  ![The handshake pop-up: the oracle's k walking B across the curve, one chord at a time](docs/handshake.jpg)
 
 - **Coming back on the same browser.** A *Welcome back* card lists the oracles this
   browser trusts, by fingerprint. One button opens the camera or the connect button
@@ -167,16 +169,36 @@ a torus, `ℂ/Λ`, with scalar multiplication as the straight line `k·z mod Λ`
 round it — drag to turn it. The ring behind the whole page is `E(𝔽₂₁₁)` laid out in scalar order; it
 turns slowly, and quickly while a derivation is running.
 
-The sheets and the ring live in `scene.js`, walled off from the passwords:
+The handshake pop-up draws the protocol itself on the same curve over ℝ. Its one
+real branch is a circle group, and on it sits a cyclic subgroup of prime order 197:
+the dots. Each step is walked across that group by genuine double-and-add, one
+chord or tangent per hop. The line meets the curve a third time, the reflection is
+the sum, and the bits of the scalar light up as they are spent. `r` walks `P` to
+`B`, the oracle's `k` walks `B` to `B′`, and `r⁻¹` walks it home. The loop closes
+the way the real one does, landing exactly on `k·P`. The scalars and `P` in the
+picture are made up; the real ones are in ristretto255, whose order ℓ runs round
+the projector at the bottom.
 
-- It imports nothing and is loaded by its own `<script>` tag, so it is a separate
-  module graph. If it throws, derivation carries on.
-- The only application state it reads is whether `<body>` has the `handshaking`
-  class. No phrase, point, key or password is reachable from it, and the curve it
-  draws is a toy over ℝ and 𝔽₂₁₁ that shares nothing with ristretto255.
-- With reduced motion on, every scene is a still frame that moves only when you drag
-  it, and the handshake still plays, at a shorter dwell. Nothing animates off-screen
-  or in a hidden tab.
+The readout under it shows `B` and `B′` in full, because they are the only values
+that leave the machine and are public anyway. It does **not** show `P` or `S`.
+`P = H(phrase ‖ account)` would let anyone with a screenshot test guesses at the
+phrase offline, without the oracle. `S` is one hash away from the password, which
+stays masked.
+
+The sheets and the ring live in `scene.js`, and the handshake drawing in
+`handshake.js`. Both are walled off from the passwords:
+
+- Each imports nothing and is loaded by its own `<script>` tag, so each is a
+  separate module graph. If either throws, derivation carries on.
+- `scene.js` reads only whether `<body>` has the `handshaking` class.
+  `handshake.js` reads only the stage name, which oracle path is in use, the
+  password's length (set by the style) and the readout, which only ever holds
+  `B` and `B′`. No phrase, key, `P`, `S` or password is reachable from either,
+  and the curves they draw are toys over ℝ and 𝔽₂₁₁ that share nothing with
+  ristretto255.
+- With reduced motion on, every scene is a still frame that moves only when you
+  drag it, and the handshake still plays, one still frame per stage, at a shorter
+  dwell. Nothing animates off-screen or in a hidden tab.
 
 ## Repo layout
 
@@ -187,10 +209,12 @@ app.js                 protocol: derivation, WebSerial transport, DLEQ verificat
                          trusted-key pinning, clipboard scrub
 ui.js                  chrome: routing between the two oracle paths, the welcome-back
                          and quick-entry cards, simple/expert switch, passphrase meter,
-                         account number, the handshake view, masking and reveal
+                         account number, the handshake pop-up and its pacing,
+                         masking and reveal
 sheet.js               paper oracle UI: entropy pad, scanning, printing, key lifetime
 recovery.js            paper oracle codec: Crockford base32, checksum, QR draw/scan
 scene.js               the live sheets and the backdrop — isolated, see "The look"
+handshake.js           the handshake pop-up's drawing — isolated the same way
                          (every script loads as a module, so the page runs under a
                           strict CSP with script-src 'self' and no inline script)
 sw.js                  offline shell: the app is served cache-first, so the code you
