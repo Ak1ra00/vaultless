@@ -21,14 +21,24 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<canvas id="rain" aria-hidden="true"></canvas>
+<canvas id="field" aria-hidden="true"></canvas>
 <div class="aurora" aria-hidden="true"></div>
 
 <div class="wrap">
 
   <header class="top">
     <div class="brand">
-      <span class="mark" aria-hidden="true">2P</span>
+      <!-- The mark from Oracle's unlock screen: y² = x³ − 3x + 1, which unlike
+           the curve on the sheets has two real pieces — a closed oval and an
+           open branch — with a point marked on it. Computed, not traced. -->
+      <svg class="logo" viewBox="-22 -30 48 60" aria-hidden="true" focusable="false">
+        <path class="logo-glow" d="M-18.79,-0.00 L-18.77,-1.34 L-18.70,-2.68 L-18.58,-4.00 L-18.41,-5.29 L-18.20,-6.55 L-17.95,-7.77 L-17.65,-8.94 L-17.30,-10.05 L-16.92,-11.11 L-16.49,-12.09 L-16.03,-13.00 L-15.53,-13.83 L-15.00,-14.58 L-14.44,-15.24 L-13.85,-15.81 L-13.23,-16.29 L-12.58,-16.68 L-11.92,-16.98 L-11.24,-17.18 L-10.54,-17.29 L-9.83,-17.32 L-9.11,-17.25 L-8.39,-17.11 L-7.66,-16.88 L-6.93,-16.57 L-6.21,-16.20 L-5.49,-15.75 L-4.78,-15.25 L-4.08,-14.69 L-3.40,-14.07 L-2.74,-13.42 L-2.09,-12.72 L-1.48,-12.00 L-0.88,-11.24 L-0.32,-10.47 L0.21,-9.68 L0.71,-8.87 L1.17,-8.06 L1.60,-7.25 L1.98,-6.43 L2.32,-5.61 L2.63,-4.80 L2.88,-3.99 L3.09,-3.19 L3.26,-2.39 L3.38,-1.59 L3.45,-0.79 L3.47,-0.00 L3.45,0.79 L3.38,1.59 L3.26,2.39 L3.09,3.19 L2.88,3.99 L2.63,4.80 L2.32,5.61 L1.98,6.43 L1.60,7.25 L1.17,8.06 L0.71,8.87 L0.21,9.68 L-0.32,10.47 L-0.88,11.24 L-1.48,12.00 L-2.09,12.72 L-2.74,13.42 L-3.40,14.07 L-4.08,14.69 L-4.78,15.25 L-5.49,15.75 L-6.21,16.20 L-6.93,16.57 L-7.66,16.88 L-8.39,17.11 L-9.11,17.25 L-9.83,17.32 L-10.54,17.29 L-11.24,17.18 L-11.92,16.98 L-12.58,16.68 L-13.23,16.29 L-13.85,15.81 L-14.44,15.24 L-15.00,14.58 L-15.53,13.83 L-16.03,13.00 L-16.49,12.09 L-16.92,11.11 L-17.30,10.05 L-17.65,8.94 L-17.95,7.77 L-18.20,6.55 L-18.41,5.29 L-18.58,4.00 L-18.70,2.68 L-18.77,1.34 Z"/>
+        <path class="logo-glow" d="M23.50,-26.32 L23.10,-25.28 L22.70,-24.27 L22.32,-23.29 L21.95,-22.33 L21.58,-21.40 L21.23,-20.49 L20.89,-19.61 L20.56,-18.76 L20.23,-17.93 L19.92,-17.12 L19.62,-16.33 L19.33,-15.56 L19.05,-14.82 L18.78,-14.10 L18.52,-13.39 L18.27,-12.70 L18.03,-12.04 L17.80,-11.39 L17.58,-10.75 L17.37,-10.14 L17.17,-9.53 L16.98,-8.94 L16.80,-8.37 L16.63,-7.81 L16.47,-7.26 L16.32,-6.72 L16.18,-6.20 L16.06,-5.68 L15.94,-5.18 L15.83,-4.68 L15.73,-4.19 L15.65,-3.70 L15.57,-3.23 L15.50,-2.76 L15.45,-2.29 L15.40,-1.83 L15.37,-1.37 L15.34,-0.91 L15.33,-0.45 L15.32,-0.00 L15.33,0.45 L15.34,0.91 L15.37,1.37 L15.40,1.83 L15.45,2.29 L15.50,2.76 L15.57,3.23 L15.65,3.70 L15.73,4.19 L15.83,4.68 L15.94,5.18 L16.06,5.68 L16.18,6.20 L16.32,6.72 L16.47,7.26 L16.63,7.81 L16.80,8.37 L16.98,8.94 L17.17,9.53 L17.37,10.14 L17.58,10.75 L17.80,11.39 L18.03,12.04 L18.27,12.70 L18.52,13.39 L18.78,14.10 L19.05,14.82 L19.33,15.56 L19.62,16.33 L19.92,17.12 L20.23,17.93 L20.56,18.76 L20.89,19.61 L21.23,20.49 L21.58,21.40 L21.95,22.33 L22.32,23.29 L22.70,24.27 L23.10,25.28 L23.50,26.32"/>
+        <path class="logo-line" d="M-18.79,-0.00 L-18.77,-1.34 L-18.70,-2.68 L-18.58,-4.00 L-18.41,-5.29 L-18.20,-6.55 L-17.95,-7.77 L-17.65,-8.94 L-17.30,-10.05 L-16.92,-11.11 L-16.49,-12.09 L-16.03,-13.00 L-15.53,-13.83 L-15.00,-14.58 L-14.44,-15.24 L-13.85,-15.81 L-13.23,-16.29 L-12.58,-16.68 L-11.92,-16.98 L-11.24,-17.18 L-10.54,-17.29 L-9.83,-17.32 L-9.11,-17.25 L-8.39,-17.11 L-7.66,-16.88 L-6.93,-16.57 L-6.21,-16.20 L-5.49,-15.75 L-4.78,-15.25 L-4.08,-14.69 L-3.40,-14.07 L-2.74,-13.42 L-2.09,-12.72 L-1.48,-12.00 L-0.88,-11.24 L-0.32,-10.47 L0.21,-9.68 L0.71,-8.87 L1.17,-8.06 L1.60,-7.25 L1.98,-6.43 L2.32,-5.61 L2.63,-4.80 L2.88,-3.99 L3.09,-3.19 L3.26,-2.39 L3.38,-1.59 L3.45,-0.79 L3.47,-0.00 L3.45,0.79 L3.38,1.59 L3.26,2.39 L3.09,3.19 L2.88,3.99 L2.63,4.80 L2.32,5.61 L1.98,6.43 L1.60,7.25 L1.17,8.06 L0.71,8.87 L0.21,9.68 L-0.32,10.47 L-0.88,11.24 L-1.48,12.00 L-2.09,12.72 L-2.74,13.42 L-3.40,14.07 L-4.08,14.69 L-4.78,15.25 L-5.49,15.75 L-6.21,16.20 L-6.93,16.57 L-7.66,16.88 L-8.39,17.11 L-9.11,17.25 L-9.83,17.32 L-10.54,17.29 L-11.24,17.18 L-11.92,16.98 L-12.58,16.68 L-13.23,16.29 L-13.85,15.81 L-14.44,15.24 L-15.00,14.58 L-15.53,13.83 L-16.03,13.00 L-16.49,12.09 L-16.92,11.11 L-17.30,10.05 L-17.65,8.94 L-17.95,7.77 L-18.20,6.55 L-18.41,5.29 L-18.58,4.00 L-18.70,2.68 L-18.77,1.34 Z" pathLength="1"/>
+        <path class="logo-line" d="M23.50,-26.32 L23.10,-25.28 L22.70,-24.27 L22.32,-23.29 L21.95,-22.33 L21.58,-21.40 L21.23,-20.49 L20.89,-19.61 L20.56,-18.76 L20.23,-17.93 L19.92,-17.12 L19.62,-16.33 L19.33,-15.56 L19.05,-14.82 L18.78,-14.10 L18.52,-13.39 L18.27,-12.70 L18.03,-12.04 L17.80,-11.39 L17.58,-10.75 L17.37,-10.14 L17.17,-9.53 L16.98,-8.94 L16.80,-8.37 L16.63,-7.81 L16.47,-7.26 L16.32,-6.72 L16.18,-6.20 L16.06,-5.68 L15.94,-5.18 L15.83,-4.68 L15.73,-4.19 L15.65,-3.70 L15.57,-3.23 L15.50,-2.76 L15.45,-2.29 L15.40,-1.83 L15.37,-1.37 L15.34,-0.91 L15.33,-0.45 L15.32,-0.00 L15.33,0.45 L15.34,0.91 L15.37,1.37 L15.40,1.83 L15.45,2.29 L15.50,2.76 L15.57,3.23 L15.65,3.70 L15.73,4.19 L15.83,4.68 L15.94,5.18 L16.06,5.68 L16.18,6.20 L16.32,6.72 L16.47,7.26 L16.63,7.81 L16.80,8.37 L16.98,8.94 L17.17,9.53 L17.37,10.14 L17.58,10.75 L17.80,11.39 L18.03,12.04 L18.27,12.70 L18.52,13.39 L18.78,14.10 L19.05,14.82 L19.33,15.56 L19.62,16.33 L19.92,17.12 L20.23,17.93 L20.56,18.76 L20.89,19.61 L21.23,20.49 L21.58,21.40 L21.95,22.33 L22.32,23.29 L22.70,24.27 L23.10,25.28 L23.50,26.32" pathLength="1"/>
+        <circle class="logo-dot-halo" cx="21.20" cy="20.42" r="6"/>
+        <circle class="logo-dot" cx="21.20" cy="20.42" r="2.6"/>
+      </svg>
       <div>
         <h1>vaultless</h1>
         <small>passwords from thin air</small>
@@ -128,6 +138,41 @@
       <p class="q-new">First time here? <button type="button" class="linky" id="quickNew">Start from
         the beginning</button> — it takes a couple of minutes, once.</p>
     </section>
+
+    <!-- The Oracle sheets, live. Three of the six backgrounds in Ak1ra00/oracle,
+         redrawn from the maths every frame rather than shown as pictures, and
+         each one something you can take hold of. scene.js draws them; it is
+         loaded on its own and touches nothing the passwords depend on. -->
+    <figure class="sheets" id="sheets" data-start="torus" aria-labelledby="sheetTitle">
+      <div class="sheets-stage">
+        <canvas id="sheetCanvas" tabindex="0" aria-describedby="sheetNoteBody"
+                aria-label="Interactive diagram. Drag, or use the arrow keys, to explore it."></canvas>
+        <div class="sheets-head">
+          <h3 class="sheets-title" id="sheetTitle">E(ℂ) ≅ ℂ/Λ</h3>
+          <p class="sheets-sub" id="sheetSub">the curve over the complex numbers is a torus</p>
+        </div>
+        <div class="sheets-tabs" role="tablist" aria-label="Sheets">
+          <button type="button" role="tab" data-scene="group" aria-selected="false" tabindex="-1"
+                  aria-label="Sheet 01: the group law over the reals" title="01 · the group law, over ℝ"><b>01</b> ℝ</button>
+          <button type="button" role="tab" data-scene="field" aria-selected="false" tabindex="-1"
+                  aria-label="Sheet 02: the curve over a finite field" title="02 · the curve over 𝔽₂₁₁"><b>02</b> 𝔽₂₁₁</button>
+          <button type="button" role="tab" data-scene="torus" aria-selected="true" tabindex="0"
+                  aria-label="Sheet 05: the curve over the complex numbers, a torus" title="05 · the torus, E(ℂ)"><b>05</b> ℂ</button>
+        </div>
+        <span class="sheets-badge" id="sheetBadge" aria-hidden="true">VAULTLESS · E/ℂ · SHEET 05</span>
+      </div>
+      <!-- Under the drawing, not over it: the diagram gets the whole stage. -->
+      <figcaption class="sheets-note">
+        <div class="sheets-note-text">
+          <b id="sheetNoteHead">uniformisation</b>
+          <span id="sheetNoteBody"></span>
+        </div>
+        <div class="sheets-meta">
+          <p class="sheets-readout" id="sheetReadout" aria-hidden="true"></p>
+          <span class="sheets-hint" id="sheetHint" aria-hidden="true"></span>
+        </div>
+      </figcaption>
+    </figure>
 
     <ul class="what-strip">
       <li><strong>No vault to steal</strong><span>No secret is written down here — not your
@@ -629,5 +674,8 @@ pio run -e esp32dev -t upload</pre>
 </dialog>
 
 <script type="module" src="app.js"></script>
+<!-- Separate on purpose: a separate module graph, so nothing the scenes do —
+     including failing — can reach the code that makes passwords. -->
+<script type="module" src="scene.js"></script>
 </body>
 </html>

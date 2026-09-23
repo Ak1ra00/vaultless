@@ -74,64 +74,11 @@ export function confirmDialog(opts) {
   return ask({ confirmLabel: 'Continue', ...opts });
 }
 
-/* --------------------------------------------------- matrix rain backdrop */
-function initRain() {
-  const c = $('rain');
-  if (!c || reduceMotion) return;
-  const ctx = c.getContext('2d');
-  const GLYPHS = 'アイウエオカキクケコサシスセソ0123456789ABCDEF<>*/+=$#@&%';
-  let cols = [], w = 0, h = 0, dpr = Math.min(devicePixelRatio || 1, 2);
-
-  function size() {
-    w = c.width = innerWidth * dpr;
-    h = c.height = innerHeight * dpr;
-    c.style.width = innerWidth + 'px';
-    c.style.height = innerHeight + 'px';
-    const step = 18 * dpr;
-    cols = Array.from({ length: Math.ceil(w / step) }, () => ({
-      y: Math.random() * -h, speed: (1.1 + Math.random() * 2.2) * dpr, step,
-    }));
-  }
-  size();
-  addEventListener('resize', size);
-
-  let raf = null, last = 0, surge = 0;
-  function frame(ts) {
-    raf = requestAnimationFrame(frame);
-    /* The rain answers the handshake. While the oracle is working the whole
-     * backdrop quickens and brightens, so the page is visibly doing the thing
-     * rather than leaving one panel to mime it. Eased in and out, because a
-     * step change reads as a glitch. */
-    const want = document.body.classList.contains('handshaking') ? 1 : 0;
-    surge += (want - surge) * 0.045;
-    if (ts - last < 55 - surge * 26) return;   // ~18fps at rest, ~34fps mid-handshake
-    last = ts;
-    /* The trail colour has to be the page's own ground, or the canvas fades to
-     * a rectangle of the wrong black over the bloom behind it. */
-    ctx.fillStyle = `rgba(5,8,10,${0.14 - surge * 0.035})`;
-    ctx.fillRect(0, 0, w, h);
-    ctx.font = `${13 * dpr}px 'JetBrains Mono', 'IBM Plex Mono', monospace`;
-    const bright = 0.42 + surge * 0.3;
-    cols.forEach((col, i) => {
-      const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
-      const x = i * col.step;
-      /* The theme's cyan-teal, with the lead glyph blown out towards its
-       * bright variant — the same two-tone the accent uses everywhere else. */
-      ctx.fillStyle = Math.random() < 0.06 + surge * 0.07
-        ? `rgba(127,242,230,${0.85 + surge * 0.15})`
-        : `rgba(30,150,141,${bright})`;
-      ctx.fillText(ch, x, col.y);
-      col.y += col.speed * (6 + surge * 5);
-      if (col.y > h && Math.random() > 0.975) col.y = Math.random() * -220 * dpr;
-    });
-  }
-  raf = requestAnimationFrame(frame);
-  // Don't burn battery in a background tab.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { cancelAnimationFrame(raf); raf = null; }
-    else if (!raf) raf = requestAnimationFrame(frame);
-  });
-}
+/* The backdrop used to be drawn here, as a matrix rain. It is now the group
+ * E(𝔽₂₁₁) turning in 3D, drawn by scene.js — a separate module, so that the
+ * presentation layer that holds the password on screen no longer runs any
+ * drawing loop at all. It still answers the handshake: scene.js watches the
+ * `handshaking` class vizStart puts on <body>, and nothing else. */
 
 /* ------------------------------------------------------- simple / expert */
 const MODE_KEY = 'vaultless.mode.v1';
@@ -339,8 +286,8 @@ export function vizStart(label, hex) {
   vizReset();
   $('viz').classList.add('on');
   $('vizLabel').textContent = label;
-  // The backdrop answers the handshake: the rain surges while the oracle works,
-  // so the whole page is visibly doing the thing, not just this one panel.
+  // The backdrop answers the handshake: the group ring behind the page speeds
+  // up while the oracle works, so the whole page is visibly doing the thing.
   document.body.classList.add('handshaking');
   stage('local');
   /* Put it where it can be watched.
@@ -933,7 +880,6 @@ export function initChrome() {
   initNav();
   initQuickEntry();
   initHardwareFork();
-  initRain();
   initMode();
   initStrength();
   initAccountNumber();
