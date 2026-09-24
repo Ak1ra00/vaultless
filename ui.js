@@ -10,12 +10,31 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------------------------------------------------------------- toast */
 let toastTimer = null;
+let toastAt = 0;
 export function toast(msg) {
+  /* Never a bubble on top of the handshake pop-up — two layers stacked on a
+   * phone read as two pop-ups. While it is open, messages go into its own
+   * notice line instead. */
+  if (popOpen) { notice(msg); return; }
   const t = $('toast');
   t.textContent = msg;
   t.classList.add('on');
+  toastAt = performance.now();
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('on'), 3600);
+}
+
+function hideToast() {
+  clearTimeout(toastTimer);
+  $('toast').classList.remove('on');
+}
+
+/* The pop-up's own line for anything that would otherwise have been a toast. */
+function notice(msg) {
+  const n = $('hsNotice');
+  if (!n) return;
+  n.textContent = msg;
+  n.hidden = false;
 }
 
 /* ------------------------------------------------------------- dialogs */
@@ -341,6 +360,15 @@ function openPop() {
   // to a screen reader. The toast and the pin dialog live outside .wrap, so a
   // first-use notice or a key-mismatch question still gets through.
   document.querySelector('.wrap').inert = true;
+  /* A toast raised in the moment before this — the first-use "Trusting paper
+   * oracle …" check, which belongs to this very derivation and must be read —
+   * moves into the pop-up rather than floating over it. Anything older (the
+   * demo's "type a phrase" hint, "oracle ready") has done its job: it goes. */
+  const t = $('toast');
+  if (t.classList.contains('on')) {
+    if (performance.now() - toastAt < 600) notice(t.textContent);
+    hideToast();
+  }
   // Tells the backdrop and the diagrams (scene.js) to stop drawing and the
   // page's own CSS loops to pause: nothing under the pop-up needs to move,
   // and on a phone drawing it anyway is what made the pop-up stutter.
@@ -524,6 +552,8 @@ function clearStage() {
   $('vizLabel').textContent = '';
   $('vizHex').textContent = '';
   $('vizTag').textContent = '';
+  $('hsNotice').hidden = true;
+  $('hsNotice').textContent = '';
   document.body.classList.remove('handshaking');
 }
 
