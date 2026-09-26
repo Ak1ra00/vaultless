@@ -72,7 +72,7 @@
   h1,h2,h3{line-height:1.2;margin:0;font-family:var(--display);letter-spacing:.01em;}
 
   /* animated backdrop ------------------------------------------------ */
-  #field{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.95;pointer-events:none;}
+  #field,#fieldFar{position:fixed;inset:0;width:100%;height:100%;z-index:0;opacity:.95;pointer-events:none;}
   .aurora{
     position:fixed;inset:0;z-index:0;pointer-events:none;
     background:
@@ -678,9 +678,9 @@
   body:not(.in-app) .hero,
   body:not(.in-app) #haveOracle,
   body:not(.in-app) .what-strip,
-  body:not(.in-app) .sheets,
+  body:not(.in-app) .sheets-deck,
   body:not(.in-app) #homeStep1{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) backwards;}
-  body:not(.in-app) .sheets{animation-delay:.12s;}
+  body:not(.in-app) .sheets-deck{animation-delay:.12s;}
   body:not(.in-app) #haveOracle{animation-delay:.08s;}
   body:not(.in-app) .what-strip{animation-delay:.16s;}
   body:not(.in-app) #homeStep1{animation-delay:.24s;}
@@ -796,7 +796,7 @@
   body.returning .hero,
   body.returning .what-strip,
   body.returning #haveOracle,
-  body.returning .sheets,
+  body.returning .sheets-deck,
   body.returning #homeStep1,
   body.returning #continueRow{display:none;}
 
@@ -945,43 +945,61 @@
      The Oracle sheets, live. scene.js draws them; this lays them out.
      ==================================================================== */
 
-  /* Desktop: the sheet stands beside the headline. It is AFTER the quick entry
-     in the markup, so on a phone — where there is no beside — the shortcut for
-     returning users stays above it; here the grid lifts it into row one. */
+  /* Desktop: the headline and the "already have an oracle?" shortcut share the
+     top row, and the three sheets run as one band of windows beneath them. On a
+     phone — where there is no beside — they simply stack, shortcut first. */
   @media (min-width:1000px){
-    #viewHome{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);column-gap:36px;align-items:center;}
+    #viewHome{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:40px;align-items:center;}
     /* display:grid outranks the UA's [hidden]{display:none}. Without this the
        home page would never leave when the app opens. */
     #viewHome[hidden]{display:none;}
     #viewHome > *{grid-column:1 / -1;}
     #viewHome > .hero{grid-column:1;grid-row:1;text-align:left;padding:0 0 28px;}
     #viewHome > .hero p{margin:0;}
-    #viewHome > .sheets{grid-column:2;grid-row:1;margin:0 0 28px;}
-    .hero h2{font-size:clamp(32px,3.1vw,42px);}
+    #viewHome > #haveOracle{grid-column:2;grid-row:1;margin-bottom:28px;}
+    #viewHome > .sheets-deck{grid-row:2;}
+    .hero h2{font-size:clamp(32px,3.1vw,44px);}
   }
-  /* Wide screens: the headline row is allowed out of the 1080px column and
-     into the side margins, and the sheet takes most of that room — it is the
-     thing worth looking at up here. --spill is how far the row reaches past
-     the column on each side: nothing at 1080, up to 220px on a big monitor,
-     and always 24px short of the viewport edge, so no scrollbar width can
-     push it into a horizontal scroll. */
+  /* Wide screens: the band of windows is allowed out of the 1080px column and
+     into the side margins — the sheets are the thing worth looking at up here.
+     --spill is how far it reaches past the column on each side: nothing at
+     1080, up to 220px on a big monitor, and always 24px short of the viewport
+     edge, so no scrollbar width can push it into a horizontal scroll. */
   @media (min-width:1200px){
-    #viewHome{
-      --spill:clamp(0px, calc((100vw - 1080px) / 2 - 24px), 220px);
-      grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);column-gap:44px;
-    }
-    #viewHome > .hero{margin-left:calc(var(--spill) * -.55);}
-    #viewHome > .sheets{margin-right:calc(var(--spill) * -1);}
-    .sheets-title{font-size:clamp(18px,1.5vw,23px);}
-    .sheets-note{font-size:11px;padding:15px 22px 17px;}
+    #viewHome{--spill:clamp(0px, calc((100vw - 1080px) / 2 - 24px), 220px);column-gap:48px;}
+    #viewHome > .hero{margin-left:calc(var(--spill) * -.5);}
+    #viewHome > #haveOracle{margin-right:calc(var(--spill) * -.5);}
+    #viewHome > .sheets-deck{margin-left:calc(var(--spill) * -1);margin-right:calc(var(--spill) * -1);}
   }
 
+  /* the deck ------------------------------------------------------------ */
+  .sheets-deck{margin:0 0 30px;}
+  .deck-head{
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:0 0 14px;
+    font:400 11.5px/1.5 var(--mono);color:var(--ink-2);
+  }
+  .deck-head span{
+    color:var(--cyan);letter-spacing:.2em;text-transform:uppercase;font-size:10.5px;font-weight:600;
+  }
+  .deck-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:stretch;}
+  /* Tablets: two side by side, the torus across the full width beneath. */
+  @media (max-width:999px){
+    .deck-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .deck-row > .sheets[data-scene="torus"]{grid-column:1 / -1;}
+    .deck-row > .sheets[data-scene="torus"] .sheets-stage{aspect-ratio:16 / 8.5;}
+  }
+  /* Phones: one window after another. */
+  @media (max-width:640px){
+    .deck-row{grid-template-columns:minmax(0,1fr);gap:16px;}
+  }
+
+  /* one window --------------------------------------------------------- */
   .sheets{
-    position:relative;margin:0 0 26px;isolation:isolate;
-    border:1px solid var(--line);border-radius:var(--r);
+    position:relative;margin:0;isolation:isolate;display:flex;flex-direction:column;min-width:0;
+    border:1px solid var(--line);border-radius:var(--r);overflow:hidden;
     background:
       var(--grid),
-      radial-gradient(110% 80% at 68% 48%, rgba(43,217,201,.07), transparent 62%),
+      radial-gradient(110% 80% at 60% 48%, rgba(43,217,201,.07), transparent 62%),
       linear-gradient(180deg, rgba(10,16,20,.97), rgba(5,8,10,.97));
     box-shadow:var(--shadow);
     transition:box-shadow .5s ease, transform .6s cubic-bezier(.2,.9,.3,1.2);
@@ -989,75 +1007,75 @@
   /* Oracle's active window: the cyan-into-violet edge and the cyan spill, on
      the sheet you are working in. Same masked ring as the step cards. */
   .sheets::after{
-    content:'';position:absolute;inset:-1px;border-radius:var(--r);pointer-events:none;
+    content:'';position:absolute;inset:-1px;border-radius:var(--r);pointer-events:none;z-index:3;
     padding:1px;background:var(--edge-live);
     -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite:xor;
     mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     mask-composite:exclude;
-    opacity:.35;transition:opacity .45s ease;
+    opacity:.3;transition:opacity .45s ease;
   }
   .sheets:hover::after,.sheets:focus-within::after{opacity:1;}
   .sheets:hover,.sheets:focus-within{box-shadow:var(--shadow),0 0 44px rgba(43,217,201,.14);}
+  @media (hover:hover){ .sheets:hover{transform:translateY(-3px);} }
 
-  .sheets-stage{position:relative;aspect-ratio:16/10.6;min-height:320px;overflow:hidden;border-radius:var(--r) var(--r) 0 0;}
-  #sceneCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;outline:none;}
-  #sceneCanvas:focus-visible{box-shadow:inset 0 0 0 2px var(--neon);}
+  /* the title bar */
+  .sheets-bar{
+    display:flex;align-items:center;gap:10px;padding:8px 12px;
+    border-bottom:1px solid var(--line);background:rgba(5,8,10,.72);
+    font:500 10.5px var(--mono);color:var(--ink-2);letter-spacing:.04em;
+  }
+  .sheets-lights{display:flex;gap:5px;flex:none;}
+  .sheets-lights i{width:7px;height:7px;border-radius:50%;background:var(--line-bright);}
+  .sheets-lights i:nth-child(1){background:rgba(255,84,104,.55);}
+  .sheets-lights i:nth-child(2){background:rgba(224,166,64,.55);}
+  .sheets-lights i:nth-child(3){background:rgba(53,212,136,.55);}
+  .sheets-tag{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sheets-tag b{color:var(--cyan);font-weight:700;margin-right:2px;}
+  .sheets-live{
+    flex:none;display:inline-flex;align-items:center;gap:6px;color:var(--green);
+    text-transform:uppercase;letter-spacing:.16em;font-size:9px;
+  }
+  .sheets-live::before{
+    content:'';width:6px;height:6px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 10px var(--green);animation:pulse 2.4s ease-in-out infinite;
+  }
 
-  .sheets-head{position:absolute;left:20px;top:16px;max-width:calc(100% - 230px);pointer-events:none;}
+  .sheets-stage{position:relative;aspect-ratio:1 / .92;min-height:280px;overflow:hidden;}
+  .sheets-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;outline:none;}
+  .sheets-canvas:focus-visible{box-shadow:inset 0 0 0 2px var(--neon);}
+
+  .sheets-head{position:absolute;left:14px;top:11px;max-width:calc(100% - 28px);pointer-events:none;}
   .sheets-title{
-    font-family:var(--mono);font-weight:700;font-size:clamp(16px,1.6vw,20px);letter-spacing:.01em;
+    font-family:var(--mono);font-weight:700;font-size:clamp(14px,1.25vw,17px);letter-spacing:.01em;
     color:var(--ink-0);text-shadow:0 0 18px rgba(43,217,201,.28);
   }
-  .sheets-sub{font-family:var(--mono);font-size:11px;color:var(--ink-2);margin:6px 0 0;}
-
-  .sheets-tabs{position:absolute;right:14px;top:14px;display:flex;gap:6px;z-index:1;}
-  .sheets-tabs button{
-    font:500 10.5px var(--mono);letter-spacing:.03em;color:var(--ink-2);cursor:pointer;
-    background:rgba(5,8,10,.72);border:1px solid var(--line);border-radius:3px;padding:6px 9px;
-    transition:color .2s, border-color .2s, background .2s, box-shadow .2s;
-  }
-  .sheets-tabs button b{color:var(--cyan);font-weight:700;margin-right:4px;}
-  .sheets-tabs button:hover{color:var(--ink-0);border-color:var(--line-bright);}
-  .sheets-tabs button[aria-selected="true"]{
-    color:var(--ink-0);border-color:var(--cyan);background:rgba(43,217,201,.1);
-    box-shadow:0 0 18px rgba(43,217,201,.2);
-  }
-  .sheets-tabs button:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
-
+  .sheets-sub{font-family:var(--mono);font-size:10px;color:var(--ink-2);margin:4px 0 0;}
   .sheets-badge{
-    position:absolute;right:14px;bottom:14px;pointer-events:none;
-    font:500 9px var(--mono);letter-spacing:.18em;color:var(--cyan);
-    border:1px solid var(--cyan-dim);border-radius:2px;padding:5px 9px;background:rgba(5,8,10,.65);
+    position:absolute;right:10px;bottom:10px;pointer-events:none;
+    font:500 8px var(--mono);letter-spacing:.16em;color:var(--cyan);
+    border:1px solid var(--cyan-dim);border-radius:2px;padding:4px 7px;background:rgba(5,8,10,.65);
   }
-  /* The caption bar: what the sheet says on the left, what it is showing
-     right now on the right. */
+  /* The caption: what the sheet says, then what it is showing right now. */
   .sheets-note{
-    display:flex;gap:18px;justify-content:space-between;align-items:flex-start;
-    padding:13px 18px 15px;border-top:1px solid var(--line);
+    flex:1;display:flex;flex-direction:column;gap:8px;
+    padding:12px 14px 14px;border-top:1px solid var(--line);
     font:400 10.5px/1.6 var(--mono);color:var(--ink-2);
   }
-  .sheets-note-text{flex:1 1 55%;min-width:0;}
-  .sheets-meta{flex:0 1 45%;min-width:0;text-align:right;}
-  .sheets-readout{margin:0;color:var(--ink-1);font-size:10px;min-height:1.6em;}
+  .sheets-note-text{min-width:0;}
+  .sheets-meta{min-width:0;margin-top:auto;}
+  .sheets-readout{margin:0;color:var(--ink-1);font-size:10px;min-height:1.6em;overflow-wrap:anywhere;}
   .sheets-note b{display:block;color:var(--cyan);font-weight:600;font-size:11px;margin-bottom:3px;}
   .sheets-hint{display:block;margin-top:5px;color:var(--ink-1);opacity:.8;transition:opacity .6s;}
   .sheets-hint::before{content:'◇ ';color:var(--violet);}
   .sheets.touched .sheets-hint{opacity:.35;}
-  /* switching sheets: the text re-sets itself like a new page going down */
-  .sheets.switching .sheets-head,
-  .sheets.switching .sheets-note{animation:sheetText .55s cubic-bezier(.2,.8,.2,1) backwards;}
-  @keyframes sheetText{from{opacity:0;transform:translateY(7px);}}
 
-  /* Narrow: the diagram gets the whole stage, and the notes go underneath it
-     rather than over it. */
-  @media (max-width:700px){
-    .sheets-stage{aspect-ratio:auto;height:min(96vw,420px);min-height:300px;}
-    .sheets-head{left:16px;top:14px;max-width:calc(100% - 32px);}
-    .sheets-tabs{left:12px;right:auto;top:auto;bottom:12px;}
+  @media (max-width:999px){
+    .sheets-deck{margin-bottom:26px;}
+  }
+  @media (max-width:640px){
+    .sheets-stage{aspect-ratio:auto;height:min(88vw,380px);min-height:270px;}
     .sheets-badge{display:none;}
-    .sheets-note{flex-direction:column;gap:8px;padding:12px 16px 16px;}
-    .sheets-meta{text-align:left;}
   }
 
   /* Every step is a sheet too: the corner badge the Oracle backgrounds carry.
@@ -1092,7 +1110,7 @@
 
   @media print{
     body{background:#fff;}
-    #field,.aurora,.toast,.sheets{display:none !important;}
+    #field,#fieldFar,.aurora,.toast,.sheets-deck{display:none !important;}
     /* A password on paper is the one thing this project exists to avoid, so an
        accidental Ctrl+P never carries one — with or without the class below. */
     /* The handshake pop-up is live derivation state, and never belongs on paper. */

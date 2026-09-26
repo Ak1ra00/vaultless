@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<canvas id="fieldFar" aria-hidden="true"></canvas>
 <canvas id="field" aria-hidden="true"></canvas>
 <div class="aurora" aria-hidden="true"></div>
 
@@ -125,43 +126,95 @@
         the beginning</button> — it takes a couple of minutes, once.</p>
     </section>
 
-    <!-- The Oracle sheets, live. Three of the six backgrounds in Ak1ra00/oracle,
-         redrawn from the maths every frame rather than shown as pictures, and
-         each one something you can take hold of. scene.js draws them; it is
-         loaded on its own and touches nothing the passwords depend on. -->
-    <figure class="sheets" id="sheets" data-start="torus" aria-labelledby="sheetTitle">
-      <div class="sheets-stage">
-        <!-- NOT "sheetCanvas": that id belongs to the scanner's hidden decode
-             canvas further down, and getElementById returns the first match —
-             so sharing it had the scanner painting camera frames into this. -->
-        <canvas id="sceneCanvas" tabindex="0" aria-describedby="sheetNoteBody"
-                aria-label="Interactive diagram. Drag, or use the arrow keys, to explore it."></canvas>
-        <div class="sheets-head">
-          <h3 class="sheets-title" id="sheetTitle">E(ℂ) ≅ ℂ/Λ</h3>
-          <p class="sheets-sub" id="sheetSub">the curve over the complex numbers is a torus</p>
+    <!-- The Oracle sheets, live — all three at once, each in its own window.
+         After the backgrounds in Ak1ra00/oracle, redrawn from the maths every
+         frame rather than shown as pictures, and each one something you can
+         take hold of. scene.js draws them; it is loaded on its own and touches
+         nothing the passwords depend on. -->
+    <section class="sheets-deck" id="sheets" aria-label="The curve behind every password, three ways">
+      <p class="deck-head"><span>one curve · three worlds · live</span>
+        y² = x³ − 3x + 5, over the reals, a finite field, and the complex numbers</p>
+      <div class="deck-row">
+      <figure class="sheets" data-scene="group" aria-labelledby="sheetTitle-group">
+        <div class="sheets-bar" aria-hidden="true">
+          <span class="sheets-lights"><i></i><i></i><i></i></span>
+          <span class="sheets-tag"><b>01</b> ℝ · the group law</span>
+          <span class="sheets-live">live</span>
         </div>
-        <div class="sheets-tabs" role="tablist" aria-label="Sheets">
-          <button type="button" role="tab" data-scene="group" aria-selected="false" tabindex="-1"
-                  aria-label="Sheet 01: the group law over the reals" title="01 · the group law, over ℝ"><b>01</b> ℝ</button>
-          <button type="button" role="tab" data-scene="field" aria-selected="false" tabindex="-1"
-                  aria-label="Sheet 02: the curve over a finite field" title="02 · the curve over 𝔽₂₁₁"><b>02</b> 𝔽₂₁₁</button>
-          <button type="button" role="tab" data-scene="torus" aria-selected="true" tabindex="0"
-                  aria-label="Sheet 05: the curve over the complex numbers, a torus" title="05 · the torus, E(ℂ)"><b>05</b> ℂ</button>
+        <div class="sheets-stage">
+          <canvas class="sheets-canvas" tabindex="0" aria-describedby="sheetNote-group"
+                  aria-label="Sheet 01, the group law over the reals: an interactive diagram. Drag P or Q, or use the arrow keys."></canvas>
+          <div class="sheets-head">
+            <h3 class="sheets-title" id="sheetTitle-group"></h3>
+            <p class="sheets-sub"></p>
+          </div>
+          <span class="sheets-badge" aria-hidden="true"></span>
         </div>
-        <span class="sheets-badge" id="sheetBadge" aria-hidden="true">VAULTLESS · E/ℂ · SHEET 05</span>
+        <figcaption class="sheets-note">
+          <div class="sheets-note-text">
+            <b class="sheets-note-head"></b>
+            <span class="sheets-note-body" id="sheetNote-group"></span>
+          </div>
+          <div class="sheets-meta">
+            <p class="sheets-readout" aria-hidden="true"></p>
+            <span class="sheets-hint" aria-hidden="true"></span>
+          </div>
+        </figcaption>
+      </figure>
+      <figure class="sheets" data-scene="field" aria-labelledby="sheetTitle-field">
+        <div class="sheets-bar" aria-hidden="true">
+          <span class="sheets-lights"><i></i><i></i><i></i></span>
+          <span class="sheets-tag"><b>02</b> 𝔽₂₁₁ · a finite field</span>
+          <span class="sheets-live">live</span>
+        </div>
+        <div class="sheets-stage">
+          <canvas class="sheets-canvas" tabindex="0" aria-describedby="sheetNote-field"
+                  aria-label="Sheet 02, the curve over a finite field: an interactive diagram. Drag to turn it, click a point to walk from it."></canvas>
+          <div class="sheets-head">
+            <h3 class="sheets-title" id="sheetTitle-field"></h3>
+            <p class="sheets-sub"></p>
+          </div>
+          <span class="sheets-badge" aria-hidden="true"></span>
+        </div>
+        <figcaption class="sheets-note">
+          <div class="sheets-note-text">
+            <b class="sheets-note-head"></b>
+            <span class="sheets-note-body" id="sheetNote-field"></span>
+          </div>
+          <div class="sheets-meta">
+            <p class="sheets-readout" aria-hidden="true"></p>
+            <span class="sheets-hint" aria-hidden="true"></span>
+          </div>
+        </figcaption>
+      </figure>
+      <figure class="sheets" data-scene="torus" aria-labelledby="sheetTitle-torus">
+        <div class="sheets-bar" aria-hidden="true">
+          <span class="sheets-lights"><i></i><i></i><i></i></span>
+          <span class="sheets-tag"><b>05</b> ℂ · the torus</span>
+          <span class="sheets-live">live</span>
+        </div>
+        <div class="sheets-stage">
+          <canvas class="sheets-canvas" tabindex="0" aria-describedby="sheetNote-torus"
+                  aria-label="Sheet 05, the curve over the complex numbers, a torus: an interactive diagram. Drag or use the arrow keys to turn it."></canvas>
+          <div class="sheets-head">
+            <h3 class="sheets-title" id="sheetTitle-torus"></h3>
+            <p class="sheets-sub"></p>
+          </div>
+          <span class="sheets-badge" aria-hidden="true"></span>
+        </div>
+        <figcaption class="sheets-note">
+          <div class="sheets-note-text">
+            <b class="sheets-note-head"></b>
+            <span class="sheets-note-body" id="sheetNote-torus"></span>
+          </div>
+          <div class="sheets-meta">
+            <p class="sheets-readout" aria-hidden="true"></p>
+            <span class="sheets-hint" aria-hidden="true"></span>
+          </div>
+        </figcaption>
+      </figure>
       </div>
-      <!-- Under the drawing, not over it: the diagram gets the whole stage. -->
-      <figcaption class="sheets-note">
-        <div class="sheets-note-text">
-          <b id="sheetNoteHead">uniformisation</b>
-          <span id="sheetNoteBody"></span>
-        </div>
-        <div class="sheets-meta">
-          <p class="sheets-readout" id="sheetReadout" aria-hidden="true"></p>
-          <span class="sheets-hint" id="sheetHint" aria-hidden="true"></span>
-        </div>
-      </figcaption>
-    </figure>
+    </section>
 
     <ul class="what-strip">
       <li><strong>No vault to steal</strong><span>No secret is written down here — not your

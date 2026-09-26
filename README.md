@@ -7,7 +7,7 @@ up, or leak.
 
 Live at **[vaultless.space](https://vaultless.space)**.
 
-![The home page: the headline beside the live torus sheet, E(ℂ) ≅ ℂ/Λ](docs/home.jpg)
+![The home page: the headline, the way straight in for someone who already has a sheet, and the three live sheets side by side](docs/home.jpg)
 
 The first visit walks you through getting a paper oracle before it asks for
 anything else:
@@ -144,17 +144,26 @@ cannot be turned into a sheet; the last version with the device path is commit
 
 The page is drawn after the sheets in [Ak1ra00/oracle](https://github.com/Ak1ra00/oracle),
 and none of its diagrams are pictures — each one is computed from the maths it
-shows, and each one can be taken hold of:
+shows, and each one can be taken hold of. The home page shows one curve,
+`y² = x³ − 3x + 5`, three ways at once, each in its own live window: side by side
+on a wide screen, two above one on a tablet, one under another on a phone.
 
-| | |
-| --- | --- |
-| ![Sheet 01: the chord-and-tangent group law on y² = x³ − 3x + 5 over ℝ](docs/sheet-group.jpg) | ![Sheet 02: the 196 points of E(𝔽₂₁₁) in 3D, with the walk k·P](docs/sheet-field.jpg) |
-| **01 ℝ** — drag `P` and `Q`; the chord, the third point and `P + Q` follow. | **02 𝔽₂₁₁** — all 196 points of `y² ≡ x³ − 3x + 5 (mod 211)`. The group has 197 elements, a prime, so every point walks the whole of it. Click one to walk from it. |
+| | | |
+| --- | --- | --- |
+| ![Sheet 01: the chord-and-tangent group law on y² = x³ − 3x + 5 over ℝ](docs/sheet-group.jpg) | ![Sheet 02: the 196 points of E(𝔽₂₁₁) in 3D, with the walk k·P](docs/sheet-field.jpg) | ![Sheet 05: E(ℂ) as a torus, with k·z mod Λ wound round it](docs/sheet-torus.jpg) |
+| **01 ℝ** — drag `P` and `Q`; the chord, the third point and `P + Q` follow. | **02 𝔽₂₁₁** — all 196 points of `y² ≡ x³ − 3x + 5 (mod 211)`. The group has 197 elements, a prime, so every point walks the whole of it. Click one to walk from it. | **05 ℂ** — over the complex numbers the curve is a torus, `ℂ/Λ`, and scalar multiplication is the straight line `k·z mod Λ` wound round it. Drag to turn it. |
 
-**05 ℂ** (at the top of this page) is an elliptic curve over the complex numbers:
-a torus, `ℂ/Λ`, with scalar multiplication as the straight line `k·z mod Λ` wound
-round it — drag to turn it. The ring behind the whole page is `E(𝔽₂₁₁)` laid out in scalar order; it
-turns slowly, and quickly while a derivation is running.
+Behind the whole page is a scene in depth, and every layer of it is the same maths:
+
+- far off, `E(ℂ)` again, as a vast faint torus turning in the dark above a blueprint
+  floor that runs to a horizon. It sits on a canvas of its own, drawn small and a few
+  times a second, so it costs next to nothing and reads as out of focus;
+- the ring: `E(𝔽₂₁₁)` laid out in scalar order, the walk `P, 2P, 3P, …` joining
+  neighbours that land nowhere near each other — the discrete-log problem, drawn;
+- comets running that walk, one group operation per step, much faster while a
+  derivation is running;
+- the formulas the oracle works with, drifting in depth; a pointer that lights the
+  points near it and reaches out to them; soft light in the foreground.
 
 The handshake pop-up draws the computation itself on the same curve over ℝ. Its one
 real branch is a circle group, and on it sits a cyclic subgroup of prime order 197:
@@ -172,7 +181,7 @@ that leave the machine and are public anyway. It does **not** show `P` or `S`.
 phrase offline, without the oracle. `S` is one hash away from the password, which
 stays masked.
 
-The sheets and the ring live in `scene.js`, and the handshake drawing in
+The windows and the backdrop live in `scene.js`, and the handshake drawing in
 `handshake.js`. Both are walled off from the passwords:
 
 - Each imports nothing and is loaded by its own `<script>` tag, so each is a
@@ -185,12 +194,18 @@ The sheets and the ring live in `scene.js`, and the handshake drawing in
   ristretto255. The one thing `handshake.js` writes back is where it drew the
   finale's character slots, so the delivery flight knows where to take off from.
 - With reduced motion on, nothing slides, spins or zooms, but nothing freezes
-  either. The diagrams drift at a third of the speed with no scroll or pointer
-  parallax, the full-screen backdrop only twinkles in place, and the handshake plays
-  as fades — lines and points appearing where they are, packets dissolving from one
-  end of the wire to the other — at a shorter dwell, ending in a cross-fade instead
-  of the flight. Nothing animates off-screen, in a hidden tab, or underneath the
-  pop-up.
+  either. All three windows keep drifting, at a third of the speed, with no scroll
+  or pointer parallax. The full-screen backdrop holds still — nothing turns, no
+  comets travel, nothing follows the scroll — and lives by light alone: the points
+  twinkle and the far torus breathes. The handshake plays as fades — lines and
+  points appearing where they are, packets dissolving from one end of the wire to
+  the other — at a shorter dwell, ending in a cross-fade instead of the flight.
+- Nothing animates off-screen, in a hidden tab, or underneath the pop-up, and a
+  window draws only while its picture is at least a quarter on screen.
+- A device that cannot keep up gets a lighter page. A couple of seconds in, the
+  backdrop checks how often frames actually arrive; if most come slower than about
+  40 a second, every canvas drops to fewer pixels and fewer frames for the rest of
+  the visit. It never switches back, so the page never flickers between the two.
 
 ## Repo layout
 
@@ -204,7 +219,7 @@ ui.js                  chrome: the welcome-back and quick-entry cards, simple/ex
                          pop-up and its pacing, masking and reveal
 sheet.js               paper oracle UI: entropy pad, scanning, printing, key lifetime
 recovery.js            paper oracle codec: Crockford base32, checksum, QR draw/scan
-scene.js               the live sheets and the backdrop — isolated, see "The look"
+scene.js               the three live windows and the backdrop — isolated, see "The look"
 handshake.js           the handshake pop-up's drawing — isolated the same way
                          (every script loads as a module, so the page runs under a
                           strict CSP with script-src 'self' and no inline script)

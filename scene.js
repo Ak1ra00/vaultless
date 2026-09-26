@@ -36,6 +36,22 @@ const covered = () => document.body.classList.contains('hs-open');
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2;
 
+/* Not every phone can draw all of this at full rate. Once the page has settled,
+ * the backdrop's loop keeps the spacing of the last couple of seconds' frames;
+ * if most of them come slower than about 40 a second, everything drops to a
+ * lighter setting — fewer pixels, fewer frames — for the rest of the visit. It
+ * never switches back, so the page never flickers between the two. */
+const load = { lite: false, gaps: [], span: 0, from: performance.now() + 2000 };
+function frameGap(t, gap) {
+  if (load.lite || t < load.from || gap <= 0 || gap > 250) return;   // a hidden tab, a pop-up, a stall
+  load.gaps.push(gap);
+  load.span += gap;
+  if (load.span < 1500 || load.gaps.length < 20) return;
+  const g = load.gaps.sort((a, b) => a - b);
+  if (g[g.length >> 1] > 25) load.lite = true;
+  load.gaps = []; load.span = 0;
+}
+
 /* colors.toml, as "r,g,b" so alpha can vary per stroke */
 const C = {
   cyan: '43,217,201', hot: '127,242,230', violet: '185,138,255',
@@ -116,10 +132,22 @@ function facing(p, n, dist) {
   return -(n[0] * vx + n[1] * vy + n[2] * vz) / Math.hypot(vx, vy, vz);
 }
 
-function fit(c, maxDpr) {
-  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
-  const w = Math.max(1, Math.round(c.clientWidth * dpr));
-  const h = Math.max(1, Math.round(c.clientHeight * dpr));
+/* Size the backing store to the element, crisp but never past a pixel budget —
+ * three windows and a full-screen backdrop share one phone's worth of fill.
+ * The element's size comes from a ResizeObserver, never from reading layout in
+ * a frame: with a readout just written, that read would lay the whole page out
+ * again, once per canvas, every frame. */
+const SIZE = new WeakMap();
+const sizes = new ResizeObserver((es) => {
+  for (const e of es) SIZE.set(e.target, [e.contentRect.width, e.contentRect.height]);
+});
+function fit(c, maxDpr, budget = 7e5) {
+  let s = SIZE.get(c);
+  if (!s) { s = [c.clientWidth, c.clientHeight]; SIZE.set(c, s); sizes.observe(c); }
+  const area = Math.max(1, s[0] * s[1]);
+  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr, Math.sqrt(budget / area));
+  const w = Math.max(1, Math.round(s[0] * dpr));
+  const h = Math.max(1, Math.round(s[1] * dpr));
   if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
   return dpr;
 }
@@ -135,27 +163,75 @@ function node(ctx, x, y, col, r, alpha = 1, fillDark = true) {
   ctx.lineWidth = Math.max(1, r * 0.34);
   ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); ctx.stroke();
 }
+/* Text is the slowest thing a canvas draws, and almost none of it here ever
+ * changes. So each string is set once, per colour, size and weight, and
+ * stamped from then on. */
+const TEXT = new Map();
+function textSprite(text, col, px, weight) {
+  const key = `${weight}|${px}|${col}|${text}`;
+  let sp = TEXT.get(key);
+  if (sp) return sp;
+  if (TEXT.size > 800) TEXT.clear();             // a few resizes' worth; never grows without end
+  const c = document.createElement('canvas'), g = c.getContext('2d');
+  const font = `${weight} ${px}px ${MONO}`, pad = Math.ceil(px * 0.25);
+  g.font = font;
+  const w = g.measureText(text).width;
+  c.width = Math.max(1, Math.ceil(w) + 2 * pad);
+  c.height = Math.max(1, Math.ceil(px * 1.5));
+  g.font = font;                                   // resizing the canvas reset it
+  g.textBaseline = 'middle';
+  g.fillStyle = rgba(col, 1);
+  g.fillText(text, pad, c.height / 2);
+  sp = { c, w, pad };
+  TEXT.set(key, sp);
+  return sp;
+}
+// The mono face is a web font and can land after the first frames were drawn
+// in a fallback; set everything again when it does.
+if (document.fonts && document.fonts.addEventListener) {
+  document.fonts.addEventListener('loadingdone', () => TEXT.clear());
+}
 function label(ctx, text, x, y, col, px, alpha = 1, align = 'left', weight = 600) {
-  ctx.font = `${weight} ${px}px ${MONO}`;
-  ctx.textAlign = align;
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = rgba(col, alpha);
-  ctx.fillText(text, x, y);
+  const sp = textSprite(text, col, px, weight);
+  const left = align === 'center' ? x - sp.w / 2 : align === 'right' ? x - sp.w : x;
+  const ga = ctx.globalAlpha;
+  ctx.globalAlpha = ga * alpha;
+  ctx.drawImage(sp.c, Math.round(left - sp.pad), Math.round(y - sp.c.height / 2));
+  ctx.globalAlpha = ga;
 }
 const fmt = (v, d = 2) => (v < 0 ? '−' : '') + Math.abs(v).toFixed(d);
 
 /* ========================================================= the backdrop */
 
-/* The group E(𝔽₂₁₁) as a ring, ordered by scalar: the i-th point round the
- * ring is (i+1)·G. Its radius and height come from that point's coordinates.
- * So neighbours on the ring — k·G and (k+1)·G — land nowhere near each other,
- * and the line joining them in order zig-zags with no pattern at all. That
- * scatter is the discrete-log problem, and it is the reason the oracle can
- * hand back k·B without anyone recovering k. */
+/* A deep scene in layers, back to front — every layer is the same maths the
+ * page is about, and none of it is a picture:
+ *
+ *   - far away, E(ℂ): the curve over the complex numbers, a torus, as a vast
+ *     faint wireframe turning slowly in the dark;
+ *   - a blueprint floor, receding to a horizon;
+ *   - the group E(𝔽₂₁₁) as a ring in scalar order — the i-th point round the
+ *     ring is (i+1)·G, placed by its own coordinates, so neighbours k·G and
+ *     (k+1)·G land nowhere near each other and the line joining them in order
+ *     zig-zags with no pattern at all. That scatter is the discrete-log
+ *     problem, and it is why the oracle can hand back k·B without anyone
+ *     recovering k;
+ *   - comets running that walk, one group operation per step, faster while a
+ *     password is being made;
+ *   - the formulas, drifting in depth, and a pointer that lights the points
+ *     near it and reaches out to them;
+ *   - out-of-focus light in the foreground, for depth.
+ *
+ * Reduced motion: nothing turns, drifts, travels or follows the scroll. The
+ * scene holds still and lives by light alone — points twinkle, the torus
+ * breathes — which is the one register of motion that setting leaves room for.
+ * The pointer can still light points up; that motion is the user's own. */
 function initField() {
   const c = $('field');
   if (!c || !c.getContext) return;
   const ctx = c.getContext('2d');
+  const far = $('fieldFar');
+  const fctx = far && far.getContext ? far.getContext('2d') : null;
+
   const G = [17, 15];
   const group = walkFrom(G, FP);                   // all 196 affine points
   const ring = group.map((P, i) => {
@@ -174,38 +250,154 @@ function initField() {
     return { text, p: [rho * Math.cos(th), 0.5 * Math.sin(i * 1.7), rho * Math.sin(th)] };
   });
 
-  let yaw = 0.6, mx = 0, my = 0, tmx = 0, tmy = 0, surge = 0, cursor = 0;
-  let raf = 0, lastT = 0, lastDraw = 0, lastMove = 0;
+  // E(ℂ): a torus, as a grid of meridians and parallels
+  const TU = 40, TV = 16, TR = 1, Tr = 0.4;
+  const TORUS = [];
+  for (let a = 0; a < TU; a++) {
+    const row = [];
+    for (let b = 0; b < TV; b++) {
+      const th = TAU * a / TU, ph = TAU * b / TV, q = TR + Tr * Math.cos(ph);
+      row.push([q * Math.cos(th), Tr * Math.sin(ph), q * Math.sin(th)]);
+    }
+    TORUS.push(row);
+  }
+
+  // soft light, rendered once per colour and stamped — never a gradient per point
+  const SPR = new Map();
+  function sprite(col) {
+    let sp = SPR.get(col);
+    if (sp) return sp;
+    sp = document.createElement('canvas');
+    sp.width = sp.height = 64;
+    const g = sp.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, rgba(col, 1)); gr.addColorStop(0.4, rgba(col, 0.32)); gr.addColorStop(1, rgba(col, 0));
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    SPR.set(col, sp);
+    return sp;
+  }
+  function glowAt(x, y, r, col, a) {
+    if (a <= 0.004 || r <= 0) return;
+    ctx.globalAlpha = Math.min(1, a);
+    ctx.drawImage(sprite(col), x - r, y - r, 2 * r, 2 * r);
+  }
+
+  // out-of-focus light in front of everything
+  const seeded = (k) => fract(Math.sin(k * 127.1 + 311.7) * 43758.5453);
+  const BOKEH = Array.from({ length: 11 }, (_, i) => ({
+    x: seeded(i), y: seeded(i + 40), r: 0.06 + 0.13 * seeded(i + 80),
+    col: [C.cyan, C.violet, C.hot][i % 3], depth: 0.3 + 0.7 * seeded(i + 120),
+    ph: TAU * seeded(i + 160), a: 0.06 + 0.07 * seeded(i + 200),
+  }));
+  // comets running the scalar walk
+  const COMETS = [
+    { at: 0, v: 7, col: C.hot, len: 18 },
+    { at: 70, v: 5.2, col: C.violet, len: 14 },
+    { at: 140, v: 4.1, col: C.amber, len: 11 },
+  ];
+
+  let yaw = 0.6, tyaw = 0.2, mx = 0, my = 0, tmx = 0, tmy = 0, surge = 0;
+  let raf = 0, lastT = 0, lastDraw = 0, lastMove = 0, lastFar = -1e9, farLift = -1;
+  let ptrX = 0, ptrY = 0, ptrOn = false;
+
+  function floor(ctx, W, H, lw, t, lift) {
+    const hz = H * (0.64 + lift * 0.08), vp = W / 2;
+    // light pooling along the horizon, where the floor meets the dark
+    const g = ctx.createLinearGradient(0, hz - H * 0.06, 0, hz + H * 0.1);
+    g.addColorStop(0, rgba(C.cyan, 0)); g.addColorStop(0.45, rgba(C.cyan, 0.045)); g.addColorStop(1, rgba(C.cyan, 0));
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = g; ctx.fillRect(0, hz - H * 0.06, W, H * 0.16);
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = rgba(C.cyan, 0.05);
+    ctx.beginPath();
+    for (let i = -16; i <= 16; i++) { ctx.moveTo(vp + i * W * 0.01, hz); ctx.lineTo(vp + i * W * 0.13, H); }
+    ctx.stroke();
+    const off = reduceMotion ? 0.4 : fract(t * 0.05);
+    for (let k = 0; k < 11; k++) {
+      const z = (k + off) / 11, y = hz + (H - hz) * z * z;
+      ctx.strokeStyle = rgba(C.cyan, 0.09 * z);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+  }
+
+  function farTorus(ctx, W, H, lw, t, lift) {
+    const breathe = reduceMotion ? 0.8 + 0.2 * Math.sin(t * 0.5) : 1;
+    const cam = { dist: 3.1, f: Math.max(W, H) * 0.62, cx: W * 0.5, cy: H * (0.42 - lift * 0.12) };
+    const P = TORUS.map((row) => row.map((v) => proj(view(v, tyaw, 1.02 + my * 0.03), cam)));
+    const near = (z) => clamp((cam.dist + 1.4 - z) / 2.8, 0, 1);
+    const paths = [[], [], []];
+    const seg = (a, b) => {
+      const n = near((a[3] + b[3]) / 2);
+      paths[n > 0.62 ? 2 : n > 0.34 ? 1 : 0].push(a, b);
+    };
+    for (let a = 0; a < TU; a++) {
+      for (let b = 0; b < TV; b++) {
+        seg(P[a][b], P[a][(b + 1) % TV]);               // round the tube
+        seg(P[a][b], P[(a + 1) % TU][b]);               // round the ring
+      }
+    }
+    ctx.lineWidth = lw;
+    ctx.globalAlpha = 1;
+    [0.04, 0.07, 0.115].forEach((al, i) => {
+      ctx.strokeStyle = rgba(i === 2 ? C.cyan : C.blue, al * breathe * (1 + surge * 0.8));
+      ctx.beginPath();
+      const s = paths[i];
+      for (let j = 0; j < s.length; j += 2) { ctx.moveTo(s[j][0], s[j][1]); ctx.lineTo(s[j + 1][0], s[j + 1][1]); }
+      ctx.stroke();
+    });
+  }
 
   function draw(now, dt) {
-    const dpr = fit(c, 1.5);
+    const dpr = load.lite ? fit(c, 1, 6e5) : fit(c, 1.5, 1.3e6);
     const W = c.width, H = c.height;
+    const t = now / 1000;
+    ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, W, H);
 
     const want = document.body.classList.contains('handshaking') ? 1 : 0;
     surge += (want - surge) * Math.min(1, dt * 3);
-    if (!reduceMotion) {                  // the backdrop never turns under reduced motion
+    if (!reduceMotion) {                  // under reduced motion nothing turns or travels
       yaw += dt * (0.035 + surge * 0.3);
+      tyaw += dt * (0.016 + surge * 0.08);
       mx += (tmx - mx) * Math.min(1, dt * 2.5);
       my += (tmy - my) * Math.min(1, dt * 2.5);
-      cursor += dt * (6 + surge * 60);
+      for (const k of COMETS) k.at += dt * k.v * (1 + surge * 5);
     }
-    const scroll = reduceMotion ? 0 : window.scrollY;
+    const scroll = reduceMotion ? 0 : scrollAt;
+    const lift = reduceMotion ? 0 : clamp(scroll / Math.max(1, docH - viewH), 0, 1);
+
+    // The far layers barely move, so they live on a canvas of their own behind
+    // this one: low resolution (far away is soft anyway), redrawn a few times a
+    // second or at once when the scroll moves the horizon, and composited by the
+    // browser for nothing in between.
+    if (fctx) {
+      if (now - lastFar > (reduceMotion ? 160 : load.lite ? 132 : 66) || Math.abs(lift - farLift) > 1e-4) {
+        const fd = load.lite ? fit(far, 0.5, 3e5) : fit(far, 0.75, 6e5);
+        fctx.clearRect(0, 0, far.width, far.height);
+        floor(fctx, far.width, far.height, Math.max(1, fd), t, lift);
+        farTorus(fctx, far.width, far.height, Math.max(1, fd), t, lift);
+        lastFar = now; farLift = lift;
+      }
+    } else {
+      floor(ctx, W, H, dpr, t, lift);
+      farTorus(ctx, W, H, dpr, t, lift);
+    }
+
     const y0 = yaw + scroll * 0.0006 + mx * 0.22;
     const p0 = 0.3 + my * 0.07 + (reduceMotion ? 0 : Math.min(0.12, scroll * 0.00008));
     const dist = 3.4;
     const cam = { dist, f: Math.max(W, H * 0.62) * 1.26, cx: W * 0.5, cy: H * 0.52 };
-
     const P = ring.map((v) => proj(view(v, y0, p0), cam));
     const near = (z) => clamp((dist + 1.3 - z) / 2.6, 0, 1);
+    const N = P.length;
 
     // the walk, in scalar order — the zig-zag nothing can shortcut
     const bucket = [[], [], []];
-    for (let i = 0; i < P.length; i++) {
-      const a = P[i], b = P[(i + 1) % P.length];
+    for (let i = 0; i < N; i++) {
+      const a = P[i], b = P[(i + 1) % N];
       const n = near((a[3] + b[3]) / 2);
       bucket[n > 0.66 ? 2 : n > 0.33 ? 1 : 0].push(a, b);
     }
+    ctx.lineWidth = dpr;
     [0.035, 0.07, 0.12].forEach((al, i) => {
       ctx.beginPath();
       for (let j = 0; j < bucket[i].length; j += 2) {
@@ -213,66 +405,119 @@ function initField() {
         ctx.lineTo(bucket[i][j + 1][0], bucket[i][j + 1][1]);
       }
       ctx.strokeStyle = rgba(C.violet, al * (1 + surge));
-      ctx.lineWidth = dpr;
       ctx.stroke();
     });
 
-    // the points — batched by brightness, so 196 points cost a handful of
-    // fills rather than 392 separate ones (that, per frame, is what a phone felt)
-    const head = Math.floor(cursor) % P.length;
+    // comets: each step of the walk they cross lights up behind them
+    if (!reduceMotion) {
+      ctx.lineCap = 'round';
+      const TAIL = 5;                                  // the tail fades in steps, one stroke per step
+      for (const k of COMETS) {
+        const head = ((Math.floor(k.at) % N) + N) % N, f = fract(k.at);
+        const lit = near(P[head][3]), steps = Array.from({ length: TAIL }, () => []);
+        for (let s = k.len; s >= 0; s--) {
+          const i = ((head - s) % N + N) % N, a = P[i], b = P[(i + 1) % N];
+          const fade = 1 - (s - f) / (k.len + 1);
+          if (fade <= 0) continue;
+          const e = s === 0 ? f : 1;                   // the head's segment grows as it goes
+          steps[Math.min(TAIL - 1, Math.floor(fade * TAIL))].push(a[0], a[1],
+            a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e);
+        }
+        for (let q = 0; q < TAIL; q++) {
+          const seg = steps[q];
+          if (!seg.length) continue;
+          const fade = (q + 0.5) / TAIL;
+          ctx.strokeStyle = rgba(k.col, 0.5 * fade * fade * (0.45 + 0.55 * lit));
+          ctx.lineWidth = dpr * (1 + 1.4 * fade);
+          ctx.beginPath();
+          for (let j = 0; j < seg.length; j += 4) { ctx.moveTo(seg[j], seg[j + 1]); ctx.lineTo(seg[j + 2], seg[j + 3]); }
+          ctx.stroke();
+        }
+        const a = P[head], b = P[(head + 1) % N];
+        const hx = a[0] + (b[0] - a[0]) * f, hy = a[1] + (b[1] - a[1]) * f;
+        glowAt(hx, hy, 16 * dpr * (0.6 + near(a[3])), k.col, 0.55);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = rgba(C.hot, 0.9);
+        ctx.beginPath(); ctx.arc(hx, hy, 1.6 * dpr, 0, TAU); ctx.fill();
+      }
+      ctx.lineCap = 'butt';
+    }
+
+    // the points: nearer ones bloom; everything batched by brightness
     const LV = 6, halo = Array.from({ length: LV }, () => []), core = Array.from({ length: LV }, () => []);
-    const hot = [];
-    const tw = reduceMotion ? now / 1000 : 0;
-    for (let i = 0; i < P.length; i++) {
+    const lensR = 150 * dpr, lens = [];
+    for (let i = 0; i < N; i++) {
       const [x, y, , z] = P[i];
       let n = near(z);
-      if (reduceMotion) n = Math.min(1, n + 0.28 * Math.max(0, Math.sin(tw * 0.9 + i * 2.399)) ** 3);
-      const behind = (head - i + P.length) % P.length;      // 0 = the cursor itself
-      const lit = !reduceMotion && behind < 14 ? (1 - behind / 14) * (0.35 + surge * 0.65) : 0;
-      if (lit > 0.02) { hot.push([x, y, n, lit]); continue; }
+      n = Math.min(1, n + 0.3 * Math.max(0, Math.sin(t * (reduceMotion ? 0.9 : 1.6) + i * 2.399)) ** 3);
+      if (ptrOn) {
+        const d = Math.hypot(x - ptrX, y - ptrY);
+        if (d < lensR) { const w = 1 - d / lensR; n = Math.min(1, n + 0.7 * w); lens.push([x, y, w]); }
+      }
       const q = Math.min(LV - 1, Math.floor(n * LV));
-      halo[q].push(x, y, (0.9 + 1.5 * n) * dpr * 3.2);
-      core[q].push(x, y, (0.9 + 1.5 * n) * dpr);
+      if (n > 0.55) halo[q].push(x, y, (6 + 16 * n) * dpr);
+      core[q].push(x, y, (0.9 + 1.6 * n) * dpr);
     }
-    const batch = (pts, color, alpha) => {
-      if (!pts.length) return;
-      ctx.beginPath();
-      for (let j = 0; j < pts.length; j += 3) { ctx.moveTo(pts[j] + pts[j + 2], pts[j + 1]); ctx.arc(pts[j], pts[j + 1], pts[j + 2], 0, TAU); }
-      ctx.fillStyle = rgba(color, alpha); ctx.fill();
-    };
     for (let q = 0; q < LV; q++) {
       const n = (q + 0.5) / LV;
-      batch(halo[q], C.cyan, 0.1 * (0.4 + n));
-      batch(core[q], C.cyan, 0.22 + 0.5 * n);
+      for (let j = 0; j < halo[q].length; j += 3) glowAt(halo[q][j], halo[q][j + 1], halo[q][j + 2], C.cyan, 0.16 + 0.22 * n);
     }
-    for (const [x, y, n, lit] of hot) {
-      const r = (0.9 + 1.5 * n + lit * 2.2) * dpr;
-      ctx.fillStyle = rgba(C.hot, 0.1 * (0.4 + n) + lit * 0.18);
-      ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, TAU); ctx.fill();
-      ctx.fillStyle = rgba(C.hot, 0.22 + 0.5 * n + lit * 0.4);
-      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+    for (let q = 0; q < LV; q++) {
+      const n = (q + 0.5) / LV, pts = core[q];
+      if (!pts.length) continue;
+      ctx.beginPath();
+      for (let j = 0; j < pts.length; j += 3) { ctx.moveTo(pts[j] + pts[j + 2], pts[j + 1]); ctx.arc(pts[j], pts[j + 1], pts[j + 2], 0, TAU); }
+      ctx.fillStyle = rgba(n > 0.7 ? C.hot : C.cyan, 0.22 + 0.62 * n);
+      ctx.fill();
+    }
+    // the pointer reaches for the points it is near
+    if (lens.length) {
+      lens.sort((a, b) => b[2] - a[2]);
+      ctx.lineWidth = dpr;
+      for (const [x, y, w] of lens.slice(0, 7)) {
+        ctx.strokeStyle = rgba(C.hot, 0.28 * w * w);
+        ctx.beginPath(); ctx.moveTo(ptrX, ptrY); ctx.lineTo(x, y); ctx.stroke();
+      }
+      glowAt(ptrX, ptrY, 26 * dpr, C.violet, 0.22);
+      ctx.globalAlpha = 1;
     }
 
     // the formulas, drifting in depth
     for (const L of LABELS) {
       const [x, y, , z] = proj(view(L.p, y0 * 0.8, p0), cam);
       const n = near(z);
-      label(ctx, L.text, x, y, n > 0.5 ? C.ink1 : C.ink, (8.5 + 4 * n) * dpr,
-            0.06 + 0.16 * n + surge * 0.08, 'center', 500);
+      // set once at the largest size it is shown, scaled down as it recedes
+      const sp = textSprite(L.text, n > 0.5 ? C.ink1 : C.ink, 12.5 * dpr, 500).c, s = (8.5 + 4 * n) / 12.5;
+      ctx.globalAlpha = Math.min(1, 0.06 + 0.16 * n + surge * 0.08);
+      ctx.drawImage(sp, x - sp.width * s / 2, y - sp.height * s / 2, sp.width * s, sp.height * s);
     }
+    ctx.globalAlpha = 1;
+
+    // out-of-focus light, nearest of all: it moves most with the pointer and the scroll
+    const m = Math.min(W, H);
+    for (const b of BOKEH) {
+      const drift = reduceMotion ? 0 : 1;
+      const x = b.x * W + drift * (mx * 60 * b.depth * dpr + Math.sin(t * 0.07 + b.ph) * 40 * dpr);
+      const y = fract(b.y - lift * 0.35 * b.depth) * H + drift * (my * 40 * b.depth * dpr + Math.cos(t * 0.05 + b.ph) * 30 * dpr);
+      const a = b.a * (reduceMotion ? 0.75 + 0.25 * Math.sin(t * 0.4 + b.ph) : 1);
+      glowAt(x, y, b.r * m, b.col, a);
+    }
+    ctx.globalAlpha = 1;
     lastDraw = now;
   }
 
   function loop(t) {
     raf = 0;
     if (document.hidden || covered()) return;     // resumes on the next kick
-    const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
+    const dt = clamp((t - lastT) / 1000 || 0, 0, 0.1);   // a frame can be stamped before the kick
+    frameGap(t, t - lastT);
     lastT = t;
     // ~30fps at rest, full rate while the oracle works or the pointer moves;
-    // a gentle ~12fps twinkle under reduced motion, where nothing travels
-    const busy = !reduceMotion &&
-      (surge > 0.05 || document.body.classList.contains('handshaking') || t - lastMove < 1500);
-    if (busy || t - lastDraw > (reduceMotion ? 80 : 32)) draw(t, dt);
+    // a gentle ~12fps under reduced motion, where only light changes
+    const busy = surge > 0.05 || document.body.classList.contains('handshaking') || t - lastMove < 1500;
+    const rest = reduceMotion ? (t - lastMove < 1500 ? 33 : 80) : load.lite ? 64 : 32;
+    if ((!reduceMotion && busy && !load.lite) || t - lastDraw > rest) draw(t, dt);
     raf = requestAnimationFrame(loop);
   }
   function kick() {
@@ -284,8 +529,18 @@ function initField() {
     if (e.pointerType === 'touch') return;
     tmx = (e.clientX / innerWidth - 0.5) * 2;
     tmy = (e.clientY / innerHeight - 0.5) * 2;
+    ptrX = e.clientX * (c.width / Math.max(1, innerWidth));        // the canvas is the viewport
+    ptrY = e.clientY * (c.height / Math.max(1, innerHeight));
+    ptrOn = true;
     lastMove = performance.now();
   }, { passive: true });
+  document.addEventListener('pointerout', (e) => { if (!e.relatedTarget) ptrOn = false; });
+  // how far down the page we are, kept from events — reading it in a frame
+  // would lay the page out again first
+  let scrollAt = window.scrollY, docH = 1, viewH = innerHeight;
+  addEventListener('scroll', () => { scrollAt = window.scrollY; }, { passive: true });
+  addEventListener('resize', () => { viewH = innerHeight; }, { passive: true });
+  new ResizeObserver(([e]) => { docH = e.target.scrollHeight; }).observe(document.documentElement);
   document.addEventListener('visibilitychange', kick);
   // the pop-up closing (or the page otherwise changing state) restarts the loop
   new MutationObserver(kick).observe(document.body, { attributes: true, attributeFilter: ['class'] });
@@ -418,7 +673,9 @@ function groupLaw() {
     if (which === 'P') { st.xP = x; st.sP = s; } else { st.xQ = x; st.sQ = s; }
   }
   return {
-    id: 'group', touchAction: 'none',
+    // pan-y, not none: stacked on a phone, a window that swallowed every touch
+    // would trap the page's scroll. P and Q only move sideways anyway.
+    id: 'group', touchAction: 'pan-y',
     title: 'E : y² = x³ − 3x + 5', sub: 'over ℝ',
     noteHead: 'group law',
     noteBody: 'the chord through P and Q meets E again at −R; reflect it to get P + Q = R. k·P is this, repeated — the oracle’s whole job.',
@@ -507,11 +764,23 @@ function finiteField() {
 
     // every point of E(𝔽₂₁₁)
     shown = FIELD.map(([x, y]) => pr(to3(x, y)));
+    const rOf = (i) => Math.max(1.1, shown[i][2] / cam.f * 5.6) * dpr * (i === st.hover ? 2 : 1);
+    ctx.beginPath();                                 // all the halos, then all the cores: two fills, not 392
     for (let i = 0; i < shown.length; i++) {
-      const [x, y, k] = shown[i];
-      const r = Math.max(1.1, k / cam.f * 5.6) * dpr * (i === st.hover ? 2 : 1);
-      ctx.fillStyle = rgba(C.cyan, 0.13); ctx.beginPath(); ctx.arc(x, y, r * 3.2, 0, TAU); ctx.fill();
-      ctx.fillStyle = rgba(i === st.hover ? C.hot : C.cyan, 0.9); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      const [x, y] = shown[i], R = rOf(i) * 3.2;
+      ctx.moveTo(x + R, y); ctx.arc(x, y, R, 0, TAU);
+    }
+    ctx.fillStyle = rgba(C.cyan, 0.13); ctx.fill();
+    ctx.beginPath();
+    for (let i = 0; i < shown.length; i++) {
+      if (i === st.hover) continue;
+      const [x, y] = shown[i], r = rOf(i);
+      ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, TAU);
+    }
+    ctx.fillStyle = rgba(C.cyan, 0.9); ctx.fill();
+    if (st.hover >= 0 && shown[st.hover]) {
+      const [x, y] = shown[st.hover];
+      ctx.fillStyle = rgba(C.hot, 0.9); ctx.beginPath(); ctx.arc(x, y, rOf(st.hover), 0, TAU); ctx.fill();
     }
 
     // the walk P, 2P, …, 9P — each step an arc lifted off the lattice
@@ -662,15 +931,21 @@ function torus() {
     });
 
     // the two generating loops: the cell's edges, glued, become these
+    // Segments are gathered by side and stroked once per side: one stroke call
+    // per segment was over a thousand calls a frame.
+    const strokeSegs = (segs, col, a, w) => {
+      if (!segs.length) return;
+      ctx.beginPath();
+      for (let i = 0; i < segs.length; i += 4) { ctx.moveTo(segs[i], segs[i + 1]); ctx.lineTo(segs[i + 2], segs[i + 3]); }
+      ctx.strokeStyle = rgba(col, a); ctx.lineWidth = w; ctx.stroke();
+    };
+    const loopFront = [], loopBack = [];
     const loop = (fn, name) => {
       let prev = null, best = null;
       for (let i = 0; i <= 90; i++) {
         const [u, v] = fn(i / 90);
         const p = V(pos(u, v)), s = proj(p, cam), fc = facing(p, V(nrm(u, v)), cam.dist);
-        if (prev) {
-          ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); ctx.lineTo(s[0], s[1]);
-          ctx.strokeStyle = rgba(C.amber, fc > 0 ? 0.85 : 0.2); ctx.lineWidth = 1.6 * dpr; ctx.stroke();
-        }
+        if (prev) (fc > 0 ? loopFront : loopBack).push(prev[0], prev[1], s[0], s[1]);
         if (!best || fc > best[2]) best = [s[0], s[1], fc];
         prev = s;
       }
@@ -679,22 +954,24 @@ function torus() {
     const loopLabels = [];
     loop((s) => [s, 0], 'ω₁');
     loop((s) => [0, s], 'ω₂');
+    strokeSegs(loopBack, C.amber, 0.2, 1.6 * dpr);
+    strokeSegs(loopFront, C.amber, 0.85, 1.6 * dpr);
 
     // k·z mod Λ, wound round the torus
     const f = st.fade;
     const samples = Math.ceil(st.tp * 70);
     let prev = null;
+    const windFront = [], windBack = [];
     for (let i = 0; i <= samples; i++) {
       const tt = (i / Math.max(1, samples)) * st.tp;
       const [u, v] = at(tt);
       const p = V(pos(u, v)), s = proj(p, cam), fc = facing(p, V(nrm(u, v)), cam.dist);
-      if (prev) {
-        ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); ctx.lineTo(s[0], s[1]);
-        if (fc > 0) { ctx.strokeStyle = rgba(C.violet, 0.2 * f); ctx.lineWidth = 5 * dpr; ctx.stroke(); }
-        ctx.strokeStyle = rgba(C.violet, (fc > 0 ? 0.9 : 0.22) * f); ctx.lineWidth = 1.4 * dpr; ctx.stroke();
-      }
+      if (prev) (fc > 0 ? windFront : windBack).push(prev[0], prev[1], s[0], s[1]);
       prev = s;
     }
+    strokeSegs(windBack, C.violet, 0.22 * f, 1.4 * dpr);
+    strokeSegs(windFront, C.violet, 0.2 * f, 5 * dpr);
+    strokeSegs(windFront, C.violet, 0.9 * f, 1.4 * dpr);
     nodesT = [];
     for (let k = 1; k <= Math.floor(st.tp); k++) {
       const [u, v] = at(k);
@@ -804,60 +1081,61 @@ function torus() {
   };
 }
 
-/* ======================================================= the viewer */
+/* ============================================================ the windows */
+/* All three sheets at once, each in its own window with its own loop. They
+ * used to share one stage behind tabs, which meant only ever seeing one.
+ * Every window draws only while it is on screen and nothing covers it. */
+const SCENES = { group: groupLaw, field: finiteField, torus: torus };
 
 function initSheets() {
-  const fig = $('sheets'), c = $('sceneCanvas');
-  if (!fig || !c || !c.getContext) return;
-  const ctx = c.getContext('2d');
-  const scenes = { group: groupLaw(), field: finiteField(), torus: torus() };
-  const ui = {
-    title: $('sheetTitle'), sub: $('sheetSub'), head: $('sheetNoteHead'), body: $('sheetNoteBody'),
-    badge: $('sheetBadge'), hint: $('sheetHint'), readout: $('sheetReadout'),
-  };
-  const tabs = [...fig.querySelectorAll('[role="tab"]')];
-  let cur = null, visible = false, raf = 0, lastT = 0, lastDraw = 0, interacting = false, lastRead = '';
-  let dpr = 1;
-
-  function select(id, focus = false) {
-    cur = scenes[id];
-    for (const tb of tabs) {
-      const on = tb.dataset.scene === id;
-      tb.setAttribute('aria-selected', String(on));
-      tb.tabIndex = on ? 0 : -1;
-      if (on && focus) tb.focus();
-    }
-    ui.title.textContent = cur.title;
-    ui.sub.textContent = cur.sub;
-    ui.head.textContent = cur.noteHead;
-    ui.body.textContent = cur.noteBody;
-    ui.badge.textContent = cur.badge;
-    ui.hint.textContent = cur.hint;
-    c.style.touchAction = cur.touchAction;
-    c.dataset.scene = id;
-    if (cur.data) for (const [k, v] of Object.entries(cur.data)) c.dataset[k] = String(v);
-    fig.classList.remove('switching'); void fig.offsetWidth; fig.classList.add('switching');
-    kick(true);
+  for (const fig of document.querySelectorAll('.sheets[data-scene]')) {
+    try { mountWindow(fig, SCENES[fig.dataset.scene]); }
+    catch (err) { console.warn('vaultless sheet:', err); }   // one failing leaves the others
   }
+}
+
+function mountWindow(fig, factory) {
+  const c = fig.querySelector('.sheets-canvas');
+  if (!factory || !c || !c.getContext) return;
+  const ctx = c.getContext('2d');
+  const cur = factory();
+  const q = (sel) => fig.querySelector(sel);
+  const put = (sel, text) => { const el = q(sel); if (el) el.textContent = text; };
+  put('.sheets-title', cur.title);
+  put('.sheets-sub', cur.sub);
+  put('.sheets-note-head', cur.noteHead);
+  put('.sheets-note-body', cur.noteBody);
+  put('.sheets-badge', cur.badge);
+  put('.sheets-hint', cur.hint);
+  const readoutEl = q('.sheets-readout');
+  c.style.touchAction = cur.touchAction;
+  c.dataset.scene = cur.id;
+  if (cur.data) for (const [k, v] of Object.entries(cur.data)) c.dataset[k] = String(v);
+
+  let visible = false, raf = 0, lastT = 0, lastDraw = 0, interacting = false, lastRead = '', readAt = -1e9;
+  let dpr = 1;
 
   function frame(t) {
     raf = 0;
     if (covered()) return;                       // resumes when the pop-up closes
-    const dt = Math.min(0.1, (t - lastT) / 1000 || 0);
+    const dt = clamp((t - lastT) / 1000 || 0, 0, 0.1);   // a frame can be stamped before the kick
     lastT = t;
     // ~40fps while it idles (~30 when calm), full rate while someone has hold of it
-    if (interacting || t - lastDraw > (reduceMotion ? 32 : 24) || dt === 0) {
-      dpr = fit(c, 2);
+    if (interacting || t - lastDraw > (reduceMotion ? 32 : 24) * (load.lite ? 2 : 1) || dt === 0) {
+      dpr = load.lite ? fit(c, 1.5, 3e5) : fit(c, 2, 6e5);
       ctx.clearRect(0, 0, c.width, c.height);
       cur.draw(ctx, c.width, c.height, dpr, t / 1000, dt);
-      const text = cur.readout();
-      if (text !== lastRead) { ui.readout.textContent = text; lastRead = text; }
+      // numbers are for reading: a few times a second, or live under the finger
+      if (readoutEl && (interacting || t - readAt > 200)) {
+        const text = cur.readout();
+        if (text !== lastRead) { readoutEl.textContent = text; lastRead = text; readAt = t; }
+      }
       lastDraw = t;
     }
     if (visible && !document.hidden && cur.busy()) raf = requestAnimationFrame(frame);
   }
   function kick(now = false) {
-    if (raf || document.hidden || !cur || covered()) return;
+    if (raf || document.hidden || covered()) return;
     if (!visible && !now) return;
     lastT = performance.now();
     raf = requestAnimationFrame(frame);
@@ -895,23 +1173,14 @@ function initSheets() {
     if (cur.key(e)) { e.preventDefault(); fig.classList.add('touched'); kick(true); }
   });
 
-  tabs.forEach((tb, i) => {
-    tb.addEventListener('click', () => select(tb.dataset.scene));
-    tb.addEventListener('keydown', (e) => {
-      const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-      if (!d) return;
-      e.preventDefault();
-      select(tabs[(i + d + tabs.length) % tabs.length].dataset.scene, true);
-    });
-  });
-
-  new IntersectionObserver(([en]) => { visible = en.isIntersecting; kick(); }).observe(fig);
-  new MutationObserver(() => kick()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  // Only while the picture itself is at least a quarter on screen: a caption
+  // or a sliver of stage peeking in is not worth a frame.
+  new IntersectionObserver(([en]) => { visible = en.isIntersecting && en.intersectionRatio >= 0.25; kick(); },
+    { threshold: [0, 0.25] }).observe(c);
   new ResizeObserver(() => kick(true)).observe(c);
+  new MutationObserver(() => kick()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   document.addEventListener('visibilitychange', () => kick());
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => kick(true));
-
-  select(fig.dataset.start || 'torus');
+  kick(true);
 }
 
 /* ===================================================== 3D card tilt */
