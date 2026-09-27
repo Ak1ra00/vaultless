@@ -841,7 +841,7 @@ function finiteField() {
         const dx = (x - st.drag.x) / dpr, dy = (y - st.drag.y) / dpr;
         st.drag.moved = Math.max(st.drag.moved, Math.hypot(dx, dy));
         const prev = st.yaw;
-        st.yaw = st.drag.yaw + dx * 0.008;
+        st.yaw = st.drag.yaw - dx * 0.008;       // the near side follows the finger
         st.pitch = clamp(st.drag.pitch + dy * 0.006, 0.3, 1.4);
         st.vyaw = (st.yaw - prev) * 60;
         st.lastUser = performance.now() / 1000;
@@ -859,8 +859,8 @@ function finiteField() {
     },
     leave() { st.hover = -1; },
     key(e) {
-      if (e.key === 'ArrowLeft') st.yaw -= 0.08;
-      else if (e.key === 'ArrowRight') st.yaw += 0.08;
+      if (e.key === 'ArrowLeft') st.yaw += 0.08;          // as a drag to the left does
+      else if (e.key === 'ArrowRight') st.yaw -= 0.08;
       else if (e.key === 'ArrowUp') st.pitch = clamp(st.pitch + 0.06, 0.3, 1.4);
       else if (e.key === 'ArrowDown') st.pitch = clamp(st.pitch - 0.06, 0.3, 1.4);
       else if (e.key === 'Enter' || e.key === ' ') restart(FIELD[(Math.random() * FIELD.length) | 0]);
@@ -1056,7 +1056,7 @@ function torus() {
     move(x, y, dpr) {
       if (st.drag) {
         const prev = st.yaw;
-        st.yaw = st.drag.yaw + (x - st.drag.x) / dpr * 0.008;
+        st.yaw = st.drag.yaw - (x - st.drag.x) / dpr * 0.008;   // the near side follows the finger
         st.pitch = clamp(st.drag.pitch + (y - st.drag.y) / dpr * 0.006, -0.2, 1.4);
         st.vyaw = (st.yaw - prev) * 60;
         st.lastUser = performance.now() / 1000;
@@ -1073,8 +1073,8 @@ function torus() {
     up() { st.drag = null; },
     leave() { st.hover = -1; },
     key(e) {
-      if (e.key === 'ArrowLeft') st.yaw -= 0.1;
-      else if (e.key === 'ArrowRight') st.yaw += 0.1;
+      if (e.key === 'ArrowLeft') st.yaw += 0.1;           // as a drag to the left does
+      else if (e.key === 'ArrowRight') st.yaw -= 0.1;
       else if (e.key === 'ArrowUp') st.pitch = clamp(st.pitch + 0.08, -0.2, 1.4);
       else if (e.key === 'ArrowDown') st.pitch = clamp(st.pitch - 0.08, -0.2, 1.4);
       else return false;
