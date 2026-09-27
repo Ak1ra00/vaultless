@@ -128,6 +128,10 @@
     display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12.5px;color:var(--ink-1);
     background:var(--bg-2);border:1px solid var(--line);border-radius:999px;padding:7px 14px;
   }
+  /* On the password steps the pill is also the way back to the paper. */
+  button.conn{cursor:pointer;transition:border-color .2s, background .2s;}
+  button.conn:hover{border-color:var(--cyan-dim);background:var(--bg-3);}
+  button.conn:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-2);flex:none;}
   .dot.live{background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 1.8s ease-in-out infinite;}
   @keyframes pulse{50%{opacity:.45;}}
@@ -201,7 +205,10 @@
     background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));color:var(--on-accent);border-color:transparent;
     box-shadow:0 0 26px rgba(43,217,201,.32);font-size:18px;padding:18px 30px;min-height:62px;
   }
-  .btn.primary:hover:not(:disabled){box-shadow:0 0 40px rgba(43,217,201,.5);}
+  /* keeps its own face on hover: the plain .btn hover rule is more specific
+     than .btn.primary and used to paint it dark — and on a phone a tap leaves
+     :hover stuck on whatever lands under the finger next */
+  .btn.primary:hover:not(:disabled){background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));box-shadow:0 0 40px rgba(43,217,201,.5);}
   .btn.small{font-size:14px;padding:10px 15px;min-height:44px;}
   .btn.wide{width:100%;}
   .actions{display:flex;gap:12px;flex-wrap:wrap;}
@@ -214,7 +221,7 @@
 
   /* account number ----------------------------------------------------- */
   /* .chips / .chip outlived the account nicknames they were written for: the
-     trusted-oracle list in the welcome card is built from the same pieces. */
+     trusted-oracle list in the guide is built from the same pieces. */
   .chips{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;}
   .chip{
     font:inherit;font-size:14.5px;border-radius:999px;padding:9px 16px;min-height:42px;
@@ -564,7 +571,6 @@
   body:not(.in-app) .app-only{display:none;}
 
 
-  .just-looking{text-align:center;color:var(--ink-2);margin:30px auto 0;font-size:15px;max-width:600px;}
   .linky{
     font:inherit;font-size:15px;color:var(--cyan);background:none;border:0;padding:0;
     cursor:pointer;text-decoration:underline;text-underline-offset:3px;
@@ -613,8 +619,6 @@
   .what-strip strong{font-size:16px;color:var(--cyan);}
   .what-strip span{color:var(--ink-1);font-size:14.5px;line-height:1.5;}
 
-  .continue-row{text-align:center;margin:22px 0 6px;}
-  .continue-hint{color:var(--ink-2);font-size:14px;margin:10px 0 0;}
 
   /* paper oracle ------------------------------------------------------ */
   .sheet-panel{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg-0);}
@@ -676,14 +680,10 @@
   body.in-app .steps > *:nth-child(5){animation-delay:.36s;}
   body.in-app .steps > *:nth-child(6){animation-delay:.44s;}
   body:not(.in-app) .hero,
-  body:not(.in-app) #haveOracle,
   body:not(.in-app) .what-strip,
-  body:not(.in-app) .sheets-deck,
-  body:not(.in-app) #homeStep1{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) backwards;}
+  body:not(.in-app) .sheets-deck{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) backwards;}
   body:not(.in-app) .sheets-deck{animation-delay:.12s;}
-  body:not(.in-app) #haveOracle{animation-delay:.08s;}
-  body:not(.in-app) .what-strip{animation-delay:.16s;}
-  body:not(.in-app) #homeStep1{animation-delay:.24s;}
+  body:not(.in-app) .what-strip{animation-delay:.2s;}
 
   /* a completed step stamps a check over its number -------------------- */
   .num{position:relative;overflow:hidden;}
@@ -790,30 +790,7 @@
   .gh:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
   @media(max-width:560px){.gh span{display:none;}.gh{padding:7px 11px;}}
 
-  /* returning visitor -------------------------------------------------- */
-  /* While the fast lane is up the pitch is noise: someone who already has a
-     working oracle does not need to be sold the idea again. */
-  body.returning .hero,
-  body.returning .what-strip,
-  body.returning #haveOracle,
-  body.returning .sheets-deck,
-  body.returning #homeStep1,
-  body.returning #continueRow{display:none;}
-
-  .welcome{
-    border-color:var(--cyan-dim);
-    border-left:3px solid var(--cyan);
-    background:linear-gradient(180deg,rgba(43,217,201,.07),rgba(10,16,20,.94));
-    box-shadow:var(--shadow),0 0 44px rgba(43,217,201,.1);
-    margin-top:12px;
-  }
-  .welcome[hidden]{display:none;}
-  .wb-eyebrow{
-    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--cyan);display:block;margin-bottom:10px;
-  }
-  .wb-title{font-size:clamp(22px,3.4vw,30px);font-weight:600;letter-spacing:-.02em;margin-bottom:12px;}
-  .wb-line{color:var(--ink-1);font-size:16px;margin:0 0 10px;max-width:60ch;}
+  /* the oracles this browser trusts, as the guide greets a returning visitor */
   .wb-fp{font-family:var(--mono);color:var(--violet);font-size:.95em;}
   .wb-trust{margin:0 0 18px;}
   .wb-trust .lbl{display:block;margin-bottom:9px;}
@@ -834,56 +811,6 @@
   }
   .wb-last[hidden]{display:none;}
   .wb-last b{color:var(--ink-1);font-weight:500;}
-
-  /* the same shortcut for a browser that has never seen you --------------- */
-  /* The welcome card can only appear where a trusted key was stored, so on a
-     new laptop or in a private window a long-standing user is shown the
-     first-timer's tour. This is the shortcut offered up front instead. Violet
-     rather than cyan: cyan marks the guided path, and these two are the way
-     around it. */
-  .quick{
-    border-color:rgba(185,138,255,.34);
-    /* The reference marks every callout with a 3px rail down the left rather
-       than by tinting the whole border. */
-    border-left:3px solid var(--violet);
-    background:linear-gradient(180deg,rgba(185,138,255,.07),rgba(10,16,20,.92));
-    box-shadow:var(--shadow),0 0 40px rgba(185,138,255,.09);
-    margin-bottom:26px;
-  }
-  .quick[hidden]{display:none;}
-  .q-eyebrow{
-    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
-    color:var(--violet);display:block;margin-bottom:9px;
-  }
-  .q-title{font-size:clamp(19px,2.6vw,24px);font-weight:600;letter-spacing:-.02em;}
-  .q-line{color:var(--ink-1);font-size:15.5px;margin:9px 0 18px;max-width:62ch;}
-
-  .q-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:13px;}
-  .q-btn{
-    font:inherit;text-align:left;cursor:pointer;color:var(--ink-0);background:var(--bg-0);
-    border:1.5px solid var(--line-bright);border-radius:var(--r-sm);padding:17px 18px;
-    display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;
-    column-gap:14px;row-gap:4px;align-items:center;
-    transition:border-color .32s ease, transform .32s cubic-bezier(.2,.9,.3,1.2),
-               background .32s ease, box-shadow .32s ease;
-  }
-  .q-mark{grid-row:1 / 3;width:30px;height:30px;color:var(--violet);
-    transition:color .4s ease, transform .5s cubic-bezier(.2,.9,.3,1.2);}
-  .q-t{font-weight:600;font-size:16px;align-self:end;}
-  .q-s{color:var(--ink-1);font-size:13.5px;line-height:1.45;align-self:start;}
-  .q-btn:hover{
-    border-color:rgba(185,138,255,.55);background:rgba(185,138,255,.07);
-    transform:translateY(-2px);box-shadow:0 0 28px rgba(185,138,255,.16);
-  }
-  .q-btn:hover .q-mark{color:var(--violet);transform:scale(1.07);}
-  .q-btn:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
-  .q-btn[disabled]{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none;
-    border-color:var(--line);background:var(--bg-0);}
-  .q-btn[disabled] .q-mark{color:var(--ink-2);transform:none;}
-
-  .q-new{color:var(--ink-2);font-size:14.5px;margin:16px 0 0;}
-  .q-new .linky{font-size:14.5px;}
-
 
   /* paper oracle: the reveal ------------------------------------------- */
   #sheetOutput{animation:sheetFeed 1s cubic-bezier(.2,.8,.2,1) backwards;transform-origin:50% 0;}
@@ -945,30 +872,15 @@
      The Oracle sheets, live. scene.js draws them; this lays them out.
      ==================================================================== */
 
-  /* Desktop: the headline and the "already have an oracle?" shortcut share the
-     top row, and the three sheets run as one band of windows beneath them. On a
-     phone — where there is no beside — they simply stack, shortcut first. */
-  @media (min-width:1000px){
-    #viewHome{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:40px;align-items:center;}
-    /* display:grid outranks the UA's [hidden]{display:none}. Without this the
-       home page would never leave when the app opens. */
-    #viewHome[hidden]{display:none;}
-    #viewHome > *{grid-column:1 / -1;}
-    #viewHome > .hero{grid-column:1;grid-row:1;text-align:left;padding:0 0 28px;}
-    #viewHome > .hero p{margin:0;}
-    #viewHome > #haveOracle{grid-column:2;grid-row:1;margin-bottom:28px;}
-    #viewHome > .sheets-deck{grid-row:2;}
-    .hero h2{font-size:clamp(32px,3.1vw,44px);}
-  }
+  /* The home page only explains now — the way in is the pair of buttons in the
+     header — so it is the headline over one band of windows at every width. */
   /* Wide screens: the band of windows is allowed out of the 1080px column and
      into the side margins — the sheets are the thing worth looking at up here.
      --spill is how far it reaches past the column on each side: nothing at
      1080, up to 220px on a big monitor, and always 24px short of the viewport
      edge, so no scrollbar width can push it into a horizontal scroll. */
   @media (min-width:1200px){
-    #viewHome{--spill:clamp(0px, calc((100vw - 1080px) / 2 - 24px), 220px);column-gap:48px;}
-    #viewHome > .hero{margin-left:calc(var(--spill) * -.5);}
-    #viewHome > #haveOracle{margin-right:calc(var(--spill) * -.5);}
+    #viewHome{--spill:clamp(0px, calc((100vw - 1080px) / 2 - 24px), 220px);}
     #viewHome > .sheets-deck{margin-left:calc(var(--spill) * -1);margin-right:calc(var(--spill) * -1);}
   }
 
@@ -1087,26 +999,142 @@
     font:500 9px var(--mono);letter-spacing:.18em;color:var(--cyan);opacity:.75;
     border:1px solid var(--cyan-dim);border-radius:2px;padding:4px 8px;background:rgba(5,8,10,.55);
   }
-  #homeStep1 .step-h::after{content:'VAULTLESS · ORACLE · 01' / '';}
   #card1 .step-h::after{content:'VAULTLESS · PHRASE · 02' / '';}
   #card2 .step-h::after{content:'VAULTLESS · INDEX · 03' / '';}
   #card3 .step-h::after{content:'VAULTLESS · HKDF · 04' / '';}
   #card4 .step-h::after{content:'VAULTLESS · k·P · 05' / '';}
   @media (max-width:560px){.card.step .step-h::after{font-size:8px;letter-spacing:.14em;right:10px;bottom:10px;}}
 
-  /* 3D tilt: the shortcut button leans towards the pointer, and a highlight
-     follows it across the face. */
-  .q-btn{position:relative;overflow:hidden;}
-  .q-btn::after{
-    content:'';position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;
-    background:radial-gradient(260px 140px at var(--gx,50%) var(--gy,50%), rgba(185,138,255,.16), transparent 70%);
+  /* the way in ---------------------------------------------------------- */
+  /* Two buttons in the header, on every screen, instead of a shortcut card and
+     a step 1 far down the home page. The lit one is "New here" for a stranger
+     and "Returning" for a browser that already trusts an oracle. */
+  body.in-app .home-only{display:none;}
+  .entry{display:flex;gap:8px;}
+  .entry-btn{
+    font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;min-height:36px;white-space:nowrap;
+    padding:7px 16px;border-radius:999px;transition:.2s;
+    color:var(--ink-0);background:var(--bg-2);border:1px solid var(--line-bright);
   }
-  .q-btn.tilt-on{
-    transform:perspective(700px) translateY(-2px) rotateX(var(--ty,0deg)) rotateY(var(--tx,0deg));
-    transition:transform .12s ease-out, border-color .3s ease, background .3s ease, box-shadow .3s ease;
+  .entry-btn:hover{border-color:var(--cyan-dim);background:var(--bg-3);}
+  .entry-btn:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
+  body:not(.known) #startNew,
+  body.known #startBack{
+    background:linear-gradient(135deg,var(--cyan-hot),var(--cyan));color:var(--on-accent);
+    border-color:transparent;box-shadow:0 0 18px rgba(43,217,201,.32);
   }
-  .q-btn.tilt-on::after{opacity:1;}
+  body:not(.known) #startNew:hover,
+  body.known #startBack:hover{box-shadow:0 0 26px rgba(43,217,201,.5);}
+  @media(max-width:560px){
+    .head-right{width:100%;}
+    .entry{flex:1;}
+    .entry-btn{flex:1;padding:7px 10px;}
+  }
 
+  /* the guide ------------------------------------------------------------ */
+  /* A native modal <dialog>: head, a rail of the five steps, the page, and a
+     foot with the readiness line and the way forward. Only the page scrolls.
+     On a phone it is the whole screen. */
+  dialog.guide{
+    width:min(720px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 40px);
+    padding:0;border:1px solid var(--line-bright);border-radius:var(--r);
+    background:linear-gradient(180deg,rgba(15,23,28,.985),rgba(8,12,15,.985));color:var(--ink-0);
+    box-shadow:var(--shadow),0 0 70px rgba(43,217,201,.12);font-family:var(--sans);overflow:hidden;
+  }
+  dialog.guide[open]{display:flex;flex-direction:column;animation:askIn .42s cubic-bezier(.2,.9,.3,1.2);}
+  /* one steady height, so moving between pages does not make the panel jump */
+  @media(min-width:561px){ dialog.guide{height:min(780px,calc(100dvh - 40px));} }
+  dialog.guide::backdrop{background:rgba(3,5,6,.74);backdrop-filter:blur(4px);}
+  dialog.guide[open]::backdrop{animation:fadeIn .42s ease;}
+  dialog.guide [hidden]{display:none !important;}
+
+  .guide-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 22px 12px;}
+  .guide-eyebrow{
+    display:block;font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--cyan);
+  }
+  dialog.guide[data-flow="back"] .guide-eyebrow{color:var(--violet);}
+  .guide-title{font-size:clamp(21px,3vw,27px);font-weight:600;letter-spacing:-.02em;margin-top:7px;}
+  .guide-title:focus{outline:none;}
+  .guide-x{
+    flex:none;width:38px;height:38px;border-radius:50%;cursor:pointer;
+    font:inherit;font-size:22px;line-height:1;color:var(--ink-1);
+    background:var(--bg-2);border:1px solid var(--line);transition:.2s;
+  }
+  .guide-x:hover{color:var(--ink-0);border-color:var(--cyan-dim);}
+  .guide-x:focus-visible{outline:2px solid var(--neon);outline-offset:2px;}
+
+  .guide-rail{
+    list-style:none;display:flex;gap:6px;margin:0;padding:0 22px 14px;
+    border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;
+  }
+  .guide-rail li{
+    flex:none;display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);
+    padding:5px 11px 5px 5px;border-radius:999px;border:1px solid transparent;
+  }
+  .gr-n{
+    width:22px;height:22px;display:grid;place-items:center;border-radius:50%;
+    font:700 11px var(--mono);color:var(--ink-2);border:1px solid var(--line-bright);
+  }
+  .gr-sub{font-family:var(--mono);font-size:11px;color:var(--cyan);}
+  .gr-sub:empty{display:none;}
+  .guide-rail li[aria-current="step"]{color:var(--ink-0);border-color:var(--cyan-dim);background:rgba(43,217,201,.07);}
+  .guide-rail li[aria-current="step"] .gr-n{color:var(--cyan);border-color:var(--cyan);}
+  .guide-rail li.done .gr-n{background:var(--cyan);border-color:var(--cyan);color:var(--on-accent);font-size:0;}
+  .guide-rail li.done .gr-n::before{content:'✓';font-size:12px;}
+
+  .guide-notice{
+    margin:12px 22px 0;padding:9px 12px;font-size:14px;color:var(--ink-0);
+    border-left:2px solid var(--amber);background:rgba(224,166,64,.08);border-radius:0 var(--r-sm) var(--r-sm) 0;
+  }
+  .guide-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 22px 10px;}
+  .guide-page{animation:riseIn .45s cubic-bezier(.2,.8,.2,1) backwards;}
+  .guide-lead{color:var(--ink-1);font-size:16px;margin:0 0 16px;max-width:62ch;}
+  .halves{list-style:none;counter-reset:half;padding:0;margin:0 0 18px;display:grid;gap:10px;}
+  .halves li{
+    counter-increment:half;display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:3px;
+    padding:14px 16px;background:var(--bg-0);border:1px solid var(--line);border-radius:var(--r-sm);
+  }
+  .halves li::before{content:counter(half,decimal-leading-zero);grid-row:1 / 3;font:700 13px var(--mono);color:var(--cyan);padding-top:2px;}
+  .halves.keep li::before{color:var(--amber);}
+  .halves b{font-weight:600;font-size:15.5px;}
+  .halves span{color:var(--ink-1);font-size:14px;line-height:1.5;}
+  .guide-aside{color:var(--ink-2);font-size:14.5px;margin:10px 0 0;}
+  .guide-aside .linky{font-size:14.5px;}
+  /* what used to be step 1, at home in the guide */
+  .guide .help{margin-left:0;}
+  .guide .fork-panel{margin-top:0;padding-top:0;border-top:0;}
+  .guide .sheet-panel{margin-top:0;}
+  .guide-trust{
+    margin:0 0 16px;padding:14px 16px;border-left:3px solid var(--violet);
+    background:rgba(185,138,255,.06);border-radius:0 var(--r-sm) var(--r-sm) 0;
+  }
+  .guide-trust .guide-lead{margin-bottom:12px;}
+  .guide-trust .wb-trust{margin-bottom:12px;}
+  .guide-trust .wb-last{margin:0;}
+
+  .guide-foot{border-top:1px solid var(--line);padding:12px 22px 18px;background:rgba(5,8,10,.55);}
+  .guide-foot .ready-line{margin-top:0;}
+  .guide-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;}
+  .guide-nav .continue-hint{flex:1;min-width:150px;margin:0;color:var(--ink-2);font-size:13.5px;}
+  @media(max-width:560px){
+    dialog.guide{width:100vw;height:100dvh;max-height:100dvh;border:0;border-radius:0;}
+    .guide-head{padding:16px 16px 10px;}
+    .guide-rail{padding:0 16px 12px;}
+    .guide-rail li:not([aria-current]) .gr-t{display:none;}
+    .guide-rail li:not([aria-current]){padding-right:5px;}
+    .guide-notice{margin:10px 16px 0;}
+    .guide-body{padding:16px;}
+    .guide-foot{padding:10px 16px calc(14px + env(safe-area-inset-bottom));}
+    .guide-nav .continue-hint{flex-basis:100%;order:-1;}
+    .guide-nav .continue-hint:empty{display:none;}
+    .guide-nav{margin-top:8px;gap:10px;}
+    .guide-nav .btn{min-height:48px;padding:11px 16px;font-size:15px;}
+    .guide-nav #guideNext,.guide-nav #continueBtn{flex:1;}
+    .guide-foot .ready-row{flex-wrap:nowrap;gap:10px;}
+    .guide-foot .ready-line{font-size:12px;min-width:0;}
+    .guide-foot #sheetForget{flex:none;min-height:34px;padding:6px 11px;font-size:12.5px;}
+  }
 
   @media print{
     body{background:#fff;}
@@ -1118,6 +1146,9 @@
     /* sheet.js lifts #printable to the top of <body> and sets this class, so
        there is no app left in the flow to paginate into blank pages. */
     body.printing-sheet > *{display:none;}
+    /* the guide the sheet was lifted out of: an open dialog's own display:flex
+       would otherwise outrank the line above */
+    body.printing-sheet > dialog.guide{display:none !important;}
     body.printing-sheet > #printable{display:block;margin:0;padding:0;}
   }
 

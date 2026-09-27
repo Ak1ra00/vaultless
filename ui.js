@@ -16,6 +16,7 @@ export function toast(msg) {
    * phone read as two pop-ups. While it is open, messages go into its own
    * notice line instead. */
   if (popOpen) { notice(msg); return; }
+  if (guideOpen()) { guideNotice(msg); return; }
   const t = $('toast');
   t.textContent = msg;
   t.classList.add('on');
@@ -887,12 +888,15 @@ function setView(inApp, { push = true } = {}) {
 
 /* Readiness is reported by whichever module owns the oracle; it also decides
  * whether the way forward is open. */
+let oracleReady = false;
 export function setReady(text, ready) {
+  oracleReady = !!ready;
   /* The fast lane's last step. Once the oracle is actually ready there is
    * nothing left for "Continue" to confirm, so skip it and put the cursor where
    * the only remaining input goes. */
   if (ready && fastLaneArmed) {
     fastLaneArmed = false;
+    closeGuide();
     setView(true);
     applyLastUse();
     $('passphrase').focus({ preventScroll: true });
@@ -903,28 +907,185 @@ export function setReady(text, ready) {
     line.textContent = text;
     line.classList.toggle('ready', !!ready);
   }
-  const btn = $('continueBtn');
-  if (btn) {
-    btn.disabled = !ready;
-    $('continueHint').textContent = ready
-      ? 'Your oracle is ready.'
-      : 'Finish step 1 and this opens up.';
+  syncGuide();
+}
+
+/* ------------------------------------------------------------ the guide */
+/* The one way to get a paper oracle ready, opened from "New here" or
+ * "Returning" in the header. It holds the controls step 1 used to have on the
+ * home page — moved, not rebuilt — and presses the same two fork buttons a
+ * person used to, so sheet.js decides what each panel does exactly as before
+ * and there is no second path through setup to keep in step with the first.
+ *
+ *   New here:   how it works → make the paper → keep it safe → the password steps
+ *   Returning:  present the paper → straight to the phrase box
+ */
+const FLOWS = {
+  new: { eyebrow: 'New here', pages: ['intro', 'make', 'keep'] },
+  back: { eyebrow: 'Welcome back', pages: ['present'] },
+};
+const PAGE_TITLES = {
+  intro: 'Two halves make every password',
+  make: 'Make your paper oracle',
+  keep: 'Keep your paper safe',
+  present: 'Present your paper oracle',
+};
+let guideFlow = 'new', guideAt = 0;
+
+const guidePage = () => FLOWS[guideFlow].pages[guideAt];
+const guideOpen = () => !!$('guide')?.open;
+
+/* The camera belongs to the "present" page only; sheet.js listens for this. */
+const stopCamera = () => document.dispatchEvent(new CustomEvent('scanstop'));
+
+function openGuide(flow) {
+  const dlg = $('guide');
+  if (!dlg) return;
+  guideFlow = flow;
+  guideAt = 0;
+  dlg.dataset.flow = flow;
+  /* Returning with nothing loaded: the moment the oracle is ready, go straight
+   * on to the phrase. With one already loaded, the page just says so. */
+  fastLaneArmed = flow === 'back' && !oracleReady;
+  $('guideNotice').hidden = true;
+  if (!dlg.open) {
+    dlg.showModal();
+    document.body.classList.add('guide-open');
   }
+  showGuidePage();
+}
+
+function closeGuide() {
+  const dlg = $('guide');
+  if (dlg && dlg.open) dlg.close();     // the 'close' handler does the rest
+}
+
+function showGuidePage() {
+  const page = guidePage();
+  for (const p of document.querySelectorAll('#guide .guide-page')) p.hidden = p.dataset.page !== page;
+  $('guideEyebrow').textContent = `${FLOWS[guideFlow].eyebrow} · step 1 of 5`;
+  $('guideTitle').textContent = PAGE_TITLES[page];
+  if (page === 'present') {
+    if ($('forkHave').getAttribute('aria-pressed') !== 'true') $('forkHave').click();  // starts the camera
+    // for anyone who would rather type the code than hold it up
+    $('sheetManual').focus({ preventScroll: true });
+  } else {
+    stopCamera();
+    if (page === 'make' && $('forkCreate').getAttribute('aria-pressed') !== 'true') $('forkCreate').click();
+  }
+  $('guideBody').scrollTop = 0;
+  $('guideNotice').hidden = true;       // what was said belonged to the last page
+  syncGuide();
+  /* Focus the page's title so a screen reader hears where it is, without
+   * pulling the view — except on "present", where the code box has it. */
+  if (page !== 'present') {
+    const t = $('guideTitle');
+    t.tabIndex = -1;
+    t.focus({ preventScroll: true });
+  }
+}
+
+/* Buttons, hints and the rail, from where the guide is and whether an oracle
+ * is loaded. Called on every page change and every change of readiness. */
+let guideWasReady = false;
+function syncGuide() {
+  if (!$('guide')) return;
+  const pages = FLOWS[guideFlow].pages, page = guidePage();
+  const last = guideAt === pages.length - 1;
+  /* The oracle was just made: bring the new sheet and its Print button into
+   * view — they arrive below the scribble pad, out of sight. Scrolled to the
+   * button, since printing is what the page asks for next. */
+  if (guideOpen() && page === 'make' && oracleReady && !guideWasReady) {
+    const show = () => $('printSheetBtn').scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth', block: 'end' });
+    requestAnimationFrame(show);
+    // the sheet unrolls for about a second and pushes the button down as it
+    // does; follow it to where it finally rests
+    setTimeout(show, reduceMotion ? 60 : 1100);
+  }
+  guideWasReady = oracleReady;
+  /* The key can be dropped under the guide — the idle timer, or "Forget this
+   * oracle" — and forgetting closes whichever panel was open. Open it again,
+   * and step back to making one if the "keep it safe" page has nothing left
+   * to keep. */
+  if (guideOpen() && !oracleReady) {
+    if (page === 'keep') { guideAt = pages.indexOf('make'); showGuidePage(); return; }
+    if (page === 'make' && $('panelCreate').hidden) $('forkCreate').click();
+    if (page === 'present' && $('panelScan').hidden) $('forkHave').click();
+  }
+  $('guideBack').hidden = guideAt === 0;
+  $('guideNext').hidden = last;
+  $('continueBtn').hidden = !last;
+  $('guideNext').disabled = page === 'make' && !oracleReady;
+  $('guideNext').textContent = page === 'intro' ? 'Make my paper oracle →'
+    : page === 'make' ? 'I have printed it →' : 'Next →';
+  $('continueBtn').disabled = !oracleReady;
+  $('continueHint').textContent =
+    page === 'make' && !oracleReady ? 'Create your oracle and this opens up.'
+    : last && !oracleReady ? 'Scan the square or type its code and this opens up.'
+    : '';
+  $('guide').querySelector('.guide-foot .ready-row').hidden = page === 'intro';
+  const rail = $('guideRail').querySelector('[data-step="oracle"]');
+  rail.classList.toggle('done', oracleReady);
+  rail.setAttribute('aria-current', 'step');
+  $('guideSub').textContent = pages.length > 1 ? `${guideAt + 1} of ${pages.length}` : '';
+}
+
+/* While the guide is up it is the only thing on screen worth reading, so a
+ * message raised under it moves into its own notice line instead of a bubble
+ * the dialog would cover. */
+function guideNotice(msg) {
+  const n = $('guideNotice');
+  n.textContent = msg;
+  n.hidden = false;
+}
+
+function initGuide() {
+  const dlg = $('guide');
+  if (!dlg) return;
+  $('startNew').onclick = () => openGuide('new');
+  $('startBack').onclick = () => openGuide('back');
+  // From the password steps, the pill is the way back to the paper.
+  $('connBtn').onclick = () => openGuide('back');
+  $('guideToBack').onclick = () => openGuide('back');
+  $('guideToNew').onclick = () => openGuide('new');
+  $('guideClose').onclick = () => closeGuide();
+  $('guideBack').onclick = () => { if (guideAt > 0) { guideAt--; showGuidePage(); } };
+  $('guideNext').onclick = () => {
+    if ($('guideNext').disabled) return;
+    guideAt = Math.min(guideAt + 1, FLOWS[guideFlow].pages.length - 1);
+    showGuidePage();
+  };
+  $('continueBtn').onclick = () => { closeGuide(); setView(true); };
+  /* A click on the dimmed page around the panel closes it, as Escape does —
+   * but only one that also began there. A scribble that starts in the pad and
+   * is let go past the panel's edge ends in a click on the dialog too, and
+   * must not throw the guide away mid-stroke. */
+  let downOutside = false;
+  dlg.addEventListener('pointerdown', (e) => { downOutside = e.target === dlg; });
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg && downOutside) closeGuide();
+    downOutside = false;
+  });
+  dlg.addEventListener('close', () => {
+    fastLaneArmed = false;
+    stopCamera();
+    $('guideNotice').hidden = true;
+    document.body.classList.remove('guide-open');
+  });
 }
 
 /* ------------------------------------------------- returning visitors */
 /* Someone who has derived a password here before should not be walked through
  * setup again. The trusted-key set proves they have — it is only written after
- * an oracle has actually answered — so it is the signal this keys off.
+ * an oracle has actually answered — so it is the signal this keys off: the
+ * Returning button is the one lit up, and the guide greets them with the
+ * oracles this browser already trusts and the account they used last.
  *
  * The one thing that genuinely cannot be skipped is presenting the oracle: it
  * is the second factor, and the paper key is deliberately wiped on reload.
  * Everything AROUND that can go: which branch of the fork, and the press of
- * "Continue".
- *
- * This drives the existing controls rather than reimplementing them — it clicks
- * the same fork buttons a person would — so the setup and derivation paths stay
- * exactly as they were and there is nothing new to keep in step. */
+ * "Continue". */
 const LAST_KEY = 'vaultless.lastuse.v1';
 let fastLaneArmed = false;
 
@@ -958,25 +1119,10 @@ function applyLastUse() {
   }
 }
 
-/* Leaves the fast lane and puts the ordinary setup pages back. */
-function showSetup() {
-  document.body.classList.remove('returning');
-  $('welcomeBack').hidden = true;
-  $('haveOracle').hidden = false;
-}
-
-/* One press: open the scan branch and start the camera, with the typed-code
- * box focused for anyone who would rather type. */
-function unlock() {
-  showSetup();
-  /* The shortcut has done its job. Leaving it sitting above a running camera
-   * only invites a second press, which would tear the scan down and restart
-   * it. */
-  $('haveOracle').hidden = true;
-  fastLaneArmed = true;                 // setReady() takes it from here
-  $('forkHave').click();                // opens the scan panel and starts the camera
-  $('sheetManual').focus({ preventScroll: true });
-  $('homeStep1').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+/* No trusted oracle left: nothing to greet, and "New here" is the lit button again. */
+function forgetReturning() {
+  document.body.classList.remove('known');
+  $('wbTrust').hidden = true;
 }
 
 /* Trust has to be revocable from the page.
@@ -1032,9 +1178,8 @@ async function forgetOne(fp, all = false) {
 
   const left = forgetTrusted ? forgetTrusted(all ? null : fp) : [];
   if (!left.length) {
-    showSetup();
+    forgetReturning();
     toast(all ? 'All oracles forgotten' : `Forgot oracle ${fp}`);
-    $('homeStep1').scrollIntoView({ block: 'start' });
     return;
   }
   renderTrusted(left);
@@ -1042,11 +1187,9 @@ async function forgetOne(fp, all = false) {
 }
 
 /* app.js hands over the fingerprints, because it owns the trusted-key store and
- * the hashing needed to shorten them. No fingerprints means no fast lane. */
+ * the hashing needed to shorten them. No fingerprints means a first-timer. */
 export function initReturning(fingerprints, forget) {
   if (!fingerprints || !fingerprints.length) return;
-  if (document.body.classList.contains('in-app')) return;   // deep-linked; leave it
-
   forgetTrusted = forget;
   renderTrusted(fingerprints);
   $('wbForgetAll').onclick = () => forgetOne(null, true);
@@ -1058,29 +1201,8 @@ export function initReturning(fingerprints, forget) {
       `account ${last.index}${style ? ` · ${style}` : ''}`;
     $('wbLast').hidden = false;
   }
-  document.body.classList.add('returning');
-  $('welcomeBack').hidden = false;
-  $('wbGo').onclick = () => unlock();
-  $('wbSetup').onclick = () => { showSetup(); $('homeStep1').scrollIntoView({ block: 'start' }); };
-}
-
-/* The welcome card needs a trusted key to appear, so it can only ever help
- * someone on a browser that has already derived a password here. The case it
- * misses is the one a long-standing user hits most often — a new laptop, a
- * cleared profile, a private window — where nothing stored proves anything and
- * the page has no choice but to show the first-timer's tour.
- *
- * So the same shortcut is offered up front, unconditionally, and answers a
- * question instead of guessing at one. It runs `unlock`, which means the fork
- * buttons, the scanner and the derivation path are all exactly the ones the
- * long way round uses. */
-function initQuickEntry() {
-  $('quickPaper').onclick = () => unlock();
-  $('quickNew').onclick = () =>
-    $('homeStep1').scrollIntoView({
-      behavior: reduceMotion ? 'auto' : 'smooth',
-      block: 'start',
-    });
+  $('wbTrust').hidden = false;
+  document.body.classList.add('known');
 }
 
 function routeFromHash() {
@@ -1091,9 +1213,9 @@ function routeFromHash() {
 function initNav() {
   setView(routeFromHash(), { push: false });
 
-  $('continueBtn').onclick = () => setView(true);
   $('homeBtn').onclick = () => setView(false);
   $('chooseDemo').onclick = () => {
+    closeGuide();
     setView(true);
     toast('Type a phrase, then press “Try the demo” at step 5');
   };
@@ -1103,7 +1225,7 @@ function initNav() {
 export function initChrome() {
   initHandshakePop();
   initNav();
-  initQuickEntry();
+  initGuide();
   initMode();
   initStrength();
   initAccountNumber();

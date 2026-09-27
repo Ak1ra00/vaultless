@@ -14,9 +14,10 @@
  *   - This module imports nothing and is loaded by its own <script> tag, so it
  *     is a separate module graph. If it throws, app.js — and every password —
  *     is untouched.
- *   - The only application state it reads is two classes on <body>:
- *     `handshaking` (a derivation is in progress) and `hs-open` (the handshake
- *     pop-up is covering the page). No phrase, point, key or password is
+ *   - The only application state it reads is three classes on <body>:
+ *     `handshaking` (a derivation is in progress), and `hs-open` and
+ *     `guide-open` (the handshake pop-up, or the guide, is covering the page).
+ *     No phrase, point, key or password is
  *     reachable from here. The curve maths below is a toy over ℝ and 𝔽₂₁₁ and
  *     shares nothing with the ristretto255 group derivation actually uses.
  *   - Reduced motion means REDUCED, not removed. A slideshow of still frames
@@ -24,15 +25,17 @@
  *     with no scroll or pointer parallax; and the one full-screen layer — the
  *     backdrop, where large-field motion is what actually troubles people — does
  *     not turn at all, it only twinkles in place. Dragging still works.
- *   - Nothing animates off-screen, in a hidden tab, or under the pop-up.
+ *   - Nothing animates off-screen, in a hidden tab, or under a pop-up.
  */
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* How fast the diagrams move on their own: full speed, or calm. */
 const PACE = reduceMotion ? 0.3 : 1;
-/* The pop-up covers the whole page while it is open; nothing under it needs
- * drawing, and on a phone drawing it anyway is what made the pop-up stutter. */
-const covered = () => document.body.classList.contains('hs-open');
+/* The handshake pop-up, and the guide, cover the page while they are open;
+ * nothing under them needs drawing, and on a phone drawing it anyway is what
+ * made the pop-up stutter — and would slow the camera scanning in the guide. */
+const covered = () => document.body.classList.contains('hs-open')
+  || document.body.classList.contains('guide-open');
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2;
 
@@ -1183,53 +1186,8 @@ function mountWindow(fig, factory) {
   kick(true);
 }
 
-/* ===================================================== 3D card tilt */
-
-/* The shortcut button leans towards the pointer, with
- * a highlight that follows it. Mouse and pen only: on touch the card is under
- * the finger anyway, and a tilt that fires on every tap reads as a glitch.
- *
- * The hit test is against the card's rectangle as it was BEFORE it tilted.
- * Tilting moves the card's edges; test against the moved edges and a pointer
- * near one falls outside, the tilt drops, the edge moves back under the
- * pointer, and the card flickers. So the rectangle is taken on the way in and
- * kept until the pointer is really gone. */
-function initTilt() {
-  if (reduceMotion) return;
-  const SEL = '.q-btn';
-  let active = null, rect = null;
-  const inside = (r, e) => e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-  const clear = () => { if (active) active.classList.remove('tilt-on'); active = null; rect = null; };
-  const tilt = (el, r, e) => {
-    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
-    el.style.setProperty('--tx', `${((px - 0.5) * 9).toFixed(2)}deg`);
-    el.style.setProperty('--ty', `${((0.5 - py) * 7).toFixed(2)}deg`);
-    el.style.setProperty('--gx', `${(px * 100).toFixed(1)}%`);
-    el.style.setProperty('--gy', `${(py * 100).toFixed(1)}%`);
-    el.style.setProperty('--mx', (px - 0.5).toFixed(3));
-    el.style.setProperty('--my', (py - 0.5).toFixed(3));
-    el.classList.add('tilt-on');
-  };
-  document.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'touch') return;
-    if (active) {
-      if (inside(rect, e) && !active.disabled) { tilt(active, rect, e); return; }
-      clear();
-    }
-    const el = e.target instanceof Element ? e.target.closest(SEL) : null;
-    if (!el || el.disabled) return;
-    active = el;
-    rect = el.getBoundingClientRect();
-    tilt(el, rect, e);
-  }, { passive: true });
-  // left the window, scrolled (the stored rectangle is now stale), lost focus
-  document.addEventListener('pointerout', (e) => { if (!e.relatedTarget) clear(); });
-  addEventListener('scroll', clear, { passive: true });
-  addEventListener('blur', clear);
-}
-
 /* Each part stands alone: a failure in one leaves the others, and the page,
  * exactly as they were. */
-for (const init of [initField, initSheets, initTilt]) {
+for (const init of [initField, initSheets]) {
   try { init(); } catch (err) { console.warn('vaultless scene:', err); }
 }

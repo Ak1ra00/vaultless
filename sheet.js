@@ -88,7 +88,6 @@ function renderStatus() {
   $('sheetForget').style.display = loaded ? '' : 'none';
   // The source is reported on the result card; keep the button one plain verb.
   $('deriveBtn').textContent = 'Make my password';
-  $('homeStep1').classList.toggle('done', loaded);
   // The header pill and the step-1 readiness line both track the paper oracle.
   $('connDot').className = 'dot' + (loaded ? ' live' : '');
   $('connLabel').textContent = loaded ? 'paper oracle ready' : 'no paper oracle';
@@ -330,6 +329,8 @@ export function initSheet() {
    * is that nothing leaves the device. Tear it down whenever the screen it
    * belongs to is no longer the one being shown. */
   document.addEventListener('viewchange', stopScan);
+  // ...and when the guide it now lives in moves off the scan page or closes.
+  document.addEventListener('scanstop', stopScan);
 
   $('forkHave').onclick = () => {
     pickFork(PAPER_PANELS, 'forkHave');

@@ -46,6 +46,13 @@
       </div>
     </div>
     <div class="head-right">
+      <!-- The two ways in. Each opens the guide (the dialog at the end of the
+           page), which walks through getting the paper oracle ready and then
+           hands over to the password steps. -->
+      <div class="entry home-only" role="group" aria-label="Get started">
+        <button type="button" class="entry-btn" id="startNew" aria-haspopup="dialog">New here</button>
+        <button type="button" class="entry-btn" id="startBack" aria-haspopup="dialog">Returning</button>
+      </div>
       <a class="gh" href="https://github.com/Ak1ra00/vaultless" target="_blank" rel="noopener noreferrer"
          title="Read the source — every line that touches your passphrase">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor"
@@ -57,36 +64,16 @@
         <button id="modeSimple" type="button" aria-pressed="true">Simple</button>
         <button id="modeExpert" type="button" aria-pressed="false">Expert</button>
       </div>
-      <div class="conn app-only">
+      <button type="button" class="conn app-only" id="connBtn" aria-haspopup="dialog"
+              title="Present or change your paper oracle">
         <span class="dot" id="connDot" aria-hidden="true"></span>
         <span id="connLabel">no paper oracle</span>
-      </div>
+      </button>
     </div>
   </header>
 
   <!-- ===================== HOME ===================== -->
   <section id="viewHome">
-
-    <!-- Shown only to someone this browser has already derived a password for,
-         which the trusted-key set proves. Everything below it is hidden while
-         it is up: a returning visitor should see one button, not a tour. -->
-    <section class="card welcome" id="welcomeBack" hidden>
-      <span class="wb-eyebrow">Welcome back</span>
-      <h2 class="wb-title">Your oracle is already trusted here</h2>
-      <p class="wb-line">Present it and you are straight at your passwords — nothing to set
-        up again.</p>
-      <div class="wb-trust">
-        <span class="lbl">trusted on this browser</span>
-        <div class="chips" id="wbFps" role="group" aria-label="Oracles this browser trusts"></div>
-        <button type="button" class="linky wb-forgetall" id="wbForgetAll" hidden>forget all of them</button>
-      </div>
-      <p class="wb-last" id="wbLast" hidden>Picking up where you left off:
-        <b id="wbLastText"></b></p>
-      <div class="actions">
-        <button class="btn primary" id="wbGo">Unlock my passwords →</button>
-        <button class="btn small" id="wbSetup" type="button">Set up a different oracle</button>
-      </div>
-    </section>
 
     <div class="hero">
       <h2>Your passwords, <span class="grad">remembered by nobody</span></h2>
@@ -97,34 +84,6 @@
       <p class="expert-only">Deterministic derivation through a two-party oblivious PRF over
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>
-
-    <!-- Step 1 exists to explain what an oracle is and to get one made.
-         Someone who already owns one needs neither — they need the camera.
-         The welcome card above covers the case where this browser remembers them; this covers the case where it does not, which
-         is every new laptop, cleared profile and private window. It presses the
-         very same controls a person would, so there is no second path through
-         setup to keep in step with the first. -->
-    <section class="card quick" id="haveOracle">
-      <span class="q-eyebrow">Already have an oracle?</span>
-      <h3 class="q-title">Go straight to your passwords</h3>
-      <p class="q-line">Present the one you already own. There is nothing to set up again
-        and nothing to make — one press lands you at the phrase box.</p>
-      <div class="q-row">
-        <button type="button" class="q-btn" id="quickPaper">
-          <svg class="q-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-            <path d="M3 8.5V4.8A1.8 1.8 0 0 1 4.8 3H8.5M15.5 3h3.7A1.8 1.8 0 0 1 21 4.8v3.7M21 15.5v3.7a1.8 1.8 0 0 1-1.8 1.8h-3.7M8.5 21H4.8A1.8 1.8 0 0 1 3 19.2v-3.7"
-                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            <rect x="7.3" y="7.3" width="4.2" height="4.2" rx=".9" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M14 12.6h2.8M13.2 15.6h3.6M7.6 14.8h2.4v2.2" stroke="currentColor"
-                  stroke-width="1.5" stroke-linecap="round" opacity=".75"/>
-          </svg>
-          <span class="q-t">Scan my paper square</span>
-          <span class="q-s">Opens the camera. Typing the code printed under it works too.</span>
-        </button>
-      </div>
-      <p class="q-new">First time here? <button type="button" class="linky" id="quickNew">Start from
-        the beginning</button> — it takes a couple of minutes, once.</p>
-    </section>
 
     <!-- The Oracle sheets, live — all three at once, each in its own window.
          After the backgrounds in Ak1ra00/oracle, redrawn from the maths every
@@ -226,121 +185,6 @@
         give the same password, on any computer, forever.</span></li>
     </ul>
 
-    <section class="card step" id="homeStep1">
-      <div class="step-h"><span class="num" aria-hidden="true">1</span><h3>Your paper oracle</h3></div>
-      <p class="help">Your oracle is the half of the secret that lives outside your head: a key
-        printed as a square of paper. Your phrase and the paper together make every password;
-        either one alone makes nothing.</p>
-      <div>
-        <p class="help">Do you already have a printed square, or do you need to make one?</p>
-        <div class="fork" role="group" aria-label="Paper oracle state">
-          <button type="button" class="forkbtn" id="forkHave" aria-pressed="false">
-            <span class="fk-t">I already have one</span>
-            <span class="fk-s">Scan the square, or type the code under it</span>
-          </button>
-          <button type="button" class="forkbtn" id="forkCreate" aria-pressed="false">
-            <span class="fk-t">I need to make one</span>
-            <span class="fk-s">Takes a minute — you'll want a printer</span>
-          </button>
-        </div>
-
-        <div class="fork-panel" id="panelScan" hidden>
-      <div class="sheet-panel" id="sheetPanel">
-        <div class="sheet-status" id="sheetStatus">No paper oracle loaded</div>
-        <div class="actions" style="margin-bottom:12px;">
-          <button class="btn small" id="sheetScanBtn">Scan with camera</button>
-          <button class="btn small" id="sheetStopBtn">Stop camera</button>
-        </div>
-        <div id="sheetScanArea" style="display:none;">
-          <video id="sheetVideo" class="scan-video" muted playsinline></video>
-          <canvas id="sheetCanvas" style="display:none;"></canvas>
-          <p class="help" style="margin:10px 0 0;">Hold the printed square up to the camera.</p>
-        </div>
-        <label class="sheet-label" for="sheetManual">…or type the code printed under the square</label>
-        <div class="pw-row">
-          <input type="text" id="sheetManual" placeholder="VLT1-…" autocomplete="off"
-                 autocapitalize="characters" spellcheck="false">
-          <button class="btn" id="sheetManualBtn" type="button">Use code</button>
-        </div>
-        <div class="sheet-error" id="sheetError" role="alert"></div>
-      </div>
-        </div>
-
-        <div class="fork-panel" id="panelCreate" hidden>
-<p class="help">This prints your oracle: a square of paper holding a random key.
-        Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
-        password. <strong>No password is printed on it.</strong></p>
-      <div class="warn-box">
-        <strong>Read this before you print.</strong>
-        <ul>
-          <li>Anyone who photographs the paper <em>and</em> knows your phrase can make every one of
-            your passwords. Treat it like a bank card, not a shopping list.</li>
-          <li>Lose the paper with no copy and every password it makes is gone for good.
-            Print two and store them apart.</li>
-          <li>Your computer reads the key every time you scan it, so scan it only on a computer
-            you trust — malware there could copy the key along with your phrase.</li>
-          <li>Print it on a printer you own, onto paper. Not to PDF — that leaves the key in a
-            file, and probably in a sync folder. Not to a shared or office printer either: the
-            job passes through the queue and many printers keep it on an internal disk.</li>
-        </ul>
-      </div>
-      <div class="entropy">
-        <p class="help" style="margin-bottom:12px;"><strong>Scribble in the box.</strong> Your
-          squiggle gets stirred into the randomness your browser already produces. It can only add
-          to it — never replace it — so a lazy scribble is no worse than none, and a wild one is a
-          little better.</p>
-        <canvas id="entropyPad" class="entropy-pad" aria-label="Draw here to add randomness"></canvas>
-        <div class="sbar" style="margin-top:12px;"><i id="entropyBar"></i></div>
-        <div class="stext">
-          <span id="entropyText">Draw in the box to begin…</span>
-          <button type="button" class="linky" id="entropyReset">start again</button>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button class="btn primary" id="createSheetBtn" disabled>Create my paper oracle</button>
-      </div>
-
-      <div id="sheetOutput" style="display:none;">
-        <div class="printable" id="printable">
-          <h4>vaultless paper oracle</h4>
-          <!-- Purely presentational: the wrapper is what the scan line is drawn
-               on during the reveal. The canvas keeps its id and is still
-               reached by getElementById, so nothing that draws or reads it
-               cares that it gained a parent. -->
-          <div class="qr-wrap"><canvas id="sheetQR" class="qr"></canvas></div>
-          <div class="sheet-meta">
-            <div><span class="k">oracle fingerprint</span><span class="v" id="sheetFp"></span></div>
-            <div><span class="k">created</span><span class="v" id="sheetDate"></span></div>
-          </div>
-          <div class="sheet-code" id="sheetCode"></div>
-          <p class="sheet-note"><strong>This is not a password.</strong> No password is printed
-            here. This square does the secret handshake that makes your passwords — at
-            vaultless.space, scan it or type the code, then add the master phrase you keep in your
-            head. Both halves are needed. Anyone holding both can make every password this oracle
-            makes, so store it like cash.</p>
-        </div>
-        <div class="actions" style="margin-top:16px;">
-          <button class="btn primary" id="printSheetBtn">Print my paper oracle</button>
-        </div>
-      </div>
-        </div>
-      </div>
-
-      <div class="ready-row">
-        <div class="ready-line" id="oracleReady" aria-live="polite"></div>
-        <button class="btn small" id="sheetForget" style="display:none;">Forget this oracle</button>
-      </div>
-    </section>
-
-    <div class="continue-row" id="continueRow">
-      <button class="btn primary" id="continueBtn" disabled>Continue to my password →</button>
-      <p class="continue-hint" id="continueHint">Finish step 1 and this opens up.</p>
-    </div>
-
-    <p class="just-looking">No paper oracle yet? <button type="button" class="linky" id="chooseDemo">Take a
-      look around</button> — the demo runs the whole handshake with a pretend key, so nothing you
-      see is a real password.</p>
   </section>
 
   <!-- ===================== APP ===================== -->
@@ -571,6 +415,189 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- The guide: the one way to get a paper oracle ready.
+     Opened from "New here" or "Returning" in the header (and from the oracle
+     pill on the password steps). It holds the very controls step 1 used to
+     have on the home page — the scanner, the scribble pad, create and print —
+     moved rather than rebuilt, so sheet.js drives them exactly as before. A
+     native modal <dialog>: a real focus trap, Escape to close, and the
+     confirm dialog can still open on top of it. -->
+<dialog class="guide" id="guide" aria-labelledby="guideTitle">
+  <div class="guide-head">
+    <div class="guide-titles">
+      <span class="guide-eyebrow" id="guideEyebrow"></span>
+      <h2 class="guide-title" id="guideTitle"></h2>
+    </div>
+    <button type="button" class="guide-x" id="guideClose" aria-label="Close">×</button>
+  </div>
+  <ol class="guide-rail" id="guideRail" aria-label="The steps to a password">
+    <li data-step="oracle"><span class="gr-n" aria-hidden="true">1</span><span class="gr-t">Paper oracle</span><span class="gr-sub" id="guideSub"></span></li>
+    <li><span class="gr-n" aria-hidden="true">2</span><span class="gr-t">Phrase</span></li>
+    <li><span class="gr-n" aria-hidden="true">3</span><span class="gr-t">Account</span></li>
+    <li><span class="gr-n" aria-hidden="true">4</span><span class="gr-t">Style</span></li>
+    <li><span class="gr-n" aria-hidden="true">5</span><span class="gr-t">Password</span></li>
+  </ol>
+  <p class="guide-notice" id="guideNotice" role="status" hidden></p>
+
+  <div class="guide-body" id="guideBody">
+    <section class="guide-page" data-page="intro" hidden>
+      <p class="guide-lead">Nothing here stores a password. Each one is worked out on the spot
+        from two halves, and it takes both.</p>
+      <ol class="halves">
+        <li><b>A phrase in your head</b><span>Something only you know. It never leaves this
+          device and is never written down.</span></li>
+        <li><b>A paper oracle</b><span>A random key printed as a square of paper. You make it
+          once, in the next step, and present it whenever you need a password.</span></li>
+        <li><b>A number per account</b><span>The same phrase, paper and number always give the
+          same password, on any computer — and every account gets a different one.</span></li>
+      </ol>
+      <p class="guide-aside">Already have a printed square?
+        <button type="button" class="linky" id="guideToBack">Present it instead</button></p>
+      <p class="guide-aside">Just looking? <button type="button" class="linky" id="chooseDemo">Try
+        the demo</button> — it runs the whole handshake with a pretend key, so nothing you see is a
+        real password.</p>
+    </section>
+
+    <section class="guide-page" data-page="present" hidden>
+      <div class="guide-trust" id="wbTrust" hidden>
+        <p class="guide-lead">Your oracle is already trusted on this browser. Present it and you are
+          straight at your passwords — nothing to set up again.</p>
+        <div class="wb-trust">
+        <span class="lbl">trusted on this browser</span>
+        <div class="chips" id="wbFps" role="group" aria-label="Oracles this browser trusts"></div>
+        <button type="button" class="linky wb-forgetall" id="wbForgetAll" hidden>forget all of them</button>
+      </div>
+        <p class="wb-last" id="wbLast" hidden>Picking up where you left off:
+        <b id="wbLastText"></b></p>
+      </div>
+      <div class="fork-panel" id="panelScan" hidden>
+      <div class="sheet-panel" id="sheetPanel">
+        <div class="sheet-status" id="sheetStatus">No paper oracle loaded</div>
+        <div class="actions" style="margin-bottom:12px;">
+          <button class="btn small" id="sheetScanBtn">Scan with camera</button>
+          <button class="btn small" id="sheetStopBtn">Stop camera</button>
+        </div>
+        <div id="sheetScanArea" style="display:none;">
+          <video id="sheetVideo" class="scan-video" muted playsinline></video>
+          <canvas id="sheetCanvas" style="display:none;"></canvas>
+          <p class="help" style="margin:10px 0 0;">Hold the printed square up to the camera.</p>
+        </div>
+        <label class="sheet-label" for="sheetManual">…or type the code printed under the square</label>
+        <div class="pw-row">
+          <input type="text" id="sheetManual" placeholder="VLT1-…" autocomplete="off"
+                 autocapitalize="characters" spellcheck="false">
+          <button class="btn" id="sheetManualBtn" type="button">Use code</button>
+        </div>
+        <div class="sheet-error" id="sheetError" role="alert"></div>
+      </div>
+        </div>
+      <p class="guide-aside">No square yet?
+        <button type="button" class="linky" id="guideToNew">Make one — start as new</button></p>
+    </section>
+
+    <section class="guide-page" data-page="make" hidden>
+      <div class="fork-panel" id="panelCreate" hidden>
+<p class="help">This prints your oracle: a square of paper holding a random key.
+        Your phrase stays in your head, the paper stays somewhere safe, and it takes both to make a
+        password. <strong>No password is printed on it.</strong></p>
+      <div class="warn-box">
+        <strong>Read this before you print.</strong>
+        <ul>
+          <li>Anyone who photographs the paper <em>and</em> knows your phrase can make every one of
+            your passwords. Treat it like a bank card, not a shopping list.</li>
+          <li>Lose the paper with no copy and every password it makes is gone for good.
+            Print two and store them apart.</li>
+          <li>Your computer reads the key every time you scan it, so scan it only on a computer
+            you trust — malware there could copy the key along with your phrase.</li>
+          <li>Print it on a printer you own, onto paper. Not to PDF — that leaves the key in a
+            file, and probably in a sync folder. Not to a shared or office printer either: the
+            job passes through the queue and many printers keep it on an internal disk.</li>
+        </ul>
+      </div>
+      <div class="entropy">
+        <p class="help" style="margin-bottom:12px;"><strong>Scribble in the box.</strong> Your
+          squiggle gets stirred into the randomness your browser already produces. It can only add
+          to it — never replace it — so a lazy scribble is no worse than none, and a wild one is a
+          little better.</p>
+        <canvas id="entropyPad" class="entropy-pad" aria-label="Draw here to add randomness"></canvas>
+        <div class="sbar" style="margin-top:12px;"><i id="entropyBar"></i></div>
+        <div class="stext">
+          <span id="entropyText">Draw in the box to begin…</span>
+          <button type="button" class="linky" id="entropyReset">start again</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="createSheetBtn" disabled>Create my paper oracle</button>
+      </div>
+
+      <div id="sheetOutput" style="display:none;">
+        <div class="printable" id="printable">
+          <h4>vaultless paper oracle</h4>
+          <!-- Purely presentational: the wrapper is what the scan line is drawn
+               on during the reveal. The canvas keeps its id and is still
+               reached by getElementById, so nothing that draws or reads it
+               cares that it gained a parent. -->
+          <div class="qr-wrap"><canvas id="sheetQR" class="qr"></canvas></div>
+          <div class="sheet-meta">
+            <div><span class="k">oracle fingerprint</span><span class="v" id="sheetFp"></span></div>
+            <div><span class="k">created</span><span class="v" id="sheetDate"></span></div>
+          </div>
+          <div class="sheet-code" id="sheetCode"></div>
+          <p class="sheet-note"><strong>This is not a password.</strong> No password is printed
+            here. This square does the secret handshake that makes your passwords — at
+            vaultless.space, scan it or type the code, then add the master phrase you keep in your
+            head. Both halves are needed. Anyone holding both can make every password this oracle
+            makes, so store it like cash.</p>
+        </div>
+        <div class="actions" style="margin-top:16px;">
+          <button class="btn primary" id="printSheetBtn">Print my paper oracle</button>
+        </div>
+      </div>
+        </div>
+    </section>
+
+    <section class="guide-page" data-page="keep" hidden>
+      <p class="guide-lead">Your oracle is loaded and ready. Before you go on:</p>
+      <ol class="halves keep">
+        <li><b>Print a second copy</b><span>and keep the two apart. Lose the paper with no copy and
+          every password it makes is gone for good.</span></li>
+        <li><b>Treat it like a bank card</b><span>Anyone holding the paper who also knows your phrase
+          can make every one of your passwords.</span></li>
+        <li><b>Next time, press Returning</b><span>at the top of the page and present it. There is
+          nothing to set up again.</span></li>
+      </ol>
+    </section>
+
+    <!-- Which panel is open is still decided by these two buttons, as it always
+         was. The guide presses them; nobody needs to see them. -->
+    <div class="fork" hidden role="group" aria-label="Paper oracle state">
+          <button type="button" class="forkbtn" id="forkHave" aria-pressed="false">
+            <span class="fk-t">I already have one</span>
+            <span class="fk-s">Scan the square, or type the code under it</span>
+          </button>
+          <button type="button" class="forkbtn" id="forkCreate" aria-pressed="false">
+            <span class="fk-t">I need to make one</span>
+            <span class="fk-s">Takes a minute — you'll want a printer</span>
+          </button>
+        </div>
+
+  </div>
+
+  <div class="guide-foot">
+    <div class="ready-row">
+        <div class="ready-line" id="oracleReady" aria-live="polite"></div>
+        <button class="btn small" id="sheetForget" style="display:none;">Forget this oracle</button>
+      </div>
+    <div class="guide-nav">
+      <button type="button" class="btn" id="guideBack">← Back</button>
+      <p class="continue-hint" id="continueHint"></p>
+      <button type="button" class="btn primary" id="guideNext">Next →</button>
+      <button type="button" class="btn primary" id="continueBtn" disabled>Continue to my password →</button>
+    </div>
+  </div>
+</dialog>
 
 <!-- One dialog, reused for asking and confirming. No <form method="dialog">:
      this page runs under form-action 'none'. -->

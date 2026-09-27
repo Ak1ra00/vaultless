@@ -7,27 +7,24 @@ up, or leak.
 
 Live at **[vaultless.space](https://vaultless.space)**.
 
-![The home page: the headline, the way straight in for someone who already has a sheet, and the three live sheets side by side](docs/home.jpg)
+![The home page: New here and Returning at the top, the headline, and the three live sheets side by side](docs/home.jpg)
 
-The first visit walks you through getting a paper oracle before it asks for
-anything else:
-
-```
-scan the one you have, or: scribble → create → print ──→ phrase → account → style → password
-```
-
-Someone who already owns a sheet skips that:
+Two buttons at the top of every page are the way in. The rest of the home page
+only explains how it works. Each button opens a guide that walks you to a ready
+paper oracle, then hands you to the password steps:
 
 ```
-this browser has used it     Welcome back → Unlock my passwords ─┐
-                                                                 ├→ phrase → password
-new laptop, private window   Already have an oracle? → scan ─────┘
+New here    how it works → make it: scribble, create, print → keep it safe ─┐
+                                                                             ├→ phrase → account → style → password
+Returning   present your sheet: scan it, or type its code ───────────────────┘
 ```
+
+<img src="docs/guide.jpg" alt="The guide for someone new: the five steps along the top, and the two halves every password is made from" width="560">
 
 ## Using it
 
-- **First time.** Scan the sheet you have, or make one: scribble in the box, create,
-  and print it. Then type your phrase, pick an account number and a style, and press
+- **First time.** Press **New here**. The guide explains the two halves, then has
+  you make your sheet: scribble in the box, create, and print it. Then type your phrase, pick an account number and a style, and press
   **Make my password**. The computation opens over the page and plays out as it
   happens — the phrase hashed onto the curve, stamped with the key from your sheet,
   HKDF filling in the characters. Then the masked characters lift off the pop-up
@@ -36,20 +33,21 @@ new laptop, private window   Already have an oracle? → scan ─────┘
 
   ![The handshake pop-up in the demo: the oracle's k walking B across the curve, one chord at a time](docs/handshake.jpg)
 
-- **Coming back on the same browser.** A *Welcome back* card lists the oracles this
-  browser trusts, by fingerprint. One button opens the camera and lands you at the
-  phrase box, with the last account number and style already filled in. The same
-  card forgets an oracle you no longer use.
+- **Coming back on the same browser.** **Returning** is the lit button. It opens the
+  camera, with the code box ready for anyone who would rather type, and greets you
+  with the oracles this browser trusts, by fingerprint. The moment your sheet is read
+  you are at the phrase box, with the last account number and style already filled
+  in. The same place forgets an oracle you no longer use.
 - **Coming back on a new browser.** Nothing is stored there, so there is nothing to
-  welcome you back with — but *Already have an oracle?* opens the camera for your
-  paper square (or lets you type its code) in one press. This browser has never seen
-  the sheet, so the first derivation trusts it and names its fingerprint: check it
-  against the one printed on the sheet.
+  greet you with, but **Returning** still opens the camera for your paper square (or
+  lets you type its code). This browser has never seen the sheet, so the first
+  derivation trusts it and names its fingerprint: check it against the one printed
+  on the sheet.
 - **One phrase, many passwords.** Change the account number for each site. The
   sheet is an input too, so the same phrase and number with a different sheet make
   a different password — which is why, once this browser trusts a sheet, a
   different one is stopped with a warning before any password is made.
-- **Just looking?** *Take a look around* runs a demo against a simulated oracle with
+- **Just looking?** *Try the demo*, on the guide's first page, runs a demo against a simulated oracle with
   a throwaway key, playing the full two-party exchange. Nothing it shows is a real
   password.
 
@@ -70,7 +68,7 @@ data removes all of it.
 
 | key | holds | why |
 | --- | --- | --- |
-| `vaultless.oracle.trusted.v1` | the public keys `Y = k·G` of the sheets you have accepted | the pin that catches a swapped sheet; also what the *Welcome back* card is shown for |
+| `vaultless.oracle.trusted.v1` | the public keys `Y = k·G` of the sheets you have accepted | the pin that catches a swapped sheet; also what lights **Returning** and the guide's greeting |
 | `vaultless.lastuse.v1` | last account number and password style | pick up where you left off |
 | `vaultless.mode.v1` | `simple` or `expert` | the explanation level |
 | `vaultless.oracle.pubkey.v1` | a single pinned key, from before the set existed | read once to carry it into the set; never written |
@@ -186,8 +184,8 @@ The windows and the backdrop live in `scene.js`, and the handshake drawing in
 
 - Each imports nothing and is loaded by its own `<script>` tag, so each is a
   separate module graph. If either throws, derivation carries on.
-- `scene.js` reads only two classes on `<body>`: `handshaking`, and `hs-open`
-  while the pop-up covers the page. `handshake.js` reads only the stage name, which oracle path is in use, the
+- `scene.js` reads only three classes on `<body>`: `handshaking`, and `hs-open` or
+  `guide-open` while the handshake pop-up or the guide covers the page. `handshake.js` reads only the stage name, which oracle path is in use, the
   password's length (set by the style) and the readout, which only ever holds
   `B` and `B′`. No phrase, key, `P`, `S` or password is reachable from either,
   and the curves they draw are toys over ℝ and 𝔽₂₁₁ that share nothing with
@@ -214,7 +212,7 @@ index.html             the page: markup only
 styles.css             the stylesheet — the CSP allows no inline <style> element
 app.js                 derivation (paper, and the demo's simulated oracle), DLEQ
                          verification, trusted-key pinning, clipboard scrub
-ui.js                  chrome: the welcome-back and quick-entry cards, simple/expert
+ui.js                  chrome: the New here / Returning guide, simple/expert
                          switch, passphrase meter, account number, the handshake
                          pop-up and its pacing, masking and reveal
 sheet.js               paper oracle UI: entropy pad, scanning, printing, key lifetime
