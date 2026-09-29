@@ -611,6 +611,43 @@
   .entropy-pad:hover{border-color:var(--cyan-dim);}
   .entropy-pad.full{border-style:solid;border-color:var(--green);}
 
+  /* the walkthrough video: a card that links out (see index.html for why) */
+  .walkthrough{
+    display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:24px;align-items:center;
+    max-width:820px;margin:0 auto 38px;padding:14px;text-decoration:none;color:inherit;
+    background:linear-gradient(180deg,rgba(185,138,255,.07),rgba(10,16,20,.9));
+    border:1px solid rgba(185,138,255,.3);border-radius:var(--r);box-shadow:var(--shadow);
+    transition:border-color .3s ease, box-shadow .3s ease, transform .3s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .walkthrough:hover{border-color:rgba(185,138,255,.6);box-shadow:var(--shadow),0 0 36px rgba(185,138,255,.16);transform:translateY(-2px);}
+  .walkthrough:focus-visible{outline:2px solid var(--neon);outline-offset:3px;}
+  .wt-thumb{position:relative;display:block;border-radius:var(--r-sm);overflow:hidden;aspect-ratio:16/9;background:var(--bg-0);}
+  .wt-thumb img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .5s ease;}
+  .walkthrough:hover .wt-thumb img{transform:scale(1.03);}
+  .wt-play{
+    position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;
+    background:rgba(7,9,11,.72);border:2px solid var(--cyan);box-shadow:0 0 24px rgba(43,217,201,.45);
+    transition:transform .3s ease, background .3s ease;
+  }
+  .wt-play::after{
+    content:'';position:absolute;left:24px;top:18px;border-style:solid;border-width:11px 0 11px 18px;
+    border-color:transparent transparent transparent var(--cyan-hot);
+  }
+  .walkthrough:hover .wt-play{transform:scale(1.08);background:rgba(7,9,11,.85);}
+  .wt-len{
+    position:absolute;right:8px;bottom:8px;padding:2px 7px;border-radius:5px;
+    font:600 12px var(--mono);color:var(--ink-0);background:rgba(0,0,0,.72);
+  }
+  .wt-text{display:flex;flex-direction:column;gap:7px;min-width:0;}
+  .wt-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--violet);}
+  .wt-title{font-size:clamp(20px,2.4vw,25px);font-weight:600;letter-spacing:-.01em;color:var(--ink-0);}
+  .wt-sub{color:var(--ink-1);font-size:15px;line-height:1.5;}
+  .wt-go{font-weight:600;font-size:14.5px;color:var(--cyan);margin-top:2px;}
+  @media(max-width:640px){
+    .walkthrough{grid-template-columns:1fr;gap:14px;margin-bottom:30px;}
+    .wt-text{padding:0 4px 4px;}
+  }
+
   .what-strip{
     list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
     gap:14px;padding:0;margin:0 0 40px;
@@ -683,6 +720,7 @@
   body:not(.in-app) .what-strip,
   body:not(.in-app) .sheets-deck{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) backwards;}
   body:not(.in-app) .sheets-deck{animation-delay:.12s;}
+  body:not(.in-app) .walkthrough{animation:riseIn .75s cubic-bezier(.2,.8,.2,1) .06s backwards;}
   body:not(.in-app) .what-strip{animation-delay:.2s;}
 
   /* a completed step stamps a check over its number -------------------- */
@@ -1142,7 +1180,7 @@
 
   @media print{
     body{background:#fff;}
-    #field,#fieldFar,.aurora,.toast,.sheets-deck{display:none !important;}
+    #field,#fieldFar,.aurora,.toast,.sheets-deck,.walkthrough{display:none !important;}
     /* A password on paper is the one thing this project exists to avoid, so an
        accidental Ctrl+P never carries one — with or without the class below. */
     /* The handshake pop-up is live derivation state, and never belongs on paper. */

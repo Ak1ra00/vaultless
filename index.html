@@ -85,6 +85,25 @@
         ristretto255, with a verified oracle. No vault, no sync, no stored secret.</p>
     </div>
 
+    <!-- The walkthrough video. A link out, never an embedded player: a player would
+         load YouTube's scripts and trackers on the very page the phrase is typed on,
+         and this page's CSP forbids every outside origin on purpose. The picture is
+         served from here, so nothing reaches YouTube until someone clicks. -->
+    <a class="walkthrough" href="https://www.youtube.com/watch?v=ZxvO1nZaDog" target="_blank" rel="noopener noreferrer">
+      <span class="wt-thumb">
+        <img src="media/walkthrough.jpg" alt="" width="960" height="540" decoding="async">
+        <span class="wt-play" aria-hidden="true"></span>
+        <span class="wt-len" aria-hidden="true">7:15</span>
+      </span>
+      <span class="wt-text">
+        <span class="wt-eyebrow">Watch first</span>
+        <span class="wt-title">The whole thing in seven minutes</span>
+        <span class="wt-sub">Making your paper oracle, your first password, and coming back
+          the next day — every step, on this very site.</span>
+        <span class="wt-go">Watch on YouTube <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></span>
+      </span>
+    </a>
+
     <!-- The Oracle sheets, live — all three at once, each in its own window.
          After the backgrounds in Ak1ra00/oracle, redrawn from the maths every
          frame rather than shown as pictures, and each one something you can
@@ -454,6 +473,8 @@
       </ol>
       <p class="guide-aside">Already have a printed square?
         <button type="button" class="linky" id="guideToBack">Present it instead</button></p>
+      <p class="guide-aside">Prefer to watch first? <a class="linky" href="https://www.youtube.com/watch?v=ZxvO1nZaDog" target="_blank"
+        rel="noopener noreferrer">The seven-minute walkthrough ↗</a> opens on YouTube.</p>
       <p class="guide-aside">Just looking? <button type="button" class="linky" id="chooseDemo">Try
         the demo</button> — it runs the whole handshake with a pretend key, so nothing you see is a
         real password.</p>

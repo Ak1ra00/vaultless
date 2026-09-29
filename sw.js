@@ -23,7 +23,7 @@
 /* Bump on every shell change. The shell is served cache-first, so a stale
  * VERSION means returning visitors keep the previous index.html and styles.css
  * indefinitely — the activate handler drops old caches only once this differs. */
-const VERSION = 'vaultless-v24';
+const VERSION = 'vaultless-v25';
 
 /* The app shell: markup, the modules, the vendored crypto, fonts, icons. */
 const SHELL = [
@@ -44,6 +44,7 @@ const SHELL = [
   './icons/favicon-32.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './media/walkthrough.jpg',
 ];
 
 self.addEventListener('install', (event) => {

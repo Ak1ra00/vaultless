@@ -5,7 +5,8 @@ spot from two things: a passphrase in your head, and a key printed on a square o
 paper — the *paper oracle*. Nothing is stored, so there is no vault to sync, back
 up, or leak.
 
-Live at **[vaultless.space](https://vaultless.space)**.
+Live at **[vaultless.space](https://vaultless.space)**. New to it? Watch the
+[seven-minute walkthrough](https://www.youtube.com/watch?v=ZxvO1nZaDog).
 
 ![The home page: New here and Returning at the top, the headline, and the three live sheets side by side](docs/home.jpg)
 
